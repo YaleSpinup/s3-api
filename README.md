@@ -16,5 +16,5 @@ E Camden Fisher <camden.fisher@yale.edu>
 
 ## License
 
-The MIT License (MIT)
+The MIT License (MIT)  
 Copyright (c) 2019 Yale University
