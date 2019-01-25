@@ -4,13 +4,13 @@ import (
 	"reflect"
 	"testing"
 
-	"github.com/YaleSpinup/ecs-api/common"
+	"github.com/YaleSpinup/s3-api/common"
 )
 
 func TestNewSession(t *testing.T) {
 	e := NewSession(common.Account{})
 	to := reflect.TypeOf(e).String()
-	if to != "ecs.ECS" {
-		t.Errorf("expected type to be 'ecs.ECS', got %s", to)
+	if to != "s3.S3" {
+		t.Errorf("expected type to be 's3.S3', got %s", to)
 	}
 }
