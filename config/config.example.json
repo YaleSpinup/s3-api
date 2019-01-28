@@ -1,0 +1,17 @@
+{ 
+  "listenAddress": "",
+  "accounts": {
+    "nonprod": {
+      "region": "us-east-1",
+      "akid": "xxxxxxxx",
+      "secret": "xxxxxxxx",
+    },
+    "spinup": {
+      "region": "us-east-1",
+      "akid": "xxxxxxxx",
+      "secret": "xxxxxxxx",
+    }
+  },
+  "token": "xxxx",
+  "logLevel": "info"
+}
