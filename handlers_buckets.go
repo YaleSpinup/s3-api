@@ -35,7 +35,9 @@ func BucketCreateHandler(w http.ResponseWriter, r *http.Request) {
 	// Checks if a bucket exists in the account by getting the location.  This is
 	// a hack since in us-east-1 (only) bucket creation will succeed if the bucket already exists in your
 	// account.  In all other regions, the API will return s3.ErrCodeBucketAlreadyOwnedByYou 🤷‍♂️
-	_, err = s3Service.Service.GetBucketLocation(&s3.GetBucketLocationInput{Bucket: req.Bucket})
+	_, err = s3Service.Service.HeadBucketWithContext(r.Context(), &s3.HeadBucketInput{
+		Bucket: req.Bucket,
+	})
 	if err == nil {
 		msg := fmt.Sprintf("%s: Bucket exists and is owned by you.", s3.ErrCodeBucketAlreadyOwnedByYou)
 		w.WriteHeader(http.StatusConflict)
