@@ -99,6 +99,12 @@ func main() {
 	api.HandleFunc("/version", VersionHandler)
 	api.Handle("/metrics", promhttp.Handler())
 
+	// Buckets handlers
+	api.HandleFunc("/{account}/buckets", BucketListHandler).Methods(http.MethodGet)
+	api.HandleFunc("/{account}/buckets", BucketCreateHandler).Methods(http.MethodPost)
+	api.HandleFunc("/{account}/buckets/{bucket}", BucketShowHandler).Methods(http.MethodGet)
+	// api.HandleFunc("/{account}/buckets/{bucket}", BucketDeleteHandler).Methods(http.MethodDelete)
+
 	if AppConfig.ListenAddress == "" {
 		AppConfig.ListenAddress = ":8080"
 	}

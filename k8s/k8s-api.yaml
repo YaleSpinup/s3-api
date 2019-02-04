@@ -52,12 +52,20 @@ spec:
       containers:
       - name: s3api
         image: hub.docker.com/yaleits/s3api
+        volumeMounts:
+        - name: s3api-config
+          mountPath: "/app/config"
+          readOnly: true
         livenessProbe:
           httpGet:
             path: /v1/s3/ping
             port: 8080
           initialDelaySeconds: 5
           periodSeconds: 3
+      volumes:
+      - name: s3api-config
+        secret:
+          secretName: s3-api-config-json
         # envFrom:
         #   - configMapRef:
         #       name: s3api-config
