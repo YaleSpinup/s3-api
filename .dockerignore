@@ -1,0 +1,4 @@
+.gitignore
+.git/
+k8s/example-*
+README.md

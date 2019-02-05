@@ -102,7 +102,8 @@ func main() {
 	// Buckets handlers
 	api.HandleFunc("/{account}/buckets", BucketListHandler).Methods(http.MethodGet)
 	api.HandleFunc("/{account}/buckets", BucketCreateHandler).Methods(http.MethodPost)
-	api.HandleFunc("/{account}/buckets/{bucket}", BucketShowHandler).Methods(http.MethodGet)
+	api.HandleFunc("/{account}/buckets/{bucket}", BucketHeadHandler).Methods(http.MethodHead)
+	// api.HandleFunc("/{account}/buckets/{bucket}", BucketShowHandler).Methods(http.MethodGet)
 	// api.HandleFunc("/{account}/buckets/{bucket}", BucketDeleteHandler).Methods(http.MethodDelete)
 
 	if AppConfig.ListenAddress == "" {

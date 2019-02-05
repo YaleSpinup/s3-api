@@ -117,8 +117,8 @@ func BucketListHandler(w http.ResponseWriter, r *http.Request) {
 	w.Write(j)
 }
 
-// BucketShowHandler gets a bucket and returns the details
-func BucketShowHandler(w http.ResponseWriter, r *http.Request) {
+// BucketHeadHandler checks if a bucket exists
+func BucketHeadHandler(w http.ResponseWriter, r *http.Request) {
 	w = LogWriter{w}
 	vars := mux.Vars(r)
 	account := vars["account"]
