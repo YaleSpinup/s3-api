@@ -14,7 +14,7 @@ type S3 struct {
 	Service *s3.S3
 }
 
-// NewSession creates a new ECS session
+// NewSession creates a new S3 session
 func NewSession(account common.Account) S3 {
 	s := S3{}
 	log.Infof("creating new session with key id %s in region %s", account.Akid, account.Region)
