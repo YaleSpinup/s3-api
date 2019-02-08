@@ -194,6 +194,11 @@ func BucketDeleteHandler(w http.ResponseWriter, r *http.Request) {
 				log.Errorf("bucket %s not found.", bucket)
 				w.WriteHeader(http.StatusNotFound)
 				return
+			case "BucketNotEmpty":
+				log.Errorf("trying to delete bucket %s that is not empty.", bucket)
+				w.WriteHeader(http.StatusConflict)
+				w.Write([]byte("bucket not empty"))
+				return
 			case "NotFound":
 				log.Errorf("bucket %s not found.", bucket)
 				w.WriteHeader(http.StatusNotFound)
