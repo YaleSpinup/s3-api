@@ -28,7 +28,6 @@ GET `/v1/s3/{account}/buckets`
 | **404 Not Found**             | account not found               |  
 | **500 Internal Server Error** | a server error occurred         |
 
-
 ### Create a bucket
 
 POST `/v1/s3/{account}/buckets
@@ -48,7 +47,6 @@ POST `/v1/s3/{account}/buckets
 | **409 Conflict**              | bucket already exists           |
 | **500 Internal Server Error** | a server error occurred         |
 
-
 ### Check if a bucket exists
 
 HEAD `/v1/s3/{account}/buckets/foobarbucketname`
@@ -60,6 +58,18 @@ HEAD `/v1/s3/{account}/buckets/foobarbucketname`
 | **404 Not Found**             | account or bucket not found     |  
 | **500 Internal Server Error** | a server error occurred         |
 
+### Delete a bucket
+
+DELETE `/v1/s3/{account}/buckets/{bucket}
+
+| Response Code                 | Definition                      |  
+| ----------------------------- | --------------------------------|  
+| **200 OK**                    | deleted bucket                  |  
+| **400 Bad Request**           | badly formed request            |  
+| **403 Forbidden**             | you don't have access to bucket |  
+| **404 Not Found**             | account or bucket not found     |  
+| **409 Conflict**              | bucket is not empty             |
+| **500 Internal Server Error** | a server error occurred         |
 
 ## Author
 

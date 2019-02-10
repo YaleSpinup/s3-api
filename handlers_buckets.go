@@ -45,6 +45,7 @@ func BucketCreateHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	log.Infof("creating bucket: %s", *req.Bucket)
 	bucket, err := s3Service.Service.CreateBucketWithContext(r.Context(), &req)
 	if err != nil {
 		if aerr, ok := err.(awserr.Error); ok {
@@ -92,6 +93,7 @@ func BucketListHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	log.Infof("listing buckets")
 	input := s3.ListBucketsInput{}
 	output, err := s3Service.Service.ListBucketsWithContext(r.Context(), &input)
 	if err != nil {
@@ -130,6 +132,7 @@ func BucketHeadHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	log.Infof("checking if bucket exists: %s", bucket)
 	output, err := s3Service.Service.HeadBucketWithContext(r.Context(), &s3.HeadBucketInput{
 		Bucket: aws.String(bucket),
 	})
@@ -139,6 +142,62 @@ func BucketHeadHandler(w http.ResponseWriter, r *http.Request) {
 			case s3.ErrCodeNoSuchBucket:
 				log.Errorf("bucket %s not found.", bucket)
 				w.WriteHeader(http.StatusNotFound)
+				return
+			case "NotFound":
+				log.Errorf("bucket %s not found.", bucket)
+				w.WriteHeader(http.StatusNotFound)
+				return
+			case "Forbidden":
+				log.Errorf("forbidden to access requested bucket %s", bucket)
+				w.WriteHeader(http.StatusForbidden)
+				return
+			}
+		}
+		log.Errorf("error checking for bucket %s: %s", bucket, err.Error())
+		w.WriteHeader(http.StatusInternalServerError)
+		return
+	}
+
+	j, err := json.Marshal(output)
+	if err != nil {
+		log.Errorf("cannot marshal response (%v) into JSON: %s", output, err)
+		w.WriteHeader(http.StatusInternalServerError)
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusOK)
+	w.Write(j)
+}
+
+// BucketDeleteHandler deletes an empty bucket
+func BucketDeleteHandler(w http.ResponseWriter, r *http.Request) {
+	w = LogWriter{w}
+	vars := mux.Vars(r)
+	account := vars["account"]
+	bucket := vars["bucket"]
+	s3Service, ok := S3Services[account]
+	if !ok {
+		log.Errorf("account not found: %s", account)
+		w.WriteHeader(http.StatusNotFound)
+		return
+	}
+
+	log.Infof("deleting bucket: %s", bucket)
+	output, err := s3Service.Service.DeleteBucketWithContext(r.Context(), &s3.DeleteBucketInput{
+		Bucket: aws.String(bucket),
+	})
+	if err != nil {
+		if aerr, ok := err.(awserr.Error); ok {
+			switch aerr.Code() {
+			case s3.ErrCodeNoSuchBucket:
+				log.Errorf("bucket %s not found.", bucket)
+				w.WriteHeader(http.StatusNotFound)
+				return
+			case "BucketNotEmpty":
+				log.Errorf("trying to delete bucket %s that is not empty.", bucket)
+				w.WriteHeader(http.StatusConflict)
+				w.Write([]byte("bucket not empty"))
 				return
 			case "NotFound":
 				log.Errorf("bucket %s not found.", bucket)
