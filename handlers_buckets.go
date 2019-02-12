@@ -7,6 +7,7 @@ import (
 
 	"github.com/aws/aws-sdk-go/aws"
 	"github.com/aws/aws-sdk-go/aws/awserr"
+	"github.com/aws/aws-sdk-go/service/iam"
 	"github.com/aws/aws-sdk-go/service/s3"
 	"github.com/gorilla/mux"
 	log "github.com/sirupsen/logrus"
@@ -19,7 +20,14 @@ func BucketCreateHandler(w http.ResponseWriter, r *http.Request) {
 	account := vars["account"]
 	s3Service, ok := S3Services[account]
 	if !ok {
-		log.Errorf("account not found: %s", account)
+		log.Errorf("S3 service not found for account: %s", account)
+		w.WriteHeader(http.StatusNotFound)
+		return
+	}
+
+	iamService, ok := IAMServices[account]
+	if !ok {
+		log.Errorf("IAM service not found for account: %s", account)
 		w.WriteHeader(http.StatusNotFound)
 		return
 	}
@@ -46,7 +54,7 @@ func BucketCreateHandler(w http.ResponseWriter, r *http.Request) {
 	}
 
 	log.Infof("creating bucket: %s", *req.Bucket)
-	bucket, err := s3Service.Service.CreateBucketWithContext(r.Context(), &req)
+	bucketOutput, err := s3Service.Service.CreateBucketWithContext(r.Context(), &req)
 	if err != nil {
 		if aerr, ok := err.(awserr.Error); ok {
 			switch aerr.Code() {
@@ -69,9 +77,149 @@ func BucketCreateHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	j, err := json.Marshal(bucket)
+	defaultPolicy, err := iamService.DefaultBucketAdminPolicy(req.Bucket)
 	if err != nil {
-		log.Errorf("cannot marshal reasponse(%v) into JSON: %s", bucket, err)
+		// TODO: delete newly created bucket
+		log.Errorf("failed creating default IAM policy for bucket %s: %s", *req.Bucket, err)
+		w.WriteHeader(http.StatusInternalServerError)
+		return
+	}
+
+	policyName := fmt.Sprintf("%s-BucketAdminPolicy", *req.Bucket)
+	log.Infof("creating IAM policy: %s", policyName)
+
+	policyOutput, err := iamService.Service.CreatePolicyWithContext(r.Context(), &iam.CreatePolicyInput{
+		Description:    aws.String(fmt.Sprintf("Admin policy for %s bucket", *req.Bucket)),
+		PolicyDocument: aws.String(string(defaultPolicy)),
+		PolicyName:     aws.String(policyName),
+	})
+
+	if err != nil {
+		// TODO: delete newly created bucket
+		if aerr, ok := err.(awserr.Error); ok {
+			switch aerr.Code() {
+			case iam.ErrCodeInvalidInputException:
+				msg := fmt.Sprintf("%s: %s", iam.ErrCodeInvalidInputException, aerr.Error())
+				w.WriteHeader(http.StatusBadRequest)
+				w.Write([]byte(msg))
+			case iam.ErrCodeLimitExceededException:
+				msg := fmt.Sprintf("%s: %s", iam.ErrCodeLimitExceededException, aerr.Error())
+				w.WriteHeader(http.StatusTooManyRequests)
+				w.Write([]byte(msg))
+			case iam.ErrCodeEntityAlreadyExistsException:
+				msg := fmt.Sprintf("%s: %s", iam.ErrCodeEntityAlreadyExistsException, aerr.Error())
+				w.WriteHeader(http.StatusConflict)
+				w.Write([]byte(msg))
+			case iam.ErrCodeMalformedPolicyDocumentException:
+				msg := fmt.Sprintf("%s: %s", iam.ErrCodeMalformedPolicyDocumentException, aerr.Error())
+				w.WriteHeader(http.StatusBadRequest)
+				w.Write([]byte(msg))
+			case iam.ErrCodeServiceFailureException:
+				msg := fmt.Sprintf("%s: %s", iam.ErrCodeServiceFailureException, aerr.Error())
+				w.WriteHeader(http.StatusServiceUnavailable)
+				w.Write([]byte(msg))
+			default:
+				w.WriteHeader(http.StatusBadRequest)
+				w.Write([]byte(err.Error()))
+			}
+		} else {
+			w.WriteHeader(http.StatusBadRequest)
+			w.Write([]byte(err.Error()))
+		}
+		return
+	}
+
+	groupName := fmt.Sprintf("%s-BucketAdminGroup", *req.Bucket)
+	log.Infof("creating IAM group: %s", groupName)
+
+	group, err := iamService.Service.CreateGroupWithContext(r.Context(), &iam.CreateGroupInput{
+		GroupName: aws.String(groupName),
+	})
+
+	if err != nil {
+		// TODO: delete newly created bucket and IAM policy
+		if aerr, ok := err.(awserr.Error); ok {
+			switch aerr.Code() {
+			case iam.ErrCodeLimitExceededException:
+				msg := fmt.Sprintf("%s: %s", iam.ErrCodeLimitExceededException, aerr.Error())
+				w.WriteHeader(http.StatusTooManyRequests)
+				w.Write([]byte(msg))
+			case iam.ErrCodeEntityAlreadyExistsException:
+				msg := fmt.Sprintf("%s: %s", iam.ErrCodeEntityAlreadyExistsException, aerr.Error())
+				w.WriteHeader(http.StatusConflict)
+				w.Write([]byte(msg))
+			case iam.ErrCodeNoSuchEntityException:
+				msg := fmt.Sprintf("%s: %s", iam.ErrCodeNoSuchEntityException, aerr.Error())
+				w.WriteHeader(http.StatusBadRequest)
+				w.Write([]byte(msg))
+			case iam.ErrCodeServiceFailureException:
+				msg := fmt.Sprintf("%s: %s", iam.ErrCodeServiceFailureException, aerr.Error())
+				w.WriteHeader(http.StatusServiceUnavailable)
+				w.Write([]byte(msg))
+			default:
+				w.WriteHeader(http.StatusBadRequest)
+				w.Write([]byte(err.Error()))
+			}
+		} else {
+			w.WriteHeader(http.StatusBadRequest)
+			w.Write([]byte(err.Error()))
+		}
+		return
+	}
+
+	log.Infof("attaching group %s to policy with arn %s", groupName, *policyOutput.Policy.Arn)
+	_, err = iamService.Service.AttachGroupPolicyWithContext(r.Context(), &iam.AttachGroupPolicyInput{
+		GroupName: aws.String(groupName),
+		PolicyArn: policyOutput.Policy.Arn,
+	})
+	if err != nil {
+		// TODO: delete newly created bucket, IAM policy, and group
+		if aerr, ok := err.(awserr.Error); ok {
+			switch aerr.Code() {
+			case iam.ErrCodeNoSuchEntityException:
+				msg := fmt.Sprintf("%s: %s", iam.ErrCodeNoSuchEntityException, aerr.Error())
+				w.WriteHeader(http.StatusBadRequest)
+				w.Write([]byte(msg))
+			case iam.ErrCodeLimitExceededException:
+				msg := fmt.Sprintf("%s: %s", iam.ErrCodeLimitExceededException, aerr.Error())
+				w.WriteHeader(http.StatusTooManyRequests)
+				w.Write([]byte(msg))
+			case iam.ErrCodeInvalidInputException:
+				msg := fmt.Sprintf("%s: %s", iam.ErrCodeInvalidInputException, aerr.Error())
+				w.WriteHeader(http.StatusBadRequest)
+				w.Write([]byte(msg))
+			case iam.ErrCodePolicyNotAttachableException:
+				msg := fmt.Sprintf("%s: %s", iam.ErrCodePolicyNotAttachableException, aerr.Error())
+				w.WriteHeader(http.StatusBadRequest)
+				w.Write([]byte(msg))
+			case iam.ErrCodeServiceFailureException:
+				msg := fmt.Sprintf("%s: %s", iam.ErrCodeServiceFailureException, aerr.Error())
+				w.WriteHeader(http.StatusServiceUnavailable)
+				w.Write([]byte(msg))
+			default:
+				w.WriteHeader(http.StatusBadRequest)
+				w.Write([]byte(err.Error()))
+			}
+		} else {
+			w.WriteHeader(http.StatusBadRequest)
+			w.Write([]byte(err.Error()))
+		}
+		return
+	}
+
+	output := struct {
+		Bucket *string
+		Policy *iam.Policy
+		Group  *iam.Group
+	}{
+		bucketOutput.Location,
+		policyOutput.Policy,
+		group.Group,
+	}
+
+	j, err := json.Marshal(output)
+	if err != nil {
+		log.Errorf("cannot marshal reasponse(%v) into JSON: %s", output, err)
 		w.WriteHeader(http.StatusInternalServerError)
 		return
 	}

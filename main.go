@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/YaleSpinup/s3-api/common"
+	"github.com/YaleSpinup/s3-api/iam"
 	"github.com/YaleSpinup/s3-api/s3"
 	"github.com/YaleSpinup/s3-api/s3api"
 	"github.com/gorilla/handlers"
@@ -41,6 +42,9 @@ var AppConfig common.Config
 
 // S3Services is a global map of S3 services
 var S3Services = make(map[string]s3.S3)
+
+// IAMServices is a global map of IAM services
+var IAMServices = make(map[string]iam.IAM)
 
 func main() {
 	flag.Parse()
@@ -85,6 +89,7 @@ func main() {
 	for name, c := range AppConfig.Accounts {
 		log.Debugf("Creating new S3 service for account '%s' with key '%s' in region '%s'", name, c.Akid, c.Region)
 		S3Services[name] = s3.NewSession(c)
+		IAMServices[name] = iam.NewSession(c)
 	}
 
 	publicURLs := map[string]string{
@@ -105,6 +110,7 @@ func main() {
 	api.HandleFunc("/{account}/buckets/{bucket}", BucketHeadHandler).Methods(http.MethodHead)
 	// api.HandleFunc("/{account}/buckets/{bucket}", BucketShowHandler).Methods(http.MethodGet)
 	api.HandleFunc("/{account}/buckets/{bucket}", BucketDeleteHandler).Methods(http.MethodDelete)
+	api.HandleFunc("/{account}/buckets/{bucket}/objects", ObjectCountHandler).Methods(http.MethodHead)
 
 	if AppConfig.ListenAddress == "" {
 		AppConfig.ListenAddress = ":8080"
