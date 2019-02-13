@@ -1,7 +1,7 @@
 module github.com/YaleSpinup/s3-api
 
 require (
-	github.com/aws/aws-sdk-go v1.16.32
+	github.com/aws/aws-sdk-go v1.16.33
 	github.com/go-logfmt/logfmt v0.4.0 // indirect
 	github.com/gogo/protobuf v1.2.0 // indirect
 	github.com/gorilla/handlers v1.4.0

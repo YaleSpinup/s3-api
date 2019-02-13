@@ -1,4 +1,4 @@
-package main
+package s3api
 
 import (
 	"encoding/json"
@@ -9,7 +9,7 @@ import (
 )
 
 // PingHandler responds to ping requests
-func PingHandler(w http.ResponseWriter, r *http.Request) {
+func (s *server) PingHandler(w http.ResponseWriter, r *http.Request) {
 	w = LogWriter{w}
 	log.Debug("Ping/Pong")
 	w.Header().Set("Access-Control-Allow-Origin", "*")
@@ -18,7 +18,7 @@ func PingHandler(w http.ResponseWriter, r *http.Request) {
 }
 
 // VersionHandler responds to version requests
-func VersionHandler(w http.ResponseWriter, r *http.Request) {
+func (s *server) VersionHandler(w http.ResponseWriter, r *http.Request) {
 	w = LogWriter{w}
 	w.Header().Set("Access-Control-Allow-Origin", "*")
 	w.Header().Set("Content-Type", "application/json")
@@ -36,8 +36,8 @@ func VersionHandler(w http.ResponseWriter, r *http.Request) {
 		BuildStamp string `json:"buildstamp"`
 	}{
 		Version:    fmt.Sprintf("%s%s", Version, VersionPrerelease),
-		GitHash:    githash,
-		BuildStamp: buildstamp,
+		GitHash:    GitHash,
+		BuildStamp: BuildStamp,
 	})
 
 	if err != nil {

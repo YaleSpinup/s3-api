@@ -1,4 +1,4 @@
-package main
+package s3api
 
 import (
 	"encoding/json"
@@ -14,18 +14,18 @@ import (
 )
 
 // BucketCreateHandler creates a new s3 bucket
-func BucketCreateHandler(w http.ResponseWriter, r *http.Request) {
+func (s *server) BucketCreateHandler(w http.ResponseWriter, r *http.Request) {
 	w = LogWriter{w}
 	vars := mux.Vars(r)
 	account := vars["account"]
-	s3Service, ok := S3Services[account]
+	s3Service, ok := s.s3Services[account]
 	if !ok {
 		log.Errorf("S3 service not found for account: %s", account)
 		w.WriteHeader(http.StatusNotFound)
 		return
 	}
 
-	iamService, ok := IAMServices[account]
+	iamService, ok := s.iamServices[account]
 	if !ok {
 		log.Errorf("IAM service not found for account: %s", account)
 		w.WriteHeader(http.StatusNotFound)
@@ -230,11 +230,11 @@ func BucketCreateHandler(w http.ResponseWriter, r *http.Request) {
 }
 
 // BucketListHandler gets a list of buckets
-func BucketListHandler(w http.ResponseWriter, r *http.Request) {
+func (s *server) BucketListHandler(w http.ResponseWriter, r *http.Request) {
 	w = LogWriter{w}
 	vars := mux.Vars(r)
 	account := vars["account"]
-	s3Service, ok := S3Services[account]
+	s3Service, ok := s.s3Services[account]
 	if !ok {
 		log.Errorf("account not found: %s", account)
 		w.WriteHeader(http.StatusNotFound)
@@ -268,12 +268,12 @@ func BucketListHandler(w http.ResponseWriter, r *http.Request) {
 }
 
 // BucketHeadHandler checks if a bucket exists
-func BucketHeadHandler(w http.ResponseWriter, r *http.Request) {
+func (s *server) BucketHeadHandler(w http.ResponseWriter, r *http.Request) {
 	w = LogWriter{w}
 	vars := mux.Vars(r)
 	account := vars["account"]
 	bucket := vars["bucket"]
-	s3Service, ok := S3Services[account]
+	s3Service, ok := s.s3Services[account]
 	if !ok {
 		log.Errorf("account not found: %s", account)
 		w.WriteHeader(http.StatusNotFound)
@@ -319,12 +319,12 @@ func BucketHeadHandler(w http.ResponseWriter, r *http.Request) {
 }
 
 // BucketDeleteHandler deletes an empty bucket
-func BucketDeleteHandler(w http.ResponseWriter, r *http.Request) {
+func (s *server) BucketDeleteHandler(w http.ResponseWriter, r *http.Request) {
 	w = LogWriter{w}
 	vars := mux.Vars(r)
 	account := vars["account"]
 	bucket := vars["bucket"]
-	s3Service, ok := S3Services[account]
+	s3Service, ok := s.s3Services[account]
 	if !ok {
 		log.Errorf("account not found: %s", account)
 		w.WriteHeader(http.StatusNotFound)

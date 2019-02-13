@@ -1,4 +1,4 @@
-package main
+package s3api
 
 import (
 	"net/http"
@@ -8,7 +8,7 @@ import (
 )
 
 // TokenMiddleware checks the tokens for non-public URLs
-func TokenMiddleware(public map[string]string, h http.Handler) http.Handler {
+func TokenMiddleware(psk string, public map[string]string, h http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		log.Debug("Processing token middleware for protected URLs")
 
@@ -35,7 +35,7 @@ func TokenMiddleware(public map[string]string, h http.Handler) http.Handler {
 			log.Infof("Authenticating token for protected URL '%s'", r.URL)
 
 			htoken := r.Header.Get("X-Auth-Token")
-			if AppConfig.Token == htoken {
+			if psk == htoken {
 				log.Debugf("Authenticating preshared token '%s' for '%s'", htoken, r.URL)
 			} else {
 				log.Warnf("Unable to authenticate session for '%s' with '%s'", r.URL, htoken)
