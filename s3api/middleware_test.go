@@ -1,4 +1,4 @@
-package main
+package s3api
 
 import (
 	"fmt"
@@ -8,7 +8,7 @@ import (
 )
 
 func TestTokenMiddleware(t *testing.T) {
-	AppConfig.Token = "sometesttoken"
+	psk := "sometesttoken"
 
 	// Test handler that just returns 200 OK
 	okHandler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -23,7 +23,7 @@ func TestTokenMiddleware(t *testing.T) {
 	}
 
 	// Start a new server with our token middleware and test handler
-	server := httptest.NewServer(TokenMiddleware(pubUrls, okHandler))
+	server := httptest.NewServer(TokenMiddleware(psk, pubUrls, okHandler))
 	defer server.Close()
 
 	// Test some public urls
@@ -51,7 +51,7 @@ func TestTokenMiddleware(t *testing.T) {
 	// Test a priate URL _with_ an auth-token
 	client := &http.Client{}
 	req, _ := http.NewRequest(http.MethodGet, fmt.Sprintf("%s/private", server.URL), nil)
-	req.Header.Add("X-Auth-Token", AppConfig.Token)
+	req.Header.Add("X-Auth-Token", psk)
 	resp, err = client.Do(req)
 	if err != nil {
 		t.Fatal(err)
