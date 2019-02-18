@@ -285,27 +285,3 @@ func (s *server) BucketDeleteHandler(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusOK)
 	w.Write(j)
 }
-
-func handleError(w http.ResponseWriter, err error) {
-	log.Error(err.Error())
-	if aerr, ok := err.(apierror.Error); ok {
-		switch aerr.Code {
-		case apierror.ErrForbidden:
-			w.WriteHeader(http.StatusForbidden)
-		case apierror.ErrNotFound:
-			w.WriteHeader(http.StatusNotFound)
-		case apierror.ErrConflict:
-			w.WriteHeader(http.StatusConflict)
-		case apierror.ErrBadRequest:
-			w.WriteHeader(http.StatusBadRequest)
-		case apierror.ErrLimitExceeded:
-			w.WriteHeader(http.StatusTooManyRequests)
-		default:
-			w.WriteHeader(http.StatusInternalServerError)
-		}
-		w.Write([]byte(aerr.Message))
-	} else {
-		w.WriteHeader(http.StatusInternalServerError)
-		w.Write([]byte(err.Error()))
-	}
-}
