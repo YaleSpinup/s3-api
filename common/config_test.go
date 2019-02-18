@@ -13,7 +13,14 @@ var testConfig = []byte(
 		  "provider1": {
 			"region": "us-east-1",
 			"akid": "key1",
-			"secret": "secret1"
+			"secret": "secret1",
+			"defaultS3BucketActions": [
+				"s3:abc123",
+				"s3:xyz456"
+			],
+			"defaultS3ObjectActions": [
+				"s3:*"
+			]
 		  },
 		  "provider2": {
 			"region": "us-west-1",
@@ -33,6 +40,13 @@ func TestReadConfig(t *testing.T) {
 				Region: "us-east-1",
 				Akid:   "key1",
 				Secret: "secret1",
+				DefaultS3BucketActions: []string{
+					"s3:abc123",
+					"s3:xyz456",
+				},
+				DefaultS3ObjectActions: []string{
+					"s3:*",
+				},
 			},
 			"provider2": Account{
 				Region: "us-west-1",

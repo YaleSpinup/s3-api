@@ -1,4 +1,4 @@
-package main
+package s3api
 
 import (
 	"net/http"
@@ -12,7 +12,8 @@ func TestPingHandler(t *testing.T) {
 		t.Fatal(err)
 	}
 	rr := httptest.NewRecorder()
-	handler := http.HandlerFunc(PingHandler)
+	s := server{}
+	handler := http.HandlerFunc(s.PingHandler)
 
 	handler.ServeHTTP(rr, req)
 
@@ -34,7 +35,8 @@ func TestVersionHandler(t *testing.T) {
 		t.Fatal(err)
 	}
 	rr := httptest.NewRecorder()
-	handler := http.HandlerFunc(VersionHandler)
+	s := server{}
+	handler := http.HandlerFunc(s.VersionHandler)
 
 	handler.ServeHTTP(rr, req)
 

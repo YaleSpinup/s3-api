@@ -18,9 +18,11 @@ type Config struct {
 
 // Account is the configuration for an individual account
 type Account struct {
-	Region string
-	Akid   string
-	Secret string
+	Region                 string
+	Akid                   string
+	Secret                 string
+	DefaultS3BucketActions []string
+	DefaultS3ObjectActions []string
 }
 
 // ReadConfig decodes the configuration from an io Reader
