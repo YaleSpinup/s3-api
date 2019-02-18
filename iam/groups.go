@@ -105,7 +105,7 @@ func (i *IAM) AttachGroupPolicy(ctx context.Context, input *iam.AttachGroupPolic
 		return nil, apierror.New(apierror.ErrBadRequest, "invalid input", nil)
 	}
 
-	output, err = i.Service.AttachGroupPolicyWithContext(ctx, input)
+	output, err := i.Service.AttachGroupPolicyWithContext(ctx, input)
 	if err != nil {
 		if aerr, ok := err.(awserr.Error); ok {
 			switch aerr.Code() {
