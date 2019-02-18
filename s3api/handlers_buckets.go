@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"net/http"
 
+	"github.com/YaleSpinup/s3-api/apierror"
 	"github.com/aws/aws-sdk-go/aws"
 	"github.com/aws/aws-sdk-go/aws/awserr"
 	"github.com/aws/aws-sdk-go/service/iam"
@@ -13,6 +14,19 @@ import (
 	log "github.com/sirupsen/logrus"
 )
 
+func executeRollBack(t *[]func() error) {
+	if t != nil {
+		tasks := *t
+		log.Errorf("executing rollback of %d tasks", len(tasks))
+		for i := len(tasks) - 1; i >= 0; i-- {
+			f := tasks[i]
+			if funcerr := f(); funcerr != nil {
+				log.Errorf("rollback task error: %s, continuing rollback", funcerr)
+			}
+		}
+	}
+}
+
 // BucketCreateHandler creates a new s3 bucket
 func (s *server) BucketCreateHandler(w http.ResponseWriter, r *http.Request) {
 	w = LogWriter{w}
@@ -20,191 +34,114 @@ func (s *server) BucketCreateHandler(w http.ResponseWriter, r *http.Request) {
 	account := vars["account"]
 	s3Service, ok := s.s3Services[account]
 	if !ok {
-		log.Errorf("S3 service not found for account: %s", account)
-		w.WriteHeader(http.StatusNotFound)
+		msg := fmt.Sprintf("s3 service not found for account: %s", account)
+		handleError(w, apierror.New(apierror.ErrNotFound, msg, nil))
 		return
 	}
 
 	iamService, ok := s.iamServices[account]
 	if !ok {
-		log.Errorf("IAM service not found for account: %s", account)
-		w.WriteHeader(http.StatusNotFound)
+		msg := fmt.Sprintf("IAM service not found for account: %s", account)
+		handleError(w, apierror.New(apierror.ErrNotFound, msg, nil))
 		return
 	}
 
 	var req s3.CreateBucketInput
 	err := json.NewDecoder(r.Body).Decode(&req)
 	if err != nil {
-		log.Errorf("cannot decode body into create bucket input: %s", err.Error())
-		w.WriteHeader(http.StatusBadRequest)
+		msg := fmt.Sprintf("cannot decode body into create bucket input: %s", err)
+		handleError(w, apierror.New(apierror.ErrBadRequest, msg, err))
 		return
 	}
 
-	// Checks if a bucket exists in the account heading it.  This is a bit of a hack since in
-	// us-east-1 (only) bucket creation will succeed if the bucket already exists in your
-	// account.  In all other regions, the API will return s3.ErrCodeBucketAlreadyOwnedByYou 🤷‍♂️
-	_, err = s3Service.Service.HeadBucketWithContext(r.Context(), &s3.HeadBucketInput{
-		Bucket: req.Bucket,
-	})
-	if err == nil {
-		msg := fmt.Sprintf("%s: Bucket exists and is owned by you.", s3.ErrCodeBucketAlreadyOwnedByYou)
-		w.WriteHeader(http.StatusConflict)
-		w.Write([]byte(msg))
-		return
-	}
-
-	log.Infof("creating bucket: %s", *req.Bucket)
-	bucketOutput, err := s3Service.Service.CreateBucketWithContext(r.Context(), &req)
-	if err != nil {
-		if aerr, ok := err.(awserr.Error); ok {
-			switch aerr.Code() {
-			case s3.ErrCodeBucketAlreadyExists:
-				msg := fmt.Sprintf("%s: %s", s3.ErrCodeBucketAlreadyExists, aerr.Error())
-				w.WriteHeader(http.StatusConflict)
-				w.Write([]byte(msg))
-			case s3.ErrCodeBucketAlreadyOwnedByYou:
-				msg := fmt.Sprintf("%s: %s", s3.ErrCodeBucketAlreadyOwnedByYou, aerr.Error())
-				w.WriteHeader(http.StatusConflict)
-				w.Write([]byte(msg))
-			default:
-				w.WriteHeader(http.StatusBadRequest)
-				w.Write([]byte(err.Error()))
-			}
-		} else {
-			w.WriteHeader(http.StatusBadRequest)
-			w.Write([]byte(err.Error()))
+	// setup rollback function list and defer recovery and execution
+	var rollBackTasks []func() error
+	defer func() {
+		if err := recover(); err != nil {
+			log.Errorf("recovering from panic: %s", err)
+			executeRollBack(&rollBackTasks)
 		}
-		return
+	}()
+
+	bucketOutput, err := s3Service.CreateBucket(r.Context(), &req)
+	if err != nil {
+		handleError(w, err)
+		msg := fmt.Sprintf("failed to create bucket: %s", err)
+		panic(msg)
 	}
 
+	// append bucket delete to rollback tasks
+	rbfunc := func() error {
+		return func() error {
+			if _, err := s3Service.DeleteEmptyBucket(r.Context(), &s3.DeleteBucketInput{Bucket: req.Bucket}); err != nil {
+				return err
+			}
+			return nil
+		}()
+	}
+	rollBackTasks = append(rollBackTasks, rbfunc)
+
+	// build the default IAM bucket admin policy (from the config and known inputs)
 	defaultPolicy, err := iamService.DefaultBucketAdminPolicy(req.Bucket)
 	if err != nil {
-		// TODO: delete newly created bucket
-		log.Errorf("failed creating default IAM policy for bucket %s: %s", *req.Bucket, err)
-		w.WriteHeader(http.StatusInternalServerError)
-		return
+		msg := fmt.Sprintf("failed creating default IAM policy for bucket %s: %s", *req.Bucket, err.Error())
+		handleError(w, apierror.New(apierror.ErrInternalError, msg, err))
+		panic(msg)
 	}
 
-	policyName := fmt.Sprintf("%s-BucketAdminPolicy", *req.Bucket)
-	log.Infof("creating IAM policy: %s", policyName)
-
-	policyOutput, err := iamService.Service.CreatePolicyWithContext(r.Context(), &iam.CreatePolicyInput{
+	policyOutput, err := iamService.CreatePolicy(r.Context(), &iam.CreatePolicyInput{
 		Description:    aws.String(fmt.Sprintf("Admin policy for %s bucket", *req.Bucket)),
 		PolicyDocument: aws.String(string(defaultPolicy)),
-		PolicyName:     aws.String(policyName),
+		PolicyName:     aws.String(fmt.Sprintf("%s-BktAdmPlc", *req.Bucket)),
 	})
 
 	if err != nil {
-		// TODO: delete newly created bucket
-		if aerr, ok := err.(awserr.Error); ok {
-			switch aerr.Code() {
-			case iam.ErrCodeInvalidInputException:
-				msg := fmt.Sprintf("%s: %s", iam.ErrCodeInvalidInputException, aerr.Error())
-				w.WriteHeader(http.StatusBadRequest)
-				w.Write([]byte(msg))
-			case iam.ErrCodeLimitExceededException:
-				msg := fmt.Sprintf("%s: %s", iam.ErrCodeLimitExceededException, aerr.Error())
-				w.WriteHeader(http.StatusTooManyRequests)
-				w.Write([]byte(msg))
-			case iam.ErrCodeEntityAlreadyExistsException:
-				msg := fmt.Sprintf("%s: %s", iam.ErrCodeEntityAlreadyExistsException, aerr.Error())
-				w.WriteHeader(http.StatusConflict)
-				w.Write([]byte(msg))
-			case iam.ErrCodeMalformedPolicyDocumentException:
-				msg := fmt.Sprintf("%s: %s", iam.ErrCodeMalformedPolicyDocumentException, aerr.Error())
-				w.WriteHeader(http.StatusBadRequest)
-				w.Write([]byte(msg))
-			case iam.ErrCodeServiceFailureException:
-				msg := fmt.Sprintf("%s: %s", iam.ErrCodeServiceFailureException, aerr.Error())
-				w.WriteHeader(http.StatusServiceUnavailable)
-				w.Write([]byte(msg))
-			default:
-				w.WriteHeader(http.StatusBadRequest)
-				w.Write([]byte(err.Error()))
-			}
-		} else {
-			w.WriteHeader(http.StatusBadRequest)
-			w.Write([]byte(err.Error()))
-		}
-		return
+		handleError(w, err)
+		msg := fmt.Sprintf("failed to create policy: %s", err.Error())
+		panic(msg)
 	}
 
-	groupName := fmt.Sprintf("%s-BucketAdminGroup", *req.Bucket)
-	log.Infof("creating IAM group: %s", groupName)
+	// append policy delete to rollback tasks
+	rbfunc = func() error {
+		return func() error {
+			if _, err := iamService.DeletePolicy(r.Context(), &iam.DeletePolicyInput{PolicyArn: policyOutput.Policy.Arn}); err != nil {
+				return err
+			}
+			return nil
+		}()
+	}
+	rollBackTasks = append(rollBackTasks, rbfunc)
 
-	group, err := iamService.Service.CreateGroupWithContext(r.Context(), &iam.CreateGroupInput{
+	groupName := fmt.Sprintf("%s-BktAdmGrp", *req.Bucket)
+	group, err := iamService.CreateGroup(r.Context(), &iam.CreateGroupInput{
 		GroupName: aws.String(groupName),
 	})
 
 	if err != nil {
-		// TODO: delete newly created bucket and IAM policy
-		if aerr, ok := err.(awserr.Error); ok {
-			switch aerr.Code() {
-			case iam.ErrCodeLimitExceededException:
-				msg := fmt.Sprintf("%s: %s", iam.ErrCodeLimitExceededException, aerr.Error())
-				w.WriteHeader(http.StatusTooManyRequests)
-				w.Write([]byte(msg))
-			case iam.ErrCodeEntityAlreadyExistsException:
-				msg := fmt.Sprintf("%s: %s", iam.ErrCodeEntityAlreadyExistsException, aerr.Error())
-				w.WriteHeader(http.StatusConflict)
-				w.Write([]byte(msg))
-			case iam.ErrCodeNoSuchEntityException:
-				msg := fmt.Sprintf("%s: %s", iam.ErrCodeNoSuchEntityException, aerr.Error())
-				w.WriteHeader(http.StatusBadRequest)
-				w.Write([]byte(msg))
-			case iam.ErrCodeServiceFailureException:
-				msg := fmt.Sprintf("%s: %s", iam.ErrCodeServiceFailureException, aerr.Error())
-				w.WriteHeader(http.StatusServiceUnavailable)
-				w.Write([]byte(msg))
-			default:
-				w.WriteHeader(http.StatusBadRequest)
-				w.Write([]byte(err.Error()))
-			}
-		} else {
-			w.WriteHeader(http.StatusBadRequest)
-			w.Write([]byte(err.Error()))
-		}
-		return
+		handleError(w, err)
+		msg := fmt.Sprintf("failed to create group: %s", err.Error())
+		panic(msg)
 	}
 
-	log.Infof("attaching group %s to policy with arn %s", groupName, *policyOutput.Policy.Arn)
-	_, err = iamService.Service.AttachGroupPolicyWithContext(r.Context(), &iam.AttachGroupPolicyInput{
+	// append policy delete to rollback tasks
+	rbfunc = func() error {
+		return func() error {
+			if _, err := iamService.DeleteGroup(r.Context(), &iam.DeleteGroupInput{GroupName: aws.String(groupName)}); err != nil {
+				return err
+			}
+			return nil
+		}()
+	}
+	rollBackTasks = append(rollBackTasks, rbfunc)
+
+	_, err = iamService.AttachGroupPolicy(r.Context(), &iam.AttachGroupPolicyInput{
 		GroupName: aws.String(groupName),
 		PolicyArn: policyOutput.Policy.Arn,
 	})
 	if err != nil {
-		// TODO: delete newly created bucket, IAM policy, and group
-		if aerr, ok := err.(awserr.Error); ok {
-			switch aerr.Code() {
-			case iam.ErrCodeNoSuchEntityException:
-				msg := fmt.Sprintf("%s: %s", iam.ErrCodeNoSuchEntityException, aerr.Error())
-				w.WriteHeader(http.StatusBadRequest)
-				w.Write([]byte(msg))
-			case iam.ErrCodeLimitExceededException:
-				msg := fmt.Sprintf("%s: %s", iam.ErrCodeLimitExceededException, aerr.Error())
-				w.WriteHeader(http.StatusTooManyRequests)
-				w.Write([]byte(msg))
-			case iam.ErrCodeInvalidInputException:
-				msg := fmt.Sprintf("%s: %s", iam.ErrCodeInvalidInputException, aerr.Error())
-				w.WriteHeader(http.StatusBadRequest)
-				w.Write([]byte(msg))
-			case iam.ErrCodePolicyNotAttachableException:
-				msg := fmt.Sprintf("%s: %s", iam.ErrCodePolicyNotAttachableException, aerr.Error())
-				w.WriteHeader(http.StatusBadRequest)
-				w.Write([]byte(msg))
-			case iam.ErrCodeServiceFailureException:
-				msg := fmt.Sprintf("%s: %s", iam.ErrCodeServiceFailureException, aerr.Error())
-				w.WriteHeader(http.StatusServiceUnavailable)
-				w.Write([]byte(msg))
-			default:
-				w.WriteHeader(http.StatusBadRequest)
-				w.Write([]byte(err.Error()))
-			}
-		} else {
-			w.WriteHeader(http.StatusBadRequest)
-			w.Write([]byte(err.Error()))
-		}
-		return
+		handleError(w, err)
+		msg := fmt.Sprintf("failed to create group: %s", err.Error())
+		panic(msg)
 	}
 
 	output := struct {
@@ -331,34 +268,9 @@ func (s *server) BucketDeleteHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	log.Infof("deleting bucket: %s", bucket)
-	output, err := s3Service.Service.DeleteBucketWithContext(r.Context(), &s3.DeleteBucketInput{
-		Bucket: aws.String(bucket),
-	})
+	output, err := s3Service.DeleteEmptyBucket(r.Context(), &s3.DeleteBucketInput{Bucket: aws.String(bucket)})
 	if err != nil {
-		if aerr, ok := err.(awserr.Error); ok {
-			switch aerr.Code() {
-			case s3.ErrCodeNoSuchBucket:
-				log.Errorf("bucket %s not found.", bucket)
-				w.WriteHeader(http.StatusNotFound)
-				return
-			case "BucketNotEmpty":
-				log.Errorf("trying to delete bucket %s that is not empty.", bucket)
-				w.WriteHeader(http.StatusConflict)
-				w.Write([]byte("bucket not empty"))
-				return
-			case "NotFound":
-				log.Errorf("bucket %s not found.", bucket)
-				w.WriteHeader(http.StatusNotFound)
-				return
-			case "Forbidden":
-				log.Errorf("forbidden to access requested bucket %s", bucket)
-				w.WriteHeader(http.StatusForbidden)
-				return
-			}
-		}
-		log.Errorf("error checking for bucket %s: %s", bucket, err.Error())
-		w.WriteHeader(http.StatusInternalServerError)
+		handleError(w, err)
 		return
 	}
 
@@ -372,4 +284,28 @@ func (s *server) BucketDeleteHandler(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusOK)
 	w.Write(j)
+}
+
+func handleError(w http.ResponseWriter, err error) {
+	log.Error(err.Error())
+	if aerr, ok := err.(apierror.Error); ok {
+		switch aerr.Code {
+		case apierror.ErrForbidden:
+			w.WriteHeader(http.StatusForbidden)
+		case apierror.ErrNotFound:
+			w.WriteHeader(http.StatusNotFound)
+		case apierror.ErrConflict:
+			w.WriteHeader(http.StatusConflict)
+		case apierror.ErrBadRequest:
+			w.WriteHeader(http.StatusBadRequest)
+		case apierror.ErrLimitExceeded:
+			w.WriteHeader(http.StatusTooManyRequests)
+		default:
+			w.WriteHeader(http.StatusInternalServerError)
+		}
+		w.Write([]byte(aerr.Message))
+	} else {
+		w.WriteHeader(http.StatusInternalServerError)
+		w.Write([]byte(err.Error()))
+	}
 }
