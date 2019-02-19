@@ -3,9 +3,27 @@ package s3
 import (
 	"reflect"
 	"testing"
+	"time"
 
 	"github.com/YaleSpinup/s3-api/common"
+	"github.com/aws/aws-sdk-go/service/s3/s3iface"
 )
+
+var testTime = time.Now()
+
+// mockS3Client is a fake S3 client
+type mockS3Client struct {
+	s3iface.S3API
+	t   *testing.T
+	err error
+}
+
+func newMockS3Client(t *testing.T, err error) s3iface.S3API {
+	return &mockS3Client{
+		t:   t,
+		err: err,
+	}
+}
 
 func TestNewSession(t *testing.T) {
 	e := NewSession(common.Account{})

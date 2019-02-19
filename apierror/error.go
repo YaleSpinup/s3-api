@@ -50,7 +50,7 @@ func New(code, message string, err error) Error {
 
 // Error Satisfies the Error interface
 func (e Error) Error() string {
-	return fmt.Sprintf("%s: %s (%s)", e.Code, e.Message, e.OrigErr.Error())
+	return e.String()
 }
 
 // String returns the error as string

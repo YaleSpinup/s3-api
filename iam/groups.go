@@ -13,6 +13,10 @@ import (
 
 // CreateGroup handles creating an IAM group
 func (i *IAM) CreateGroup(ctx context.Context, input *iam.CreateGroupInput) (*iam.CreateGroupOutput, error) {
+	if input == nil || aws.StringValue(input.GroupName) == "" {
+		return nil, apierror.New(apierror.ErrBadRequest, "invalid input", nil)
+	}
+
 	log.Infof("creating IAM group: %s", aws.StringValue(input.GroupName))
 	output, err := i.Service.CreateGroupWithContext(ctx, input)
 
