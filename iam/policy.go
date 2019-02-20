@@ -13,6 +13,10 @@ import (
 
 // CreatePolicy handles creating IAM policy
 func (i *IAM) CreatePolicy(ctx context.Context, input *iam.CreatePolicyInput) (*iam.CreatePolicyOutput, error) {
+	if input == nil {
+		return nil, apierror.New(apierror.ErrBadRequest, "invalid input", nil)
+	}
+
 	log.Infof("creating iam policy: %s", *input.PolicyName)
 
 	output, err := i.Service.CreatePolicyWithContext(ctx, input)

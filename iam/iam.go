@@ -9,6 +9,7 @@ import (
 	"github.com/aws/aws-sdk-go/aws/credentials"
 	"github.com/aws/aws-sdk-go/aws/session"
 	"github.com/aws/aws-sdk-go/service/iam"
+	"github.com/aws/aws-sdk-go/service/iam/iamiface"
 	log "github.com/sirupsen/logrus"
 )
 
@@ -27,7 +28,7 @@ type PolicyDoc struct {
 
 // IAM is a wrapper around the aws IAM service with some default config info
 type IAM struct {
-	Service                *iam.IAM
+	Service                iamiface.IAMAPI
 	DefaultS3BucketActions []string
 	DefaultS3ObjectActions []string
 }
@@ -52,7 +53,7 @@ func NewSession(account common.Account) IAM {
 func (i *IAM) DefaultBucketAdminPolicy(bucket *string) ([]byte, error) {
 	b := aws.StringValue(bucket)
 	log.Debugf("generating default bucket admin policy for bucket: %s", b)
-	policyDoc, err := json.MarshalIndent(PolicyDoc{
+	policyDoc, err := json.Marshal(PolicyDoc{
 		Version: "2012-10-17",
 		Statement: []PolicyStatement{
 			PolicyStatement{
@@ -66,7 +67,7 @@ func (i *IAM) DefaultBucketAdminPolicy(bucket *string) ([]byte, error) {
 				Resource: []string{fmt.Sprintf("arn:aws:s3:::%s/*", b)},
 			},
 		},
-	}, "", "  ")
+	})
 
 	if err != nil {
 		log.Errorf("failed to generate default bucket admin policy for bucket: %s: %s", b, err)

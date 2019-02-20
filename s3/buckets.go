@@ -13,6 +13,10 @@ import (
 
 // CreateBucket handles checking if a bucket exists and creating it
 func (s *S3) CreateBucket(ctx context.Context, input *s3.CreateBucketInput) (*s3.CreateBucketOutput, error) {
+	if input == nil || aws.StringValue(input.Bucket) == "" {
+		return nil, apierror.New(apierror.ErrBadRequest, "invalid input", nil)
+	}
+
 	log.Infof("creating bucket: %s", aws.StringValue(input.Bucket))
 
 	// Checks if a bucket exists in the account heading it.  This is a bit of a hack since in
@@ -63,6 +67,8 @@ func (s *S3) DeleteEmptyBucket(ctx context.Context, input *s3.DeleteBucketInput)
 			case "Forbidden":
 				msg := fmt.Sprintf("forbidden to access requested bucket %s: %s", aws.StringValue(input.Bucket), aerr.Error())
 				return nil, apierror.New(apierror.ErrForbidden, msg, err)
+			default:
+				return nil, apierror.New(apierror.ErrBadRequest, aerr.Message(), err)
 			}
 		}
 

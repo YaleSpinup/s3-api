@@ -6,12 +6,13 @@ import (
 	"github.com/aws/aws-sdk-go/aws/credentials"
 	"github.com/aws/aws-sdk-go/aws/session"
 	"github.com/aws/aws-sdk-go/service/s3"
+	"github.com/aws/aws-sdk-go/service/s3/s3iface"
 	log "github.com/sirupsen/logrus"
 )
 
 // S3 is a wrapper around the aws S3 service with some default config info
 type S3 struct {
-	Service *s3.S3
+	Service s3iface.S3API
 }
 
 // NewSession creates a new S3 session
