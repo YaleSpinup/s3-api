@@ -68,11 +68,25 @@ type LogWriter struct {
 	http.ResponseWriter
 }
 
-// Write log message if http response writer returns and error
+// Write log message if http response writer returns an error
 func (w LogWriter) Write(p []byte) (n int, err error) {
 	n, err = w.ResponseWriter.Write(p)
 	if err != nil {
 		log.Errorf("Write failed: %v", err)
 	}
 	return
+}
+
+// executeRollBack executes functions from a stack of rollback functions
+func executeRollBack(t *[]func() error) {
+	if t != nil {
+		tasks := *t
+		log.Errorf("executing rollback of %d tasks", len(tasks))
+		for i := len(tasks) - 1; i >= 0; i-- {
+			f := tasks[i]
+			if funcerr := f(); funcerr != nil {
+				log.Errorf("rollback task error: %s, continuing rollback", funcerr)
+			}
+		}
+	}
 }

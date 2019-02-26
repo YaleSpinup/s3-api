@@ -11,6 +11,29 @@ import (
 	log "github.com/sirupsen/logrus"
 )
 
+// BucketExists checks if a bucket exists
+func (s *S3) BucketExists(ctx context.Context, bucketName string) (bool, error) {
+	if _, err := s.Service.HeadBucketWithContext(ctx, &s3.HeadBucketInput{
+		Bucket: aws.String(bucketName),
+	}); err != nil {
+		if aerr, ok := err.(awserr.Error); ok {
+			switch aerr.Code() {
+			case s3.ErrCodeNoSuchBucket, "NotFound":
+				return false, nil
+			case "Forbidden":
+				msg := fmt.Sprintf("forbidden to access requested bucket %s: %s", bucketName, aerr.Error())
+				return true, apierror.New(apierror.ErrForbidden, msg, err)
+			default:
+				return false, apierror.New(apierror.ErrBadRequest, aerr.Message(), err)
+			}
+		}
+		return false, apierror.New(apierror.ErrInternalError, "unexpected error checking for bucket", err)
+	}
+
+	// looks like the bucket exists and you have access to it
+	return true, nil
+}
+
 // CreateBucket handles checking if a bucket exists and creating it
 func (s *S3) CreateBucket(ctx context.Context, input *s3.CreateBucketInput) (*s3.CreateBucketOutput, error) {
 	if input == nil || aws.StringValue(input.Bucket) == "" {

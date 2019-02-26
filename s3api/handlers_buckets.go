@@ -7,25 +7,11 @@ import (
 
 	"github.com/YaleSpinup/s3-api/apierror"
 	"github.com/aws/aws-sdk-go/aws"
-	"github.com/aws/aws-sdk-go/aws/awserr"
 	"github.com/aws/aws-sdk-go/service/iam"
 	"github.com/aws/aws-sdk-go/service/s3"
 	"github.com/gorilla/mux"
 	log "github.com/sirupsen/logrus"
 )
-
-func executeRollBack(t *[]func() error) {
-	if t != nil {
-		tasks := *t
-		log.Errorf("executing rollback of %d tasks", len(tasks))
-		for i := len(tasks) - 1; i >= 0; i-- {
-			f := tasks[i]
-			if funcerr := f(); funcerr != nil {
-				log.Errorf("rollback task error: %s, continuing rollback", funcerr)
-			}
-		}
-	}
-}
 
 // BucketCreateHandler creates a new s3 bucket
 func (s *server) BucketCreateHandler(w http.ResponseWriter, r *http.Request) {
@@ -134,11 +120,10 @@ func (s *server) BucketCreateHandler(w http.ResponseWriter, r *http.Request) {
 	}
 	rollBackTasks = append(rollBackTasks, rbfunc)
 
-	_, err = iamService.AttachGroupPolicy(r.Context(), &iam.AttachGroupPolicyInput{
+	if _, err = iamService.AttachGroupPolicy(r.Context(), &iam.AttachGroupPolicyInput{
 		GroupName: aws.String(groupName),
 		PolicyArn: policyOutput.Policy.Arn,
-	})
-	if err != nil {
+	}); err != nil {
 		handleError(w, err)
 		msg := fmt.Sprintf("failed to create group: %s", err.Error())
 		panic(msg)
@@ -162,7 +147,7 @@ func (s *server) BucketCreateHandler(w http.ResponseWriter, r *http.Request) {
 	}
 
 	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(http.StatusAccepted)
+	w.WriteHeader(http.StatusOK)
 	w.Write(j)
 }
 
@@ -218,41 +203,19 @@ func (s *server) BucketHeadHandler(w http.ResponseWriter, r *http.Request) {
 	}
 
 	log.Infof("checking if bucket exists: %s", bucket)
-	output, err := s3Service.Service.HeadBucketWithContext(r.Context(), &s3.HeadBucketInput{
-		Bucket: aws.String(bucket),
-	})
+	exists, err := s3Service.BucketExists(r.Context(), bucket)
 	if err != nil {
-		if aerr, ok := err.(awserr.Error); ok {
-			switch aerr.Code() {
-			case s3.ErrCodeNoSuchBucket:
-				log.Errorf("bucket %s not found.", bucket)
-				w.WriteHeader(http.StatusNotFound)
-				return
-			case "NotFound":
-				log.Errorf("bucket %s not found.", bucket)
-				w.WriteHeader(http.StatusNotFound)
-				return
-			case "Forbidden":
-				log.Errorf("forbidden to access requested bucket %s", bucket)
-				w.WriteHeader(http.StatusForbidden)
-				return
-			}
-		}
-		log.Errorf("error checking for bucket %s: %s", bucket, err.Error())
-		w.WriteHeader(http.StatusInternalServerError)
+		handleError(w, err)
 		return
 	}
 
-	j, err := json.Marshal(output)
-	if err != nil {
-		log.Errorf("cannot marshal response (%v) into JSON: %s", output, err)
-		w.WriteHeader(http.StatusInternalServerError)
-		return
+	if !exists {
+		w.WriteHeader(http.StatusNotFound)
+		w.Write([]byte{})
 	}
 
-	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusOK)
-	w.Write(j)
+	w.Write([]byte{})
 }
 
 // BucketDeleteHandler deletes an empty bucket
