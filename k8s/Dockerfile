@@ -3,6 +3,7 @@ FROM golang:alpine AS build-env
 RUN apk add --no-cache git openssh-client gcc musl-dev
 RUN mkdir /app
 WORKDIR /app
+RUN go version
 COPY go.mod .
 COPY go.sum .
 RUN go mod download

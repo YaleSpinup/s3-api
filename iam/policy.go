@@ -112,3 +112,38 @@ func (i *IAM) DeletePolicy(ctx context.Context, input *iam.DeletePolicyInput) (*
 
 	return output, nil
 }
+
+// ListPolicies lists all policies for an account
+func (i *IAM) ListPolicies(ctx context.Context, input *iam.ListPoliciesInput) ([]*iam.Policy, error) {
+	policies := []*iam.Policy{}
+	if input == nil {
+		return policies, apierror.New(apierror.ErrBadRequest, "invalid input", nil)
+	}
+
+	log.Info("listing iam policies")
+
+	truncated := true
+	for truncated {
+		output, err := i.Service.ListPoliciesWithContext(ctx, input)
+		if err != nil {
+			if aerr, ok := err.(awserr.Error); ok {
+				switch aerr.Code() {
+				// * ErrCodeServiceFailureException "ServiceFailure"
+				// The request processing has failed because of an unknown error, exception
+				// or failure.
+				case iam.ErrCodeServiceFailureException:
+					msg := fmt.Sprintf("%s: %s", aerr.Code(), aerr.Error())
+					return policies, apierror.New(apierror.ErrServiceUnavailable, msg, err)
+				default:
+					return policies, apierror.New(apierror.ErrBadRequest, aerr.Message(), err)
+				}
+			}
+			return policies, apierror.New(apierror.ErrInternalError, "unknown error occurred", err)
+		}
+		truncated = aws.BoolValue(output.IsTruncated)
+		policies = append(policies, output.Policies...)
+		input.Marker = output.Marker
+	}
+
+	return policies, nil
+}

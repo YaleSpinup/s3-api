@@ -42,13 +42,13 @@ func (s *S3) CreateBucket(ctx context.Context, input *s3.CreateBucketInput) (*s3
 
 	log.Infof("creating bucket: %s", aws.StringValue(input.Bucket))
 
-	// Checks if a bucket exists in the account heading it.  This is a bit of a hack since in
+	// Checks if a bucket exists in the account.  This is necessary since in
 	// us-east-1 (only) bucket creation will succeed if the bucket already exists in your
 	// account.  In all other regions, the API will return s3.ErrCodeBucketAlreadyOwnedByYou 🤷‍♂️
-	if _, err := s.Service.HeadBucketWithContext(ctx, &s3.HeadBucketInput{
-		Bucket: input.Bucket,
-	}); err == nil {
-		return nil, apierror.New(apierror.ErrConflict, "bucket exists and is owned by you", nil)
+	if exists, err := s.BucketExists(ctx, aws.StringValue(input.Bucket)); exists {
+		return nil, apierror.New(apierror.ErrConflict, "bucket exists", nil)
+	} else if err != nil {
+		return nil, apierror.New(apierror.ErrInternalError, "internal error", nil)
 	}
 
 	output, err := s.Service.CreateBucketWithContext(ctx, input)
@@ -99,4 +99,21 @@ func (s *S3) DeleteEmptyBucket(ctx context.Context, input *s3.DeleteBucketInput)
 	}
 
 	return output, err
+}
+
+// ListBuckets handles getting a list of buckets in an account
+func (s *S3) ListBuckets(ctx context.Context, input *s3.ListBucketsInput) ([]*s3.Bucket, error) {
+	log.Info("listing buckets")
+	output, err := s.Service.ListBucketsWithContext(ctx, input)
+	if err != nil {
+		if aerr, ok := err.(awserr.Error); ok {
+			switch aerr.Code() {
+			default:
+				return nil, apierror.New(apierror.ErrBadRequest, aerr.Message(), err)
+			}
+		}
+
+		return nil, apierror.New(apierror.ErrInternalError, "unknown error occurred", err)
+	}
+	return output.Buckets, err
 }
