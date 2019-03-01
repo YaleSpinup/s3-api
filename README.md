@@ -147,6 +147,39 @@ DELETE `/v1/s3/{account}/buckets/{bucket}
 | **409 Conflict**              | bucket is not empty             |
 | **500 Internal Server Error** | a server error occurred         |
 
+### Create a bucket user
+
+POST `/v1/s3/{account}/buckets/{bucket}/users
+
+```json
+{
+    "UserName": "somebucketuser"
+}
+```
+
+| Response Code                 | Definition                                  |  
+| ----------------------------- | --------------------------------------------|  
+| **200 OK**                    | user created                                |  
+| **400 Bad Request**           | badly formed request                        |  
+| **403 Forbidden**             | you don't have access to bucket             |  
+| **404 Not Found**             | account or user not found when creating key |  
+| **409 Conflict**              | user already exists                         |  
+| **429 Too Many Requests**     | service or rate limit exceeded              |  
+| **500 Internal Server Error** | a server error occurred                     |
+
+### Delete a bucket user
+
+DELETE `/v1/s3/{account}/buckets/{bucket}/users/{user}
+
+| Response Code                 | Definition                               |  
+| ----------------------------- | -----------------------------------------|  
+| **200 OK**                    | deleted user                             |  
+| **400 Bad Request**           | badly formed request                     |  
+| **403 Forbidden**             | you don't have access to delete the user |  
+| **404 Not Found**             | account or user not found                |  
+| **429 Too Many Requests**     | service or rate limit exceeded           |  
+| **500 Internal Server Error** | a server error occurred                  |
+
 ## Author
 
 E Camden Fisher <camden.fisher@yale.edu>

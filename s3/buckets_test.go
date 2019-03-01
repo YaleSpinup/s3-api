@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"reflect"
+	"strings"
 	"testing"
 
 	"github.com/YaleSpinup/s3-api/apierror"
@@ -13,8 +14,37 @@ import (
 	"github.com/aws/aws-sdk-go/service/s3"
 )
 
+var testBucket1 = s3.Bucket{
+	CreationDate: &testTime,
+	Name:         aws.String("testbucket1"),
+}
+
+var testBucket2 = s3.Bucket{
+	CreationDate: &testTime,
+	Name:         aws.String("testbucket2"),
+}
+
+var testBucket3 = s3.Bucket{
+	CreationDate: &testTime,
+	Name:         aws.String("testbucket3"),
+}
+
+var testBuckets1 = []*s3.Bucket{&testBucket1, &testBucket2, &testBucket3}
+
 func (m *mockS3Client) HeadBucketWithContext(ctx context.Context, input *s3.HeadBucketInput, opts ...request.Option) (*s3.HeadBucketOutput, error) {
-	return nil, awserr.New(s3.ErrCodeNoSuchBucket, "not found", nil)
+	if aws.StringValue(input.Bucket) == "testbucket" {
+		return nil, awserr.New(s3.ErrCodeNoSuchBucket, "Not Found", nil)
+	}
+
+	if strings.HasSuffix(aws.StringValue(input.Bucket), "-exists") {
+		return &s3.HeadBucketOutput{}, nil
+	}
+
+	if strings.HasSuffix(aws.StringValue(input.Bucket), "-missing") {
+		return nil, awserr.New(s3.ErrCodeNoSuchBucket, "Not Found", nil)
+	}
+
+	return &s3.HeadBucketOutput{}, nil
 }
 
 func (m *mockS3Client) CreateBucketWithContext(ctx context.Context, input *s3.CreateBucketInput, opts ...request.Option) (*s3.CreateBucketOutput, error) {
@@ -29,6 +59,35 @@ func (m *mockS3Client) DeleteBucketWithContext(ctx context.Context, input *s3.De
 		return nil, m.err
 	}
 	return &s3.DeleteBucketOutput{}, nil
+}
+
+func (m *mockS3Client) ListBucketsWithContext(ctx context.Context, input *s3.ListBucketsInput, opts ...request.Option) (*s3.ListBucketsOutput, error) {
+	if m.err != nil {
+		return nil, m.err
+	}
+	return &s3.ListBucketsOutput{Buckets: testBuckets1}, nil
+}
+
+func TestBucketExists(t *testing.T) {
+	s := S3{Service: newMockS3Client(t, nil)}
+
+	exists, err := s.BucketExists(context.TODO(), "testbucket-exists")
+	if err != nil {
+		t.Errorf("expected nil error, got: %s", err)
+	}
+
+	if !exists {
+		t.Errorf("expected testbucket-exists to exist (true), got false")
+	}
+
+	notexists, err := s.BucketExists(context.TODO(), "testbucket-missing")
+	if err != nil {
+		t.Errorf("expected nil error, got: %s", err)
+	}
+
+	if notexists {
+		t.Errorf("expected testbucket-missing to not exist (false), got true")
+	}
 }
 
 func TestCreateBucket(t *testing.T) {
@@ -202,6 +261,43 @@ func TestDeleteBucket(t *testing.T) {
 	// test non-aws error
 	s.Service.(*mockS3Client).err = errors.New("things blowing up!")
 	_, err = s.DeleteEmptyBucket(context.TODO(), &s3.DeleteBucketInput{Bucket: aws.String("testbucket")})
+	if aerr, ok := err.(apierror.Error); ok {
+		if aerr.Code != apierror.ErrInternalError {
+			t.Errorf("expected error code %s, got: %s", apierror.ErrInternalError, aerr.Code)
+		}
+	} else {
+		t.Errorf("expected apierror.Error, got: %s", reflect.TypeOf(err).String())
+	}
+}
+
+func TestListBuckets(t *testing.T) {
+	s := S3{Service: newMockS3Client(t, nil)}
+
+	// test success
+	expected := testBuckets1
+	out, err := s.ListBuckets(context.TODO(), &s3.ListBucketsInput{})
+	if err != nil {
+		t.Errorf("expected nil error, got: %s", err)
+	}
+
+	if !reflect.DeepEqual(out, expected) {
+		t.Errorf("expected %+v, got %+v", expected, out)
+	}
+
+	// test some unexpected AWS error
+	s.Service.(*mockS3Client).err = awserr.New(s3.ErrCodeNoSuchUpload, "no such upload", nil)
+	_, err = s.ListBuckets(context.TODO(), &s3.ListBucketsInput{})
+	if aerr, ok := err.(apierror.Error); ok {
+		if aerr.Code != apierror.ErrBadRequest {
+			t.Errorf("expected error code %s, got: %s", apierror.ErrBadRequest, aerr.Code)
+		}
+	} else {
+		t.Errorf("expected apierror.Error, got: %s", reflect.TypeOf(err).String())
+	}
+
+	// test non-aws error
+	s.Service.(*mockS3Client).err = errors.New("things blowing up!")
+	_, err = s.ListBuckets(context.TODO(), &s3.ListBucketsInput{})
 	if aerr, ok := err.(apierror.Error); ok {
 		if aerr.Code != apierror.ErrInternalError {
 			t.Errorf("expected error code %s, got: %s", apierror.ErrInternalError, aerr.Code)
