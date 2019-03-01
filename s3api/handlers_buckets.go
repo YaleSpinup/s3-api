@@ -226,7 +226,7 @@ func (s *server) BucketHeadHandler(w http.ResponseWriter, r *http.Request) {
 // BucketDeleteHandler deletes an empty bucket and all of it's dependencies.  The operations are
 // 1. the bucket is deleted, this will fail if the bucket is not empty
 // 2. a list of policies attached to the bucket admin group (<bucketName>-BktAdmGrp) is gathered
-// 3. each of those policies is detached from the group and if the ut starts with '<bucketName>-' it is deleted
+// 3. each of those policies is detached from the group and if it starts with '<bucketName>-', it is deleted
 // 4. the bucket admin group is deleted
 func (s *server) BucketDeleteHandler(w http.ResponseWriter, r *http.Request) {
 	w = LogWriter{w}
@@ -248,16 +248,20 @@ func (s *server) BucketDeleteHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	output, err := s3Service.DeleteEmptyBucket(r.Context(), &s3.DeleteBucketInput{Bucket: aws.String(bucket)})
+	_, err := s3Service.DeleteEmptyBucket(r.Context(), &s3.DeleteBucketInput{Bucket: aws.String(bucket)})
 	if err != nil {
 		handleError(w, err)
 		return
 	}
 
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusOK)
+
 	groupName := fmt.Sprintf("%s-BktAdmGrp", bucket)
 	policies, err := iamService.ListGroupPolicies(r.Context(), &iam.ListAttachedGroupPoliciesInput{GroupName: aws.String(groupName)})
 	if err != nil {
-		handleError(w, err)
+		j, _ := json.Marshal("failed to list group policies: " + err.Error())
+		w.Write(j)
 		return
 	}
 
@@ -266,13 +270,15 @@ func (s *server) BucketDeleteHandler(w http.ResponseWriter, r *http.Request) {
 			GroupName: aws.String(groupName),
 			PolicyArn: p.PolicyArn,
 		}); err != nil {
-			handleError(w, err)
+			j, _ := json.Marshal("failed to detatch group policy: " + err.Error())
+			w.Write(j)
 			return
 		}
 
 		if strings.HasPrefix(aws.StringValue(p.PolicyName), bucket+"-") {
 			if _, err := iamService.DeletePolicy(r.Context(), &iam.DeletePolicyInput{PolicyArn: p.PolicyArn}); err != nil {
-				handleError(w, err)
+				j, _ := json.Marshal("failed to delete group policy: " + err.Error())
+				w.Write(j)
 				return
 			}
 			break
@@ -280,18 +286,10 @@ func (s *server) BucketDeleteHandler(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if _, err := iamService.DeleteGroup(r.Context(), &iam.DeleteGroupInput{GroupName: aws.String(groupName)}); err != nil {
-		handleError(w, err)
+		j, _ := json.Marshal("failed to delete group: " + err.Error())
+		w.Write(j)
 		return
 	}
 
-	j, err := json.Marshal(output)
-	if err != nil {
-		log.Errorf("cannot marshal response (%v) into JSON: %s", output, err)
-		w.WriteHeader(http.StatusInternalServerError)
-		return
-	}
-
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(http.StatusOK)
-	w.Write(j)
+	w.Write([]byte{})
 }
