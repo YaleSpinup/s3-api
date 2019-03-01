@@ -19,6 +19,8 @@ func (s *server) routes() {
 	// api.HandleFunc("/{account}/buckets/{bucket}", s.BucketShowHandler).Methods(http.MethodGet)
 	api.HandleFunc("/{account}/buckets/{bucket}", s.BucketDeleteHandler).Methods(http.MethodDelete)
 	// api.HandleFunc("/{account}/buckets/{bucket}/objects", s.ObjectCountHandler).Methods(http.MethodHead)
+	api.HandleFunc("/{account}/buckets/{bucket}/users", s.UserListHandler).Methods(http.MethodGet)
 	api.HandleFunc("/{account}/buckets/{bucket}/users", s.UserCreateHandler).Methods(http.MethodPost)
 	api.HandleFunc("/{account}/buckets/{bucket}/users/{user}", s.UserDeleteHandler).Methods(http.MethodDelete)
+	api.HandleFunc("/{account}/buckets/{bucket}/users/{user}", s.UserUpdateKeyHandler).Methods(http.MethodPut)
 }

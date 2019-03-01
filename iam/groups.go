@@ -243,3 +243,44 @@ func (i *IAM) ListGroupPolicies(ctx context.Context, input *iam.ListAttachedGrou
 
 	return policies, nil
 }
+
+// ListGroupUsers lists the users that belong to a group
+func (i *IAM) ListGroupUsers(ctx context.Context, input *iam.GetGroupInput) ([]*iam.User, error) {
+	users := []*iam.User{}
+	if input == nil || aws.StringValue(input.GroupName) == "" {
+		return users, apierror.New(apierror.ErrBadRequest, "invalid input", nil)
+	}
+
+	log.Infof("listing iam users for group %s", aws.StringValue(input.GroupName))
+
+	truncated := true
+	for truncated {
+		output, err := i.Service.GetGroupWithContext(ctx, input)
+		if err != nil {
+			if aerr, ok := err.(awserr.Error); ok {
+				switch aerr.Code() {
+				// * ErrCodeNoSuchEntityException "NoSuchEntity"
+				// The request was rejected because it referenced a resource entity that does
+				// not exist. The error message describes the resource.
+				case iam.ErrCodeNoSuchEntityException:
+					msg := fmt.Sprintf("%s: %s", aerr.Code(), aerr.Error())
+					return users, apierror.New(apierror.ErrNotFound, msg, err)
+				// * ErrCodeServiceFailureException "ServiceFailure"
+				// The request processing has failed because of an unknown error, exception
+				// or failure.
+				case iam.ErrCodeServiceFailureException:
+					msg := fmt.Sprintf("%s: %s", aerr.Code(), aerr.Error())
+					return users, apierror.New(apierror.ErrServiceUnavailable, msg, err)
+				default:
+					return users, apierror.New(apierror.ErrBadRequest, aerr.Message(), err)
+				}
+			}
+			return users, apierror.New(apierror.ErrInternalError, "unknown error occurred", err)
+		}
+		truncated = aws.BoolValue(output.IsTruncated)
+		users = append(users, output.Users...)
+		input.Marker = output.Marker
+	}
+
+	return users, nil
+}

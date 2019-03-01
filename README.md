@@ -106,9 +106,39 @@ GET `/v1/s3/{account}/buckets`
 
 POST `/v1/s3/{account}/buckets
 
+#### Request
+
 ```json
 {
     "Bucket": "foobarbucketname"
+}
+```
+
+#### Response
+
+```json
+{
+    "Bucket": "/foobarbucketname",
+    "Policy": {
+        "Arn": "arn:aws:iam::846761448161:policy/foobarbucketname-BktAdmPlc",
+        "AttachmentCount": 0,
+        "CreateDate": "2019-03-01T15:33:52Z",
+        "DefaultVersionId": "v1",
+        "Description": null,
+        "IsAttachable": true,
+        "Path": "/",
+        "PermissionsBoundaryUsageCount": 0,
+        "PolicyId": "ABCDEFGHI12345678",
+        "PolicyName": "foobarbucketname-BktAdmPlc",
+        "UpdateDate": "2019-03-01T15:33:52Z"
+    },
+    "Group": {
+        "Arn": "arn:aws:iam::846761448161:group/foobarbucketname-BktAdmGrp",
+        "CreateDate": "2019-03-01T15:33:52Z",
+        "GroupId": "GROUPID123",
+        "GroupName": "foobarbucketname-BktAdmGrp",
+        "Path": "/"
+    }
 }
 ```
 
@@ -151,9 +181,35 @@ DELETE `/v1/s3/{account}/buckets/{bucket}
 
 POST `/v1/s3/{account}/buckets/{bucket}/users
 
+#### Request
+
 ```json
 {
     "UserName": "somebucketuser"
+}
+```
+
+#### Response
+
+```json
+{
+    "User": {
+        "Arn": "arn:aws:iam::846761448161:user/somebucketuser",
+        "CreateDate": "2019-03-01T16:11:00Z",
+        "PasswordLastUsed": null,
+        "Path": "/",
+        "PermissionsBoundary": null,
+        "Tags": null,
+        "UserId": "AIDAJJSBBEAVOQLFAAUCG",
+        "UserName": "somebucketuser"
+    },
+    "AccessKey": {
+        "AccessKeyId": "ABCDEFGHIJ12345678",
+        "CreateDate": "2019-03-01T16:11:00Z",
+        "SecretAccessKey": "sssshimsupersekretdonttellanyoneyousawme",
+        "Status": "Active",
+        "UserName": "somebucketuser"
+    }
 }
 ```
 
@@ -166,6 +222,68 @@ POST `/v1/s3/{account}/buckets/{bucket}/users
 | **409 Conflict**              | user already exists                         |  
 | **429 Too Many Requests**     | service or rate limit exceeded              |  
 | **500 Internal Server Error** | a server error occurred                     |
+
+### Reset access keys for a bucket user
+
+PUT `/v1/s3/{account}/buckets/{bucket}/users/{user}
+
+#### Response
+
+```json
+{
+    "DeletedKeyIds": [
+        "ABCDEFGHIJK123456789"
+    ],
+    "AccessKey": {
+        "AccessKeyId": "LMNOPQRSTUVW123456789",
+        "CreateDate": "2019-03-01T16:14:07Z",
+        "SecretAccessKey": "sssshimsupersekretdonttellanyoneyousawme",
+        "Status": "Active",
+        "UserName": "someuser-admin1"
+    }
+}
+```
+
+| Response Code                 | Definition                               |  
+| ----------------------------- | -----------------------------------------|  
+| **200 OK**                    | keys reset successfully                  |  
+| **400 Bad Request**           | badly formed request                     |  
+| **403 Forbidden**             | you don't have access to delete the user |  
+| **404 Not Found**             | account or user not found                |  
+| **429 Too Many Requests**     | service or rate limit exceeded           |  
+| **500 Internal Server Error** | a server error occurred                  |
+
+### List users for a bucket
+
+GET `/v1/s3/{account}/buckets/{bucket}/users/{user}
+
+#### Response
+
+```json
+[
+    {
+        "Arn": "arn:aws:iam::846761448161:user/someuser-admin1",
+        "CreateDate": "2019-03-01T16:11:00Z",
+        "PasswordLastUsed": null,
+        "Path": "/",
+        "PermissionsBoundary": null,
+        "Tags": null,
+        "UserId": "ABCDEFGHI12345678",
+        "UserName": "someuser-admin1"
+    },
+        {
+        "Arn": "arn:aws:iam::846761448161:user/someuser-admin2",
+        "CreateDate": "2019-03-01T16:11:00Z",
+        "PasswordLastUsed": null,
+        "Path": "/",
+        "PermissionsBoundary": null,
+        "Tags": null,
+        "UserId": "ZYXWUTS87654321",
+        "UserName": "someuser-admin2"
+    }
+]
+```
+
 
 ### Delete a bucket user
 
