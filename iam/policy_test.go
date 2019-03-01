@@ -27,6 +27,50 @@ var testPolicy = iam.Policy{
 	UpdateDate:                    &testTime,
 }
 
+var testPolicy1 = iam.Policy{
+	Arn:                           aws.String("arn:aws:iam::12345678910:group/testpolicy1"),
+	AttachmentCount:               aws.Int64(0),
+	CreateDate:                    &testTime,
+	DefaultVersionId:              aws.String("v1"),
+	Description:                   aws.String("policy thang"),
+	IsAttachable:                  aws.Bool(true),
+	Path:                          aws.String("/"),
+	PermissionsBoundaryUsageCount: aws.Int64(0),
+	PolicyId:                      aws.String("TESTPOLICYID123"),
+	PolicyName:                    aws.String("testpolicy1"),
+	UpdateDate:                    &testTime,
+}
+
+var testPolicy2 = iam.Policy{
+	Arn:                           aws.String("arn:aws:iam::12345678910:group/testpolicy2"),
+	AttachmentCount:               aws.Int64(0),
+	CreateDate:                    &testTime,
+	DefaultVersionId:              aws.String("v1"),
+	Description:                   aws.String("policy thang"),
+	IsAttachable:                  aws.Bool(true),
+	Path:                          aws.String("/"),
+	PermissionsBoundaryUsageCount: aws.Int64(0),
+	PolicyId:                      aws.String("TESTPOLICYID223"),
+	PolicyName:                    aws.String("testpolicy2"),
+	UpdateDate:                    &testTime,
+}
+
+var testPolicy3 = iam.Policy{
+	Arn:                           aws.String("arn:aws:iam::12345678910:group/testpolicy3"),
+	AttachmentCount:               aws.Int64(0),
+	CreateDate:                    &testTime,
+	DefaultVersionId:              aws.String("v1"),
+	Description:                   aws.String("policy thang"),
+	IsAttachable:                  aws.Bool(true),
+	Path:                          aws.String("/"),
+	PermissionsBoundaryUsageCount: aws.Int64(0),
+	PolicyId:                      aws.String("TESTPOLICYID323"),
+	PolicyName:                    aws.String("testpolicy3"),
+	UpdateDate:                    &testTime,
+}
+
+var testPolicies1 = []*iam.Policy{&testPolicy1, &testPolicy2, &testPolicy3}
+
 func (m *mockIAMClient) CreatePolicyWithContext(ctx context.Context, input *iam.CreatePolicyInput, opts ...request.Option) (*iam.CreatePolicyOutput, error) {
 	if m.err != nil {
 		return nil, m.err
@@ -39,6 +83,13 @@ func (m *mockIAMClient) DeletePolicyWithContext(ctx context.Context, input *iam.
 		return nil, m.err
 	}
 	return &iam.DeletePolicyOutput{}, nil
+}
+
+func (m *mockIAMClient) ListPoliciesWithContext(ctx context.Context, input *iam.ListPoliciesInput, opts ...request.Option) (*iam.ListPoliciesOutput, error) {
+	if m.err != nil {
+		return nil, m.err
+	}
+	return &iam.ListPoliciesOutput{Policies: testPolicies1}, nil
 }
 
 func TestCreatePolicy(t *testing.T) {
@@ -294,6 +345,68 @@ func TestDeletePolicy(t *testing.T) {
 	// test non-aws error
 	i.Service.(*mockIAMClient).err = errors.New("things blowing up!")
 	_, err = i.DeletePolicy(context.TODO(), &iam.DeletePolicyInput{PolicyArn: aws.String("arn:aws:iam::12345678910:group/testpolicy")})
+	if aerr, ok := err.(apierror.Error); ok {
+		if aerr.Code != apierror.ErrInternalError {
+			t.Errorf("expected error code %s, got: %s", apierror.ErrInternalError, aerr.Code)
+		}
+	} else {
+		t.Errorf("expected apierror.Error, got: %s", reflect.TypeOf(err).String())
+	}
+}
+
+func TestListPolicies(t *testing.T) {
+	i := IAM{
+		Service:                newMockIAMClient(t, nil),
+		DefaultS3BucketActions: []string{"gti", "golfr", "jetta", "passat"},
+		DefaultS3ObjectActions: []string{"blue", "green", "yellow", "red"},
+	}
+
+	// test success
+	expected := testPolicies1
+	out, err := i.ListPolicies(context.TODO(), &iam.ListPoliciesInput{})
+	if err != nil {
+		t.Errorf("expected nil error, got: %s", err)
+	}
+
+	if !reflect.DeepEqual(out, expected) {
+		t.Errorf("expected %+v, got %+v", expected, out)
+	}
+
+	// test nil input
+	_, err = i.ListPolicies(context.TODO(), nil)
+	if aerr, ok := err.(apierror.Error); ok {
+		if aerr.Code != apierror.ErrBadRequest {
+			t.Errorf("expected error code %s, got: %s", apierror.ErrBadRequest, aerr.Code)
+		}
+	} else {
+		t.Errorf("expected apierror.Error, got: %s", reflect.TypeOf(err).String())
+	}
+
+	// test ErrCodeServiceFailureException
+	i.Service.(*mockIAMClient).err = awserr.New(iam.ErrCodeServiceFailureException, "not found", nil)
+	_, err = i.ListPolicies(context.TODO(), &iam.ListPoliciesInput{})
+	if aerr, ok := err.(apierror.Error); ok {
+		if aerr.Code != apierror.ErrServiceUnavailable {
+			t.Errorf("expected error code %s, got: %s", apierror.ErrServiceUnavailable, aerr.Code)
+		}
+	} else {
+		t.Errorf("expected apierror.Error, got: %s", reflect.TypeOf(err).String())
+	}
+
+	// test some other, unexpected AWS error
+	i.Service.(*mockIAMClient).err = awserr.New(iam.ErrCodeEntityAlreadyExistsException, "policy exists", nil)
+	_, err = i.ListPolicies(context.TODO(), &iam.ListPoliciesInput{})
+	if aerr, ok := err.(apierror.Error); ok {
+		if aerr.Code != apierror.ErrBadRequest {
+			t.Errorf("expected error code %s, got: %s", apierror.ErrBadRequest, aerr.Code)
+		}
+	} else {
+		t.Errorf("expected apierror.Error, got: %s", reflect.TypeOf(err).String())
+	}
+
+	// test non-aws error
+	i.Service.(*mockIAMClient).err = errors.New("things blowing up!")
+	_, err = i.ListPolicies(context.TODO(), &iam.ListPoliciesInput{})
 	if aerr, ok := err.(apierror.Error); ok {
 		if aerr.Code != apierror.ErrInternalError {
 			t.Errorf("expected error code %s, got: %s", apierror.ErrInternalError, aerr.Code)

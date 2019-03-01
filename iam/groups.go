@@ -104,6 +104,7 @@ func (i *IAM) DeleteGroup(ctx context.Context, input *iam.DeleteGroupInput) (*ia
 	return output, nil
 }
 
+// AttachGroupPolicy attaches a policy to a group
 func (i *IAM) AttachGroupPolicy(ctx context.Context, input *iam.AttachGroupPolicyInput) (*iam.AttachGroupPolicyOutput, error) {
 	if input == nil || aws.StringValue(input.GroupName) == "" || aws.StringValue(input.PolicyArn) == "" {
 		return nil, apierror.New(apierror.ErrBadRequest, "invalid input", nil)
@@ -149,4 +150,96 @@ func (i *IAM) AttachGroupPolicy(ctx context.Context, input *iam.AttachGroupPolic
 	}
 
 	return output, nil
+}
+
+// DetachGroupPolicy detaches a policy from a group
+func (i *IAM) DetachGroupPolicy(ctx context.Context, input *iam.DetachGroupPolicyInput) (*iam.DetachGroupPolicyOutput, error) {
+	if input == nil || aws.StringValue(input.GroupName) == "" || aws.StringValue(input.PolicyArn) == "" {
+		return nil, apierror.New(apierror.ErrBadRequest, "invalid input", nil)
+	}
+
+	output, err := i.Service.DetachGroupPolicyWithContext(ctx, input)
+	if err != nil {
+		if aerr, ok := err.(awserr.Error); ok {
+			switch aerr.Code() {
+			// * ErrCodeNoSuchEntityException "NoSuchEntity"
+			// The request was rejected because it referenced a resource entity that does
+			// not exist. The error message describes the resource.
+			case iam.ErrCodeNoSuchEntityException:
+				msg := fmt.Sprintf("%s: %s", aerr.Code(), aerr.Error())
+				return nil, apierror.New(apierror.ErrNotFound, msg, err)
+			// * ErrCodeLimitExceededException "LimitExceeded"
+			// The request was rejected because it attempted to create resources beyond
+			// the current AWS account limits. The error message describes the limit exceeded.
+			case iam.ErrCodeLimitExceededException:
+				msg := fmt.Sprintf("%s: %s", aerr.Code(), aerr.Error())
+				return nil, apierror.New(apierror.ErrLimitExceeded, msg, err)
+			// * ErrCodeInvalidInputException "InvalidInput"
+			// The request was rejected because an invalid or out-of-range value was supplied
+			// for an input parameter.
+			case iam.ErrCodeInvalidInputException:
+				msg := fmt.Sprintf("%s: %s", aerr.Code(), aerr.Error())
+				return nil, apierror.New(apierror.ErrBadRequest, msg, err)
+			// * ErrCodeServiceFailureException "ServiceFailure"
+			// The request processing has failed because of an unknown error, exception
+			// or failure.
+			case iam.ErrCodeServiceFailureException:
+				msg := fmt.Sprintf("%s: %s", aerr.Code(), aerr.Error())
+				return nil, apierror.New(apierror.ErrServiceUnavailable, msg, err)
+			default:
+				return nil, apierror.New(apierror.ErrBadRequest, aerr.Message(), err)
+			}
+		}
+		return nil, apierror.New(apierror.ErrInternalError, "unknown error occurred", err)
+	}
+
+	return output, nil
+}
+
+// ListGroupPolicies lists the policies attached to a group
+func (i *IAM) ListGroupPolicies(ctx context.Context, input *iam.ListAttachedGroupPoliciesInput) ([]*iam.AttachedPolicy, error) {
+	policies := []*iam.AttachedPolicy{}
+
+	if input == nil || aws.StringValue(input.GroupName) == "" {
+		return policies, apierror.New(apierror.ErrBadRequest, "invalid input", nil)
+	}
+
+	log.Infof("listing policies attached to group %s", aws.StringValue(input.GroupName))
+
+	truncated := true
+	for truncated {
+		output, err := i.Service.ListAttachedGroupPoliciesWithContext(ctx, input)
+		if err != nil {
+			if aerr, ok := err.(awserr.Error); ok {
+				switch aerr.Code() {
+				// * ErrCodeNoSuchEntityException "NoSuchEntity"
+				// The request was rejected because it referenced a resource entity that does
+				// not exist. The error message describes the resource.
+				case iam.ErrCodeNoSuchEntityException:
+					msg := fmt.Sprintf("%s: %s", aerr.Code(), aerr.Error())
+					return policies, apierror.New(apierror.ErrNotFound, msg, err)
+				// * ErrCodeInvalidInputException "InvalidInput"
+				// The request was rejected because an invalid or out-of-range value was supplied
+				// for an input parameter.
+				case iam.ErrCodeInvalidInputException:
+					msg := fmt.Sprintf("%s: %s", aerr.Code(), aerr.Error())
+					return policies, apierror.New(apierror.ErrBadRequest, msg, err)
+				// * ErrCodeServiceFailureException "ServiceFailure"
+				// The request processing has failed because of an unknown error, exception
+				// or failure.
+				case iam.ErrCodeServiceFailureException:
+					msg := fmt.Sprintf("%s: %s", aerr.Code(), aerr.Error())
+					return policies, apierror.New(apierror.ErrServiceUnavailable, msg, err)
+				default:
+					return policies, apierror.New(apierror.ErrBadRequest, aerr.Message(), err)
+				}
+			}
+			return policies, apierror.New(apierror.ErrInternalError, "unknown error occurred", err)
+		}
+		truncated = aws.BoolValue(output.IsTruncated)
+		policies = append(policies, output.AttachedPolicies...)
+		input.Marker = output.Marker
+	}
+
+	return policies, nil
 }
