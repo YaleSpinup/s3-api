@@ -110,7 +110,14 @@ POST `/v1/s3/{account}/buckets
 
 ```json
 {
-    "Bucket": "foobarbucketname"
+    "Tags": {
+        "Application": "HowToGet",
+        "COA": "Take.My.Money.$$$$",
+        "CreatedBy": "Big Bird"
+    },
+    "BucketInput": {
+        "Bucket": "foobarbucketname"
+    }
 }
 ```
 

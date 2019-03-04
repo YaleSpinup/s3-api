@@ -17,10 +17,11 @@ import (
 // BucketCreateHandler orchestrates the creation of a new s3 bucket with rollback in the event of
 // failure.  The operations are
 // 1. create the bucket with the given name
-// 2. generate the default admin bucket policy
-// 3. create the admin bucket policy
-// 4. create the bucket admin group, '<bucketName>-BktAdmGrp'
-// 5. attach the bucket admin policy to the bucket admin group
+// 2. tag the bucket with given tags
+// 3. generate the default admin bucket policy
+// 4. create the admin bucket policy
+// 5. create the bucket admin group, '<bucketName>-BktAdmGrp'
+// 6. attach the bucket admin policy to the bucket admin group
 // Note: this does _not_ create any users for managing the bucket
 func (s *server) BucketCreateHandler(w http.ResponseWriter, r *http.Request) {
 	w = LogWriter{w}
@@ -40,7 +41,10 @@ func (s *server) BucketCreateHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	var req s3.CreateBucketInput
+	var req struct {
+		Tags        map[string]string
+		BucketInput s3.CreateBucketInput
+	}
 	err := json.NewDecoder(r.Body).Decode(&req)
 	if err != nil {
 		msg := fmt.Sprintf("cannot decode body into create bucket input: %s", err)
@@ -57,7 +61,8 @@ func (s *server) BucketCreateHandler(w http.ResponseWriter, r *http.Request) {
 		}
 	}()
 
-	bucketOutput, err := s3Service.CreateBucket(r.Context(), &req)
+	bucketName := aws.StringValue(req.BucketInput.Bucket)
+	bucketOutput, err := s3Service.CreateBucket(r.Context(), &req.BucketInput)
 	if err != nil {
 		handleError(w, err)
 		msg := fmt.Sprintf("failed to create bucket: %s", err)
@@ -67,7 +72,7 @@ func (s *server) BucketCreateHandler(w http.ResponseWriter, r *http.Request) {
 	// append bucket delete to rollback tasks
 	rbfunc := func() error {
 		return func() error {
-			if _, err := s3Service.DeleteEmptyBucket(r.Context(), &s3.DeleteBucketInput{Bucket: req.Bucket}); err != nil {
+			if _, err := s3Service.DeleteEmptyBucket(r.Context(), &s3.DeleteBucketInput{Bucket: aws.String(bucketName)}); err != nil {
 				return err
 			}
 			return nil
@@ -75,18 +80,25 @@ func (s *server) BucketCreateHandler(w http.ResponseWriter, r *http.Request) {
 	}
 	rollBackTasks = append(rollBackTasks, rbfunc)
 
-	// build the default IAM bucket admin policy (from the config and known inputs)
-	defaultPolicy, err := iamService.DefaultBucketAdminPolicy(req.Bucket)
+	err = s3Service.TagBucket(r.Context(), bucketName, req.Tags)
 	if err != nil {
-		msg := fmt.Sprintf("failed creating default IAM policy for bucket %s: %s", *req.Bucket, err.Error())
+		msg := fmt.Sprintf("failed to tag bucket %s: %s", bucketName, err.Error())
+		handleError(w, apierror.New(apierror.ErrInternalError, msg, err))
+		panic(msg)
+	}
+
+	// build the default IAM bucket admin policy (from the config and known inputs)
+	defaultPolicy, err := iamService.DefaultBucketAdminPolicy(aws.String(bucketName))
+	if err != nil {
+		msg := fmt.Sprintf("failed creating default IAM policy for bucket %s: %s", bucketName, err.Error())
 		handleError(w, apierror.New(apierror.ErrInternalError, msg, err))
 		panic(msg)
 	}
 
 	policyOutput, err := iamService.CreatePolicy(r.Context(), &iam.CreatePolicyInput{
-		Description:    aws.String(fmt.Sprintf("Admin policy for %s bucket", *req.Bucket)),
+		Description:    aws.String(fmt.Sprintf("Admin policy for %s bucket", bucketName)),
 		PolicyDocument: aws.String(string(defaultPolicy)),
-		PolicyName:     aws.String(fmt.Sprintf("%s-BktAdmPlc", *req.Bucket)),
+		PolicyName:     aws.String(fmt.Sprintf("%s-BktAdmPlc", bucketName)),
 	})
 
 	if err != nil {
@@ -106,7 +118,7 @@ func (s *server) BucketCreateHandler(w http.ResponseWriter, r *http.Request) {
 	}
 	rollBackTasks = append(rollBackTasks, rbfunc)
 
-	groupName := fmt.Sprintf("%s-BktAdmGrp", *req.Bucket)
+	groupName := fmt.Sprintf("%s-BktAdmGrp", bucketName)
 	group, err := iamService.CreateGroup(r.Context(), &iam.CreateGroupInput{
 		GroupName: aws.String(groupName),
 	})
@@ -291,5 +303,80 @@ func (s *server) BucketDeleteHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	w.Write([]byte{})
+}
+
+// BucketShowHandler returns information about a bucket
+func (s *server) BucketShowHandler(w http.ResponseWriter, r *http.Request) {
+	w = LogWriter{w}
+	vars := mux.Vars(r)
+	account := vars["account"]
+	bucket := vars["bucket"]
+
+	s3Service, ok := s.s3Services[account]
+	if !ok {
+		log.Errorf("account not found: %s", account)
+		w.WriteHeader(http.StatusNotFound)
+		return
+	}
+
+	tags, err := s3Service.GetBucketTags(r.Context(), bucket)
+	if err != nil {
+		handleError(w, err)
+		return
+	}
+
+	// setup output struct
+	var output = struct {
+		Tags map[string]string
+	}{}
+
+	output.Tags = tags
+
+	j, err := json.Marshal(output)
+	if err != nil {
+		log.Errorf("cannot marshal response (%v) into JSON: %s", output, err)
+		w.WriteHeader(http.StatusInternalServerError)
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusOK)
+	w.Write(j)
+}
+
+func (s *server) BucketUpdateHandler(w http.ResponseWriter, r *http.Request) {
+	w = LogWriter{w}
+	vars := mux.Vars(r)
+	account := vars["account"]
+	bucket := vars["bucket"]
+	s3Service, ok := s.s3Services[account]
+	if !ok {
+		msg := fmt.Sprintf("s3 service not found for account: %s", account)
+		handleError(w, apierror.New(apierror.ErrNotFound, msg, nil))
+		return
+	}
+
+	var req struct {
+		Tags map[string]string
+	}
+	err := json.NewDecoder(r.Body).Decode(&req)
+	if err != nil {
+		msg := fmt.Sprintf("cannot decode body into update bucket input: %s", err)
+		handleError(w, apierror.New(apierror.ErrBadRequest, msg, err))
+		return
+	}
+
+	if len(req.Tags) > 0 {
+		err = s3Service.TagBucket(r.Context(), bucket, req.Tags)
+		if err != nil {
+			msg := fmt.Sprintf("failed to tag bucket %s: %s", bucket, err.Error())
+			handleError(w, apierror.New(apierror.ErrInternalError, msg, err))
+			return
+		}
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusOK)
 	w.Write([]byte{})
 }

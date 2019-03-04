@@ -31,6 +31,17 @@ var testBucket3 = s3.Bucket{
 
 var testBuckets1 = []*s3.Bucket{&testBucket1, &testBucket2, &testBucket3}
 
+var testTagsMap = map[string]string{
+	"foo": "bar",
+	"fuz": "buz",
+	"fiz": "biz",
+}
+var testTags1 = []*s3.Tag{
+	&s3.Tag{Key: aws.String("foo"), Value: aws.String("bar")},
+	&s3.Tag{Key: aws.String("fuz"), Value: aws.String("buz")},
+	&s3.Tag{Key: aws.String("fiz"), Value: aws.String("biz")},
+}
+
 func (m *mockS3Client) HeadBucketWithContext(ctx context.Context, input *s3.HeadBucketInput, opts ...request.Option) (*s3.HeadBucketOutput, error) {
 	if aws.StringValue(input.Bucket) == "testbucket" {
 		return nil, awserr.New(s3.ErrCodeNoSuchBucket, "Not Found", nil)
@@ -66,6 +77,20 @@ func (m *mockS3Client) ListBucketsWithContext(ctx context.Context, input *s3.Lis
 		return nil, m.err
 	}
 	return &s3.ListBucketsOutput{Buckets: testBuckets1}, nil
+}
+
+func (m *mockS3Client) GetBucketTaggingWithContext(ctx context.Context, input *s3.GetBucketTaggingInput, opts ...request.Option) (*s3.GetBucketTaggingOutput, error) {
+	if m.err != nil {
+		return nil, m.err
+	}
+	return &s3.GetBucketTaggingOutput{TagSet: testTags1}, nil
+}
+
+func (m *mockS3Client) PutBucketTaggingWithContext(ctx context.Context, input *s3.PutBucketTaggingInput, opts ...request.Option) (*s3.PutBucketTaggingOutput, error) {
+	if m.err != nil {
+		return nil, m.err
+	}
+	return &s3.PutBucketTaggingOutput{}, nil
 }
 
 func TestBucketExists(t *testing.T) {
@@ -298,6 +323,81 @@ func TestListBuckets(t *testing.T) {
 	// test non-aws error
 	s.Service.(*mockS3Client).err = errors.New("things blowing up!")
 	_, err = s.ListBuckets(context.TODO(), &s3.ListBucketsInput{})
+	if aerr, ok := err.(apierror.Error); ok {
+		if aerr.Code != apierror.ErrInternalError {
+			t.Errorf("expected error code %s, got: %s", apierror.ErrInternalError, aerr.Code)
+		}
+	} else {
+		t.Errorf("expected apierror.Error, got: %s", reflect.TypeOf(err).String())
+	}
+}
+
+func TestGetBucketTags(t *testing.T) {
+	s := S3{Service: newMockS3Client(t, nil)}
+
+	// test success
+	expected := testTagsMap
+	out, err := s.GetBucketTags(context.TODO(), "testBucket1")
+	if err != nil {
+		t.Errorf("expected nil error, got: %s", err)
+	}
+
+	if !reflect.DeepEqual(out, expected) {
+		t.Errorf("expected %+v, got %+v", expected, out)
+	}
+
+	// test some unexpected AWS error
+	s.Service.(*mockS3Client).err = awserr.New(s3.ErrCodeNoSuchUpload, "no such upload", nil)
+	_, err = s.GetBucketTags(context.TODO(), "testBucket1")
+	if aerr, ok := err.(apierror.Error); ok {
+		if aerr.Code != apierror.ErrBadRequest {
+			t.Errorf("expected error code %s, got: %s", apierror.ErrBadRequest, aerr.Code)
+		}
+	} else {
+		t.Errorf("expected apierror.Error, got: %s", reflect.TypeOf(err).String())
+	}
+
+	// test non-aws error
+	s.Service.(*mockS3Client).err = errors.New("things blowing up!")
+	_, err = s.GetBucketTags(context.TODO(), "testBucket1")
+	if aerr, ok := err.(apierror.Error); ok {
+		if aerr.Code != apierror.ErrInternalError {
+			t.Errorf("expected error code %s, got: %s", apierror.ErrInternalError, aerr.Code)
+		}
+	} else {
+		t.Errorf("expected apierror.Error, got: %s", reflect.TypeOf(err).String())
+	}
+}
+
+func TestTagBucket(t *testing.T) {
+	s := S3{Service: newMockS3Client(t, nil)}
+
+	// test success
+	err := s.TagBucket(context.TODO(), "testBucket1", testTagsMap)
+	if err != nil {
+		t.Errorf("expected nil error, got: %s", err)
+	}
+
+	// test empty tags
+	err = s.TagBucket(context.TODO(), "testBucket1", map[string]string{})
+	if err != nil {
+		t.Errorf("expected nil error, got: %s", err)
+	}
+
+	// test some unexpected AWS error
+	s.Service.(*mockS3Client).err = awserr.New(s3.ErrCodeNoSuchUpload, "no such upload", nil)
+	err = s.TagBucket(context.TODO(), "testBucket1", testTagsMap)
+	if aerr, ok := err.(apierror.Error); ok {
+		if aerr.Code != apierror.ErrBadRequest {
+			t.Errorf("expected error code %s, got: %s", apierror.ErrBadRequest, aerr.Code)
+		}
+	} else {
+		t.Errorf("expected apierror.Error, got: %s", reflect.TypeOf(err).String())
+	}
+
+	// test non-aws error
+	s.Service.(*mockS3Client).err = errors.New("things blowing up!")
+	err = s.TagBucket(context.TODO(), "testBucket1", testTagsMap)
 	if aerr, ok := err.(apierror.Error); ok {
 		if aerr.Code != apierror.ErrInternalError {
 			t.Errorf("expected error code %s, got: %s", apierror.ErrInternalError, aerr.Code)

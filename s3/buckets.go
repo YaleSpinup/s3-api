@@ -117,3 +117,58 @@ func (s *S3) ListBuckets(ctx context.Context, input *s3.ListBucketsInput) ([]*s3
 	}
 	return output.Buckets, err
 }
+
+// GetBucketTags handles getting the tags for a bucket
+func (s *S3) GetBucketTags(ctx context.Context, bucket string) (map[string]string, error) {
+	tags := map[string]string{}
+	if bucket == "" {
+		return tags, apierror.New(apierror.ErrBadRequest, "invalid input", nil)
+	}
+	log.Infof("getting tags for bucket %s", bucket)
+	output, err := s.Service.GetBucketTaggingWithContext(ctx, &s3.GetBucketTaggingInput{Bucket: aws.String(bucket)})
+	if err != nil {
+		if aerr, ok := err.(awserr.Error); ok {
+			switch aerr.Code() {
+			default:
+				return tags, apierror.New(apierror.ErrBadRequest, aerr.Message(), err)
+			}
+		}
+
+		return tags, apierror.New(apierror.ErrInternalError, "unknown error occurred", err)
+	}
+
+	for _, t := range output.TagSet {
+		tags[aws.StringValue(t.Key)] = aws.StringValue(t.Value)
+	}
+
+	return tags, err
+}
+
+// TagBucket adds tags to a bucket
+func (s *S3) TagBucket(ctx context.Context, bucket string, tags map[string]string) error {
+	if len(tags) == 0 {
+		return nil
+	}
+
+	log.Infof("tagging bucket %s with tags %+v", bucket, tags)
+	tagSet := []*s3.Tag{}
+	for k, v := range tags {
+		tagSet = append(tagSet, &s3.Tag{Key: aws.String(k), Value: aws.String(v)})
+	}
+
+	if _, err := s.Service.PutBucketTaggingWithContext(ctx, &s3.PutBucketTaggingInput{
+		Bucket:  aws.String(bucket),
+		Tagging: &s3.Tagging{TagSet: tagSet},
+	}); err != nil {
+		if aerr, ok := err.(awserr.Error); ok {
+			switch aerr.Code() {
+			default:
+				return apierror.New(apierror.ErrBadRequest, aerr.Message(), err)
+			}
+		}
+
+		return apierror.New(apierror.ErrInternalError, "unknown error occurred", err)
+	}
+
+	return nil
+}
