@@ -345,6 +345,8 @@ func (s *server) BucketShowHandler(w http.ResponseWriter, r *http.Request) {
 	w.Write(j)
 }
 
+// BucketUpdateHandler handles updating making changes to a bucket.  Currently supports:
+// - Updating the bucket's tags
 func (s *server) BucketUpdateHandler(w http.ResponseWriter, r *http.Request) {
 	w = LogWriter{w}
 	vars := mux.Vars(r)
