@@ -42,7 +42,7 @@ func (s *server) BucketCreateHandler(w http.ResponseWriter, r *http.Request) {
 	}
 
 	var req struct {
-		Tags        map[string]string
+		Tags        []*s3.Tag
 		BucketInput s3.CreateBucketInput
 	}
 	err := json.NewDecoder(r.Body).Decode(&req)
@@ -328,7 +328,7 @@ func (s *server) BucketShowHandler(w http.ResponseWriter, r *http.Request) {
 
 	// setup output struct
 	var output = struct {
-		Tags map[string]string
+		Tags []*s3.Tag
 	}{}
 
 	output.Tags = tags
@@ -360,7 +360,7 @@ func (s *server) BucketUpdateHandler(w http.ResponseWriter, r *http.Request) {
 	}
 
 	var req struct {
-		Tags map[string]string
+		Tags []*s3.Tag
 	}
 	err := json.NewDecoder(r.Body).Decode(&req)
 	if err != nil {
