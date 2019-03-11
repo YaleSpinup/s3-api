@@ -39,8 +39,14 @@ func TestTokenMiddleware(t *testing.T) {
 		}
 	}
 
+	// Test a bad URI
+	resp, err := http.Get(fmt.Sprintf("%s/\n", server.URL))
+	if err == nil {
+		t.Fatal("expected error for bad URL")
+	}
+
 	// Test a private URL without an auth token
-	resp, err := http.Get(fmt.Sprintf("%s/private", server.URL))
+	resp, err = http.Get(fmt.Sprintf("%s/private", server.URL))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -48,7 +54,7 @@ func TestTokenMiddleware(t *testing.T) {
 		t.Errorf("Received status: %d for '%s/private', expected %d", resp.StatusCode, server.URL, http.StatusForbidden)
 	}
 
-	// Test a priate URL _with_ an auth-token
+	// Test a private URL _with_ an auth-token
 	client := &http.Client{}
 	req, _ := http.NewRequest(http.MethodGet, fmt.Sprintf("%s/private", server.URL), nil)
 	req.Header.Add("X-Auth-Token", psk)
