@@ -23,12 +23,6 @@ func (s *server) VersionHandler(w http.ResponseWriter, r *http.Request) {
 	w = LogWriter{w}
 	w.Header().Set("Access-Control-Allow-Origin", "*")
 	w.Header().Set("Content-Type", "application/json")
-
-	if r.Method != http.MethodGet {
-		w.WriteHeader(http.StatusBadRequest)
-		w.Write([]byte{})
-		return
-	}
 	w.WriteHeader(http.StatusOK)
 
 	data, err := json.Marshal(struct {

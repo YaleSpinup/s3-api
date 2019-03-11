@@ -110,7 +110,14 @@ POST `/v1/s3/{account}/buckets
 
 ```json
 {
-    "Bucket": "foobarbucketname"
+    "Tags": {
+        "Application": "HowToGet",
+        "COA": "Take.My.Money.$$$$",
+        "CreatedBy": "Big Bird"
+    },
+    "BucketInput": {
+        "Bucket": "foobarbucketname"
+    }
 }
 ```
 
@@ -153,6 +160,30 @@ POST `/v1/s3/{account}/buckets
 | **500 Internal Server Error** | a server error occurred              |
 | **503 Service Unavailable**   | an AWS service is unavailable        |
 
+### Update a bucket
+
+Updating a bucket currently only supports updating the bucket's tags
+
+POST `/v1/s3/{account}/buckets/foobarbucketname`
+
+#### Request
+
+```json
+{
+    "Tags": {
+        "Application": "HowToGet",
+        "COA": "Take.My.Money.$$$$",
+        "CreatedBy": "Big Bird"
+    }
+}
+```
+
+| Response Code                 | Definition                      |  
+| ----------------------------- | --------------------------------|  
+| **200 OK**                    | deleted bucket                  |  
+| **400 Bad Request**           | badly formed request            |  
+| **500 Internal Server Error** | a server error occurred         |
+
 ### Check if a bucket exists
 
 HEAD `/v1/s3/{account}/buckets/foobarbucketname`
@@ -162,6 +193,18 @@ HEAD `/v1/s3/{account}/buckets/foobarbucketname`
 | **200 OK**                    | bucket exists                   |  
 | **403 Forbidden**             | you don't have access to bucket |  
 | **404 Not Found**             | account or bucket not found     |  
+| **500 Internal Server Error** | a server error occurred         |
+
+### Get information for a bucket
+
+Getting details about a bucket currently only returns tagging information
+
+GET `/v1/s3/{account}/buckets/foobarbucketname`
+
+| Response Code                 | Definition                      |  
+| ----------------------------- | --------------------------------|  
+| **200 OK**                    | deleted bucket                  |  
+| **400 Bad Request**           | badly formed request            |  
 | **500 Internal Server Error** | a server error occurred         |
 
 ### Delete a bucket
