@@ -109,6 +109,18 @@ func (m *mockS3Client) PutBucketPolicyWithContext(ctx context.Context, input *s3
 	return &s3.PutBucketPolicyOutput{}, nil
 }
 
+func (m *mockS3Client) ListObjectsV2WithContext(ctx context.Context, input *s3.ListObjectsV2Input, opts ...request.Option) (*s3.ListObjectsV2Output, error) {
+	if m.err != nil {
+		return nil, m.err
+	}
+
+	if aws.StringValue(input.Bucket) == "testBucketNotEmpty" {
+		return &s3.ListObjectsV2Output{KeyCount: aws.Int64(int64(1))}, nil
+	}
+
+	return &s3.ListObjectsV2Output{KeyCount: aws.Int64(int64(0))}, nil
+}
+
 func TestBucketExists(t *testing.T) {
 	s := S3{Service: newMockS3Client(t, nil)}
 
@@ -546,6 +558,62 @@ func TestUpdateBucketPolicy(t *testing.T) {
 		Bucket: aws.String("testbucket"),
 		Policy: aws.String("somepolicy"),
 	})
+	if aerr, ok := err.(apierror.Error); ok {
+		if aerr.Code != apierror.ErrInternalError {
+			t.Errorf("expected error code %s, got: %s", apierror.ErrInternalError, aerr.Code)
+		}
+	} else {
+		t.Errorf("expected apierror.Error, got: %s", reflect.TypeOf(err).String())
+	}
+}
+
+func TestBucketEmpty(t *testing.T) {
+	s := S3{Service: newMockS3Client(t, nil)}
+
+	// test successful empty bucket
+	empty, err := s.BucketEmpty(context.TODO(), "testBucket")
+	if err != nil {
+		t.Errorf("expected nil error, got: %s", err)
+	}
+
+	if !empty {
+		t.Error("expected testBucket bucket to be empty")
+	}
+
+	// test successful not empty bucket
+	empty, err = s.BucketEmpty(context.TODO(), "testBucketNotEmpty")
+	if err != nil {
+		t.Errorf("expected nil error, got: %s", err)
+	}
+
+	if empty {
+		t.Error("expected testBucketNotEmpty bucket to not be empty")
+	}
+
+	// test empty bucket name
+	empty, err = s.BucketEmpty(context.TODO(), "")
+	if aerr, ok := err.(apierror.Error); ok {
+		if aerr.Code != apierror.ErrBadRequest {
+			t.Errorf("expected error code %s, got: %s", apierror.ErrBadRequest, aerr.Code)
+		}
+	} else {
+		t.Errorf("expected apierror.Error, got: %s", reflect.TypeOf(err).String())
+	}
+
+	// test some other, unexpected AWS error
+	s.Service.(*mockS3Client).err = awserr.New(s3.ErrCodeNoSuchKey, "no such key", nil)
+	empty, err = s.BucketEmpty(context.TODO(), "testBucket")
+	if aerr, ok := err.(apierror.Error); ok {
+		if aerr.Code != apierror.ErrBadRequest {
+			t.Errorf("expected error code %s, got: %s", apierror.ErrBadRequest, aerr.Code)
+		}
+	} else {
+		t.Errorf("expected apierror.Error, got: %s", reflect.TypeOf(err).String())
+	}
+
+	// test non-aws error
+	s.Service.(*mockS3Client).err = errors.New("things blowing up!")
+	empty, err = s.BucketEmpty(context.TODO(), "testBucket")
 	if aerr, ok := err.(apierror.Error); ok {
 		if aerr.Code != apierror.ErrInternalError {
 			t.Errorf("expected error code %s, got: %s", apierror.ErrInternalError, aerr.Code)
