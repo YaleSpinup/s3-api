@@ -386,7 +386,7 @@ func TestGetBucketTags(t *testing.T) {
 
 	// test empty tagset
 	expected = []*s3.Tag{}
-	s.Service.(*mockS3Client).err = awserr.New("NoSuchTagSet", "no such upload", nil)
+	s.Service.(*mockS3Client).err = awserr.New("NoSuchTagSet", "no such tagset", nil)
 	out, err = s.GetBucketTags(context.TODO(), "testBucket1")
 	if err != nil {
 		t.Errorf("expected nil error, got: %s", err)
