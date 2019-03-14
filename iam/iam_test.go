@@ -59,8 +59,20 @@ var defaultPolicyDoc = PolicyDoc{
 	},
 }
 
+var defaultWebsitePolicyDoc = PolicyDoc{
+	Version: "2012-10-17",
+	Statement: []PolicyStatement{
+		PolicyStatement{
+			Effect:    "Allow",
+			Principal: "*",
+			Action:    []string{"s3:GetObject"},
+			Resource:  []string{fmt.Sprintf("arn:aws:s3:::%s/*", bucket)},
+		},
+	},
+}
+
 func TestDefaultBucketAdminPolicy(t *testing.T) {
-	dpd, err := json.Marshal(defaultPolicyDoc)
+	p, err := json.Marshal(defaultPolicyDoc)
 	if err != nil {
 		t.Errorf("expected to marshall defaultPolicyDoc with nil error, got %s", err)
 	}
@@ -70,7 +82,23 @@ func TestDefaultBucketAdminPolicy(t *testing.T) {
 		t.Errorf("expected DefaultBucketAdminPolicy to return nil error, got %s", err)
 	}
 
-	if !bytes.Equal(policyBytes, dpd) {
+	if !bytes.Equal(policyBytes, p) {
 		t.Errorf("expected: %s\ngot: %s", defaultPolicyDoc, policyBytes)
+	}
+}
+
+func TestDefaultWebsiteAccessPolicy(t *testing.T) {
+	p, err := json.Marshal(defaultWebsitePolicyDoc)
+	if err != nil {
+		t.Errorf("expected to marshall defaultWebsitePolicyDoc with nil error, got %s", err)
+	}
+
+	policyBytes, err := i.DefaultWebsiteAccessPolicy(&bucket)
+	if err != nil {
+		t.Errorf("expected DefaultWebsiteAccessPolicy to return nil error, got %s", err)
+	}
+
+	if !bytes.Equal(policyBytes, p) {
+		t.Errorf("expected: %s\ngot: %s", defaultWebsitePolicyDoc, policyBytes)
 	}
 }

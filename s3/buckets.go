@@ -119,10 +119,9 @@ func (s *S3) ListBuckets(ctx context.Context, input *s3.ListBucketsInput) ([]*s3
 }
 
 // GetBucketTags handles getting the tags for a bucket
-func (s *S3) GetBucketTags(ctx context.Context, bucket string) (map[string]string, error) {
-	tags := map[string]string{}
+func (s *S3) GetBucketTags(ctx context.Context, bucket string) ([]*s3.Tag, error) {
 	if bucket == "" {
-		return tags, apierror.New(apierror.ErrBadRequest, "invalid input", nil)
+		return []*s3.Tag{}, apierror.New(apierror.ErrBadRequest, "invalid input", nil)
 	}
 	log.Infof("getting tags for bucket %s", bucket)
 	output, err := s.Service.GetBucketTaggingWithContext(ctx, &s3.GetBucketTaggingInput{Bucket: aws.String(bucket)})
@@ -130,35 +129,27 @@ func (s *S3) GetBucketTags(ctx context.Context, bucket string) (map[string]strin
 		if aerr, ok := err.(awserr.Error); ok {
 			switch aerr.Code() {
 			default:
-				return tags, apierror.New(apierror.ErrBadRequest, aerr.Message(), err)
+				return []*s3.Tag{}, apierror.New(apierror.ErrBadRequest, aerr.Message(), err)
 			}
 		}
 
-		return tags, apierror.New(apierror.ErrInternalError, "unknown error occurred", err)
+		return []*s3.Tag{}, apierror.New(apierror.ErrInternalError, "unknown error occurred", err)
 	}
 
-	for _, t := range output.TagSet {
-		tags[aws.StringValue(t.Key)] = aws.StringValue(t.Value)
-	}
-
-	return tags, err
+	return output.TagSet, err
 }
 
 // TagBucket adds tags to a bucket
-func (s *S3) TagBucket(ctx context.Context, bucket string, tags map[string]string) error {
+func (s *S3) TagBucket(ctx context.Context, bucket string, tags []*s3.Tag) error {
 	if len(tags) == 0 {
 		return nil
 	}
 
 	log.Infof("tagging bucket %s with tags %+v", bucket, tags)
-	tagSet := []*s3.Tag{}
-	for k, v := range tags {
-		tagSet = append(tagSet, &s3.Tag{Key: aws.String(k), Value: aws.String(v)})
-	}
 
 	if _, err := s.Service.PutBucketTaggingWithContext(ctx, &s3.PutBucketTaggingInput{
 		Bucket:  aws.String(bucket),
-		Tagging: &s3.Tagging{TagSet: tagSet},
+		Tagging: &s3.Tagging{TagSet: tags},
 	}); err != nil {
 		if aerr, ok := err.(awserr.Error); ok {
 			switch aerr.Code() {
@@ -171,4 +162,87 @@ func (s *S3) TagBucket(ctx context.Context, bucket string, tags map[string]strin
 	}
 
 	return nil
+}
+
+// UpdateWebsiteConfig sets the configuration for an s3 website, defaults index suffix to index.html
+func (s *S3) UpdateWebsiteConfig(ctx context.Context, input *s3.PutBucketWebsiteInput) error {
+	if input == nil || aws.StringValue(input.Bucket) == "" || input.WebsiteConfiguration == nil {
+		return apierror.New(apierror.ErrBadRequest, "invalid input", nil)
+	}
+
+	log.Infof("updating website configuration for bucket %s", aws.StringValue(input.Bucket))
+
+	// set the default index document to index.html
+	if input.WebsiteConfiguration.IndexDocument == nil || aws.StringValue(input.WebsiteConfiguration.IndexDocument.Suffix) == "" {
+		log.Debugf("Index document not set for %s, setting to index.html", aws.StringValue(input.Bucket))
+		input.WebsiteConfiguration.IndexDocument = &s3.IndexDocument{Suffix: aws.String("index.html")}
+	}
+
+	_, err := s.Service.PutBucketWebsiteWithContext(ctx, input)
+	if err != nil {
+		if aerr, ok := err.(awserr.Error); ok {
+			switch aerr.Code() {
+			default:
+				return apierror.New(apierror.ErrBadRequest, aerr.Message(), err)
+			}
+		}
+
+		return apierror.New(apierror.ErrInternalError, "unknown error occurred", err)
+	}
+	return nil
+}
+
+// UpdateBucketPolicy sets a bucket access policy
+func (s *S3) UpdateBucketPolicy(ctx context.Context, input *s3.PutBucketPolicyInput) error {
+	if input == nil || aws.StringValue(input.Bucket) == "" || aws.StringValue(input.Policy) == "" {
+		return apierror.New(apierror.ErrBadRequest, "invalid input", nil)
+	}
+
+	log.Infof("applying bucket policy to %s", aws.StringValue(input.Bucket))
+
+	_, err := s.Service.PutBucketPolicyWithContext(ctx, input)
+	if err != nil {
+		if aerr, ok := err.(awserr.Error); ok {
+			switch aerr.Code() {
+			default:
+				return apierror.New(apierror.ErrBadRequest, aerr.Message(), err)
+			}
+		}
+
+		return apierror.New(apierror.ErrInternalError, "unknown error occurred", err)
+	}
+	return nil
+}
+
+// BucketEmpty lists the objects in a bucket with a max of 1, if there are any objects returned, we return false
+func (s *S3) BucketEmpty(ctx context.Context, bucket string) (bool, error) {
+	if bucket == "" {
+		return false, apierror.New(apierror.ErrBadRequest, "invalid input", nil)
+	}
+
+	log.Infof("checking if bucket %s is empty", bucket)
+
+	out, err := s.Service.ListObjectsV2WithContext(ctx, &s3.ListObjectsV2Input{
+		Bucket:  aws.String(bucket),
+		MaxKeys: aws.Int64(1),
+	})
+	if err != nil {
+		if aerr, ok := err.(awserr.Error); ok {
+			switch aerr.Code() {
+			case s3.ErrCodeNoSuchBucket, "NotFound":
+				msg := fmt.Sprintf("bucket %s not found: %s", bucket, aerr.Error())
+				return false, apierror.New(apierror.ErrNotFound, msg, err)
+			default:
+				return false, apierror.New(apierror.ErrBadRequest, aerr.Message(), err)
+			}
+		}
+
+		return false, apierror.New(apierror.ErrInternalError, "unknown error occurred", err)
+	}
+
+	if aws.Int64Value(out.KeyCount) > 0 {
+		return false, nil
+	}
+
+	return true, nil
 }

@@ -12,7 +12,29 @@ GET /v1/s3/metrics
 # Managing buckets
 POST /v1/s3/{account}/buckets
 GET /v1/s3/{account}/buckets
+HEAD /v1/s3/{account}/buckets/{bucket}
 GET /v1/s3/{account}/buckets/{bucket}
+PUT /v1/s3/{account}/buckets/{bucket}
+DELETE /v1/s3/{account}/buckets/{bucket}
+
+# Managing bucket users
+POST /v1/s3/{account}/buckets/{bucket}/users
+GET /v1/s3/{account}/buckets/{bucket}/users
+PUT /v1/s3/{account}/buckets/{bucket}/users/{user}
+DELETE /v1/s3/{account}/buckets/{bucket}/users/{user}
+
+# Managing websites
+POST /v1/s3/{account}/websites
+HEAD /v1/s3/{account}/websites/{website}
+GET /v1/s3/{account}/websites/{website}
+PUT /v1/s3/{account}/websites/{website}
+DELETE /v1/s3/{account}/websites/{website}
+
+# Managing website users
+POST /v1/s3/{account}/websites/{website}/users
+GET /v1/s3/{account}/websites/{website}/users
+PUT /v1/s3/{account}/websites/{website}/users/{user}
+DELETE /v1/s3/{account}/websites/{website}/users/{user}
 ```
 
 ## Access to buckets
@@ -110,11 +132,11 @@ POST `/v1/s3/{account}/buckets
 
 ```json
 {
-    "Tags": {
-        "Application": "HowToGet",
-        "COA": "Take.My.Money.$$$$",
-        "CreatedBy": "Big Bird"
-    },
+    "Tags": [
+        { "Key": "Application", "Value": "HowToGet" },
+        { "Key": "COA", "Value": "Take.My.Money.$$$$" },
+        { "Key": "CreatedBy", "Value": "Big Bird" }
+    ],
     "BucketInput": {
         "Bucket": "foobarbucketname"
     }
@@ -164,17 +186,17 @@ POST `/v1/s3/{account}/buckets
 
 Updating a bucket currently only supports updating the bucket's tags
 
-POST `/v1/s3/{account}/buckets/foobarbucketname`
+PUT `/v1/s3/{account}/buckets/foobarbucketname`
 
 #### Request
 
 ```json
 {
-    "Tags": {
-        "Application": "HowToGet",
-        "COA": "Take.My.Money.$$$$",
-        "CreatedBy": "Big Bird"
-    }
+    "Tags": [
+        { "Key": "Application", "Value": "HowToGet" },
+        { "Key": "COA", "Value": "Take.My.Money.$$$$" },
+        { "Key": "CreatedBy", "Value": "Big Bird" }
+    ]
 }
 ```
 
@@ -197,7 +219,7 @@ HEAD `/v1/s3/{account}/buckets/foobarbucketname`
 
 ### Get information for a bucket
 
-Getting details about a bucket currently only returns tagging information
+Getting details about a bucket currently only returns tagging information  and if the bucket is empty
 
 GET `/v1/s3/{account}/buckets/foobarbucketname`
 
@@ -268,7 +290,7 @@ POST `/v1/s3/{account}/buckets/{bucket}/users
 
 ### Reset access keys for a bucket user
 
-PUT `/v1/s3/{account}/buckets/{bucket}/users/{user}
+PUT `/v1/s3/{account}/buckets/{bucket}/users/{user}`
 
 #### Response
 
@@ -327,7 +349,6 @@ GET `/v1/s3/{account}/buckets/{bucket}/users/{user}
 ]
 ```
 
-
 ### Delete a bucket user
 
 DELETE `/v1/s3/{account}/buckets/{bucket}/users/{user}
@@ -340,6 +361,117 @@ DELETE `/v1/s3/{account}/buckets/{bucket}/users/{user}
 | **404 Not Found**             | account or user not found                |  
 | **429 Too Many Requests**     | service or rate limit exceeded           |  
 | **500 Internal Server Error** | a server error occurred                  |
+
+### Create a website
+
+POST `/v1/s3/{account}/websites`
+
+#### Request
+
+```json
+{
+    "Tags": [
+        { "Key": "Application", "Value": "HowToGet" },
+        { "Key": "COA" "Value", "Value": "Take.My.Money.$$$$" },
+        { "Key": "CreatedBy", "Value": "Big Bird" }
+    ],
+    "BucketInput": {
+        "Bucket": "foobar.bulldogs.cloud"
+    }
+}
+```
+
+#### Response
+
+```json
+{
+    "Bucket": "/foobar.bulldogs.cloud",
+    "Policy": {
+        "Arn": "arn:aws:iam::846761448161:policy/foobar.bulldogs.cloud-BktAdmPlc",
+        "AttachmentCount": 0,
+        "CreateDate": "2019-03-01T15:33:52Z",
+        "DefaultVersionId": "v1",
+        "Description": null,
+        "IsAttachable": true,
+        "Path": "/",
+        "PermissionsBoundaryUsageCount": 0,
+        "PolicyId": "ABCDEFGHI12345678",
+        "PolicyName": "foobar.bulldogs.cloud-BktAdmPlc",
+        "UpdateDate": "2019-03-01T15:33:52Z"
+    },
+    "Group": {
+        "Arn": "arn:aws:iam::846761448161:group/foobar.bulldogs.cloud-BktAdmGrp",
+        "CreateDate": "2019-03-01T15:33:52Z",
+        "GroupId": "GROUPID123",
+        "GroupName": "foobar.bulldogs.cloud-BktAdmGrp",
+        "Path": "/"
+    }
+}
+```
+
+| Response Code                 | Definition                           |  
+| ----------------------------- | -------------------------------------|  
+| **202 Accepted**              | creation request accepted            |  
+| **400 Bad Request**           | badly formed request                 |  
+| **403 Forbidden**             | you don't have access to bucket      |  
+| **404 Not Found**             | account not found                    |  
+| **409 Conflict**              | bucket or iam policy  already exists |
+| **429 Too Many Requests**     | service or rate limit exceeded       |
+| **500 Internal Server Error** | a server error occurred              |
+| **503 Service Unavailable**   | an AWS service is unavailable        |
+
+### Check if a website exists
+
+HEAD `/v1/s3/{account}/websites/{website}`
+
+*See [Check if a bucket exists](#check-if-a-bucket-exists)*
+
+### Get information for a website
+
+Getting details about a website currently only returns tagging information and if the bucket is empty
+
+GET `/v1/s3/{account}/websites/{website}`
+
+*See [Get information for a bucket](#get-information-for-a-bucket)*
+
+### Update a website
+
+Updating a website currently only supports updating the bucket's tags
+
+PUT `/v1/s3/{account}/websites/{website}`
+
+*See [Update a bucket](#update-a-bucket)*
+
+### Delete a website
+
+DELETE `/v1/s3/{account}/websites/{website}`
+
+*See [Delete a bucket](#delete-a-bucket)*
+
+### Create a website user
+
+POST `/v1/s3/{account}/websites/{website}/users`
+
+*See [Create a bucket user](#create-a-bucket-user)*
+
+### List users for a website
+
+GET `/v1/s3/{account}/websites/{website}/users/{user}`
+
+*See [List users for a bucket](#list-users-for-a-bucket)*
+
+### Reset access keys for a website user
+
+PUT `/v1/s3/{account}/websites/{website}/users/{user}`
+
+*See [Reset access keys for a bucket user](#reset-access-keys-for-a-bucket-user)*
+
+### Delete a website user
+
+DELETE `/v1/s3/{account}/websites/{website}/users/{user}`
+
+*See [Delete a bucket user](#delete-a-bucket-user)*
+
 
 ## Author
 

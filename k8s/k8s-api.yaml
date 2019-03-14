@@ -10,7 +10,7 @@ spec:
       - path: /v1/s3
         backend:
           serviceName: s3api
-          servicePort: 80
+          servicePort: http-s3api
 ---
 apiVersion: v1
 kind: Service
@@ -24,7 +24,8 @@ spec:
     app: s3api
     tier: api
   ports:
-    - protocol: TCP
+    - name: http-s3api
+      protocol: TCP
       port: 80
       targetPort: 8080
 ---

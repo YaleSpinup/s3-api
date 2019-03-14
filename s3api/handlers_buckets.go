@@ -42,7 +42,7 @@ func (s *server) BucketCreateHandler(w http.ResponseWriter, r *http.Request) {
 	}
 
 	var req struct {
-		Tags        map[string]string
+		Tags        []*s3.Tag
 		BucketInput s3.CreateBucketInput
 	}
 	err := json.NewDecoder(r.Body).Decode(&req)
@@ -129,7 +129,7 @@ func (s *server) BucketCreateHandler(w http.ResponseWriter, r *http.Request) {
 		panic(msg)
 	}
 
-	// append policy delete to rollback tasks
+	// append group delete to rollback tasks
 	rbfunc = func() error {
 		return func() error {
 			if _, err := iamService.DeleteGroup(r.Context(), &iam.DeleteGroupInput{GroupName: aws.String(groupName)}); err != nil {
@@ -326,12 +326,20 @@ func (s *server) BucketShowHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// setup output struct
-	var output = struct {
-		Tags map[string]string
-	}{}
+	empty, err := s3Service.BucketEmpty(r.Context(), bucket)
+	if err != nil {
+		handleError(w, err)
+		return
+	}
 
-	output.Tags = tags
+	// setup output struct
+	output := struct {
+		Tags  []*s3.Tag
+		Empty bool
+	}{
+		Tags:  tags,
+		Empty: empty,
+	}
 
 	j, err := json.Marshal(output)
 	if err != nil {
@@ -360,7 +368,7 @@ func (s *server) BucketUpdateHandler(w http.ResponseWriter, r *http.Request) {
 	}
 
 	var req struct {
-		Tags map[string]string
+		Tags []*s3.Tag
 	}
 	err := json.NewDecoder(r.Body).Decode(&req)
 	if err != nil {
