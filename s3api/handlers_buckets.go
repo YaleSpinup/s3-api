@@ -129,7 +129,7 @@ func (s *server) BucketCreateHandler(w http.ResponseWriter, r *http.Request) {
 		panic(msg)
 	}
 
-	// append policy delete to rollback tasks
+	// append group delete to rollback tasks
 	rbfunc = func() error {
 		return func() error {
 			if _, err := iamService.DeleteGroup(r.Context(), &iam.DeleteGroupInput{GroupName: aws.String(groupName)}); err != nil {

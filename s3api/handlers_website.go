@@ -153,7 +153,7 @@ func (s *server) CreateWebsiteHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// append policy delete to rollback tasks
+	// append group delete to rollback tasks
 	rbfunc = func() error {
 		return func() error {
 			if _, err := iamService.DeleteGroup(r.Context(), &iam.DeleteGroupInput{GroupName: aws.String(groupName)}); err != nil {
@@ -168,7 +168,7 @@ func (s *server) CreateWebsiteHandler(w http.ResponseWriter, r *http.Request) {
 		GroupName: aws.String(groupName),
 		PolicyArn: policyOutput.Policy.Arn,
 	}); err != nil {
-		msg := fmt.Sprintf("failed to create group: %s", err.Error())
+		msg := fmt.Sprintf("failed to attach policy %s to group %s: %s", aws.StringValue(policyOutput.Policy.Arn), groupName, err.Error())
 		handleError(w, errors.Wrap(err, msg))
 		return
 	}

@@ -189,7 +189,7 @@ func (s *S3) UpdateWebsiteConfig(ctx context.Context, input *s3.PutBucketWebsite
 
 		return apierror.New(apierror.ErrInternalError, "unknown error occurred", err)
 	}
-	return err
+	return nil
 }
 
 // UpdateBucketPolicy sets a bucket access policy
@@ -211,5 +211,5 @@ func (s *S3) UpdateBucketPolicy(ctx context.Context, input *s3.PutBucketPolicyIn
 
 		return apierror.New(apierror.ErrInternalError, "unknown error occurred", err)
 	}
-	return err
+	return nil
 }

@@ -134,7 +134,7 @@ POST `/v1/s3/{account}/buckets
 {
     "Tags": [
         { "Key": "Application", "Value": "HowToGet" },
-        { "Key": "COA" "Value", "Value": "Take.My.Money.$$$$" },
+        { "Key": "COA", "Value": "Take.My.Money.$$$$" },
         { "Key": "CreatedBy", "Value": "Big Bird" }
     ],
     "BucketInput": {
@@ -194,7 +194,7 @@ PUT `/v1/s3/{account}/buckets/foobarbucketname`
 {
     "Tags": [
         { "Key": "Application", "Value": "HowToGet" },
-        { "Key": "COA" "Value", "Value": "Take.My.Money.$$$$" },
+        { "Key": "COA", "Value": "Take.My.Money.$$$$" },
         { "Key": "CreatedBy", "Value": "Big Bird" }
     ]
 }
@@ -364,7 +364,7 @@ DELETE `/v1/s3/{account}/buckets/{bucket}/users/{user}
 
 ### Create a website
 
-POST `/v1/s3/{account}/websites
+POST `/v1/s3/{account}/websites`
 
 #### Request
 
@@ -450,13 +450,13 @@ DELETE `/v1/s3/{account}/websites/{website}`
 
 ### Create a website user
 
-POST `/v1/s3/{account}/websites/{website}/users
+POST `/v1/s3/{account}/websites/{website}/users`
 
 *See [Create a bucket user](#create-a-bucket-user)*
 
 ### List users for a website
 
-GET `/v1/s3/{account}/websites/{website}/users/{user}
+GET `/v1/s3/{account}/websites/{website}/users/{user}`
 
 *See [List users for a bucket](#list-users-for-a-bucket)*
 
