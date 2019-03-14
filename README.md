@@ -219,7 +219,7 @@ HEAD `/v1/s3/{account}/buckets/foobarbucketname`
 
 ### Get information for a bucket
 
-Getting details about a bucket currently only returns tagging information
+Getting details about a bucket currently only returns tagging information  and if the bucket is empty
 
 GET `/v1/s3/{account}/buckets/foobarbucketname`
 
@@ -428,7 +428,7 @@ HEAD `/v1/s3/{account}/websites/{website}`
 
 ### Get information for a website
 
-Getting details about a website currently only returns tagging information
+Getting details about a website currently only returns tagging information and if the bucket is empty
 
 GET `/v1/s3/{account}/websites/{website}`
 

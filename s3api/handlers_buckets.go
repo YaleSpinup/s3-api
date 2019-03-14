@@ -326,12 +326,20 @@ func (s *server) BucketShowHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// setup output struct
-	var output = struct {
-		Tags []*s3.Tag
-	}{}
+	empty, err := s3Service.BucketEmpty(r.Context(), bucket)
+	if err != nil {
+		handleError(w, err)
+		return
+	}
 
-	output.Tags = tags
+	// setup output struct
+	output := struct {
+		Tags  []*s3.Tag
+		Empty bool
+	}{
+		Tags:  tags,
+		Empty: empty,
+	}
 
 	j, err := json.Marshal(output)
 	if err != nil {

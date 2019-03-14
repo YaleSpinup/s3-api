@@ -213,3 +213,36 @@ func (s *S3) UpdateBucketPolicy(ctx context.Context, input *s3.PutBucketPolicyIn
 	}
 	return nil
 }
+
+// BucketEmpty lists the objects in a bucket with a max of 1, if there are any objects returned, we return false
+func (s *S3) BucketEmpty(ctx context.Context, bucket string) (bool, error) {
+	if bucket == "" {
+		return false, apierror.New(apierror.ErrBadRequest, "invalid input", nil)
+	}
+
+	log.Infof("checking if bucket %s is empty", bucket)
+
+	out, err := s.Service.ListObjectsV2WithContext(ctx, &s3.ListObjectsV2Input{
+		Bucket:  aws.String(bucket),
+		MaxKeys: aws.Int64(1),
+	})
+	if err != nil {
+		if aerr, ok := err.(awserr.Error); ok {
+			switch aerr.Code() {
+			case s3.ErrCodeNoSuchBucket, "NotFound":
+				msg := fmt.Sprintf("bucket %s not found: %s", bucket, aerr.Error())
+				return false, apierror.New(apierror.ErrNotFound, msg, err)
+			default:
+				return false, apierror.New(apierror.ErrBadRequest, aerr.Message(), err)
+			}
+		}
+
+		return false, apierror.New(apierror.ErrInternalError, "unknown error occurred", err)
+	}
+
+	if aws.Int64Value(out.KeyCount) > 0 {
+		return false, nil
+	}
+
+	return true, nil
+}
