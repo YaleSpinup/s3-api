@@ -128,6 +128,8 @@ func (s *S3) GetBucketTags(ctx context.Context, bucket string) ([]*s3.Tag, error
 	if err != nil {
 		if aerr, ok := err.(awserr.Error); ok {
 			switch aerr.Code() {
+			case "NoSuchTagSet":
+				return []*s3.Tag{}, nil
 			default:
 				return []*s3.Tag{}, apierror.New(apierror.ErrBadRequest, aerr.Message(), err)
 			}
@@ -136,7 +138,7 @@ func (s *S3) GetBucketTags(ctx context.Context, bucket string) ([]*s3.Tag, error
 		return []*s3.Tag{}, apierror.New(apierror.ErrInternalError, "unknown error occurred", err)
 	}
 
-	return output.TagSet, err
+	return output.TagSet, nil
 }
 
 // TagBucket adds tags to a bucket
