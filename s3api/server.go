@@ -18,6 +18,7 @@ type server struct {
 	s3Services  map[string]s3.S3
 	iamServices map[string]iam.IAM
 	router      *mux.Router
+	version     common.Version
 }
 
 // NewServer creates a new server and starts it
@@ -26,6 +27,7 @@ func NewServer(config common.Config) error {
 		s3Services:  make(map[string]s3.S3),
 		iamServices: make(map[string]iam.IAM),
 		router:      mux.NewRouter(),
+		version:     config.Version,
 	}
 
 	// Create a shared S3 session

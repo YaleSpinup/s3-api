@@ -6,6 +6,9 @@ build:
   - image: hub.docker.com/yaleits/s3api
     docker:
       dockerfile: k8s/Dockerfile
+      buildArgs:
+        version: 0.0.0
+        prerelease: dev
 deploy:
   kubectl:
     manifests:
