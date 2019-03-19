@@ -20,6 +20,7 @@ DELETE /v1/s3/{account}/buckets/{bucket}
 # Managing bucket users
 POST /v1/s3/{account}/buckets/{bucket}/users
 GET /v1/s3/{account}/buckets/{bucket}/users
+GET /v1/s3/{account}/buckets/{bucket}/users/{user}
 PUT /v1/s3/{account}/buckets/{bucket}/users/{user}
 DELETE /v1/s3/{account}/buckets/{bucket}/users/{user}
 
@@ -33,6 +34,7 @@ DELETE /v1/s3/{account}/websites/{website}
 # Managing website users
 POST /v1/s3/{account}/websites/{website}/users
 GET /v1/s3/{account}/websites/{website}/users
+GET /v1/s3/{account}/websites/{website}/users/{user}
 PUT /v1/s3/{account}/websites/{website}/users/{user}
 DELETE /v1/s3/{account}/websites/{website}/users/{user}
 ```
@@ -149,7 +151,7 @@ POST `/v1/s3/{account}/buckets
 {
     "Bucket": "/foobarbucketname",
     "Policy": {
-        "Arn": "arn:aws:iam::846761448161:policy/foobarbucketname-BktAdmPlc",
+        "Arn": "arn:aws:iam::12345678910:policy/foobarbucketname-BktAdmPlc",
         "AttachmentCount": 0,
         "CreateDate": "2019-03-01T15:33:52Z",
         "DefaultVersionId": "v1",
@@ -162,7 +164,7 @@ POST `/v1/s3/{account}/buckets
         "UpdateDate": "2019-03-01T15:33:52Z"
     },
     "Group": {
-        "Arn": "arn:aws:iam::846761448161:group/foobarbucketname-BktAdmGrp",
+        "Arn": "arn:aws:iam::12345678910:group/foobarbucketname-BktAdmGrp",
         "CreateDate": "2019-03-01T15:33:52Z",
         "GroupId": "GROUPID123",
         "GroupName": "foobarbucketname-BktAdmGrp",
@@ -259,7 +261,7 @@ POST `/v1/s3/{account}/buckets/{bucket}/users
 ```json
 {
     "User": {
-        "Arn": "arn:aws:iam::846761448161:user/somebucketuser",
+        "Arn": "arn:aws:iam::12345678910:user/somebucketuser",
         "CreateDate": "2019-03-01T16:11:00Z",
         "PasswordLastUsed": null,
         "Path": "/",
@@ -287,6 +289,51 @@ POST `/v1/s3/{account}/buckets/{bucket}/users
 | **409 Conflict**              | user already exists                         |  
 | **429 Too Many Requests**     | service or rate limit exceeded              |  
 | **500 Internal Server Error** | a server error occurred                     |
+
+### Get a bucket user's details
+
+GET `/v1/s3/{account}/bucket/users/{user}`
+
+#### Response
+
+```json
+{
+    "User": {
+        "Arn": "arn:aws:iam::12345678910:user/somebucketuser",
+        "CreateDate": "2019-03-19T18:31:14Z",
+        "PasswordLastUsed": null,
+        "Path": "/",
+        "PermissionsBoundary": null,
+        "Tags": null,
+        "UserId": "AIDAJJSBBEAVOQLFAAUCG",
+        "UserName": "somebucketuser"
+    },
+    "AccessKeys": [
+        {
+            "AccessKeyId": "AKIAJTGA5ITTTJ7WOR7A",
+            "CreateDate": "2019-03-19T18:31:14Z",
+            "Status": "Active",
+            "UserName": "somebucketuser"
+        }
+    ],
+    "Groups": [
+        {
+            "Arn": "arn:aws:iam::12345678910:group/somebucketuser",
+            "CreateDate": "2019-03-19T14:20:01Z",
+            "GroupId": "AGPAJ6SYNPMFP6O5KXQJW",
+            "GroupName": "somebucketuser-BktAdmGrp",
+            "Path": "/"
+        }
+    ],
+    "Policies": [
+        {
+            "Arn": "arn:aws:iam::12345678910:policy/somebucketuser-BktAdmPlc",
+            "PolicyName": "somebucketuser-BktAdmPlc"
+        }
+    ]
+}
+```
+
 
 ### Reset access keys for a bucket user
 
@@ -327,7 +374,7 @@ GET `/v1/s3/{account}/buckets/{bucket}/users/{user}
 ```json
 [
     {
-        "Arn": "arn:aws:iam::846761448161:user/someuser-admin1",
+        "Arn": "arn:aws:iam::12345678910:user/someuser-admin1",
         "CreateDate": "2019-03-01T16:11:00Z",
         "PasswordLastUsed": null,
         "Path": "/",
@@ -337,7 +384,7 @@ GET `/v1/s3/{account}/buckets/{bucket}/users/{user}
         "UserName": "someuser-admin1"
     },
         {
-        "Arn": "arn:aws:iam::846761448161:user/someuser-admin2",
+        "Arn": "arn:aws:iam::12345678910:user/someuser-admin2",
         "CreateDate": "2019-03-01T16:11:00Z",
         "PasswordLastUsed": null,
         "Path": "/",
@@ -387,7 +434,7 @@ POST `/v1/s3/{account}/websites`
 {
     "Bucket": "/foobar.bulldogs.cloud",
     "Policy": {
-        "Arn": "arn:aws:iam::846761448161:policy/foobar.bulldogs.cloud-BktAdmPlc",
+        "Arn": "arn:aws:iam::12345678910:policy/foobar.bulldogs.cloud-BktAdmPlc",
         "AttachmentCount": 0,
         "CreateDate": "2019-03-01T15:33:52Z",
         "DefaultVersionId": "v1",
@@ -400,7 +447,7 @@ POST `/v1/s3/{account}/websites`
         "UpdateDate": "2019-03-01T15:33:52Z"
     },
     "Group": {
-        "Arn": "arn:aws:iam::846761448161:group/foobar.bulldogs.cloud-BktAdmGrp",
+        "Arn": "arn:aws:iam::12345678910:group/foobar.bulldogs.cloud-BktAdmGrp",
         "CreateDate": "2019-03-01T15:33:52Z",
         "GroupId": "GROUPID123",
         "GroupName": "foobar.bulldogs.cloud-BktAdmGrp",
@@ -453,6 +500,12 @@ DELETE `/v1/s3/{account}/websites/{website}`
 POST `/v1/s3/{account}/websites/{website}/users`
 
 *See [Create a bucket user](#create-a-bucket-user)*
+
+### Get a website user's details
+
+GET `/v1/s3/{account}/websites/{website}/users/{user}`
+
+*See [Get a bucket user's details](#get-a-bucket-users-details)*
 
 ### List users for a website
 

@@ -54,7 +54,7 @@ func (s *server) CreateWebsiteHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// setup err var, rollback function list and defer execution
+	// setup err var, rollback function list and defer execution, note that we depend on the err variable defined above this
 	var rollBackTasks []func() error
 	defer func() {
 		if err != nil {
@@ -193,20 +193,4 @@ func (s *server) CreateWebsiteHandler(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusOK)
 	w.Write(j)
-}
-
-// rollBack executes functions from a stack of rollback functions
-func rollBack(t *[]func() error) {
-	if t == nil {
-		return
-	}
-
-	tasks := *t
-	log.Errorf("executing rollback of %d tasks", len(tasks))
-	for i := len(tasks) - 1; i >= 0; i-- {
-		f := tasks[i]
-		if funcerr := f(); funcerr != nil {
-			log.Errorf("rollback task error: %s, continuing rollback", funcerr)
-		}
-	}
 }
