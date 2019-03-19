@@ -15,16 +15,16 @@ import (
 
 var (
 	// Version is the main version number
-	Version = s3api.Version
+	Version = "0.0.0"
 
 	// VersionPrerelease is a prerelease marker
-	VersionPrerelease = s3api.VersionPrerelease
+	VersionPrerelease = ""
 
 	// Buildstamp is the timestamp the binary was built, it should be set at buildtime with ldflags
-	Buildstamp = s3api.BuildStamp
+	Buildstamp = "No BuildStamp Provided"
 
 	// Githash is the git sha of the built binary, it should be set at buildtime with ldflags
-	Githash = s3api.GitHash
+	Githash = "No Git Commit Provided"
 
 	configFileName = flag.String("config", "config/config.json", "Configuration file.")
 	version        = flag.Bool("version", false, "Display version information and exit.")
@@ -47,6 +47,13 @@ func main() {
 	config, err := common.ReadConfig(r)
 	if err != nil {
 		log.Fatalf("Unable to read configuration from %s.  %+v", *configFileName, err)
+	}
+
+	config.Version = common.Version{
+		Version:           Version,
+		VersionPrerelease: VersionPrerelease,
+		BuildStamp:        Buildstamp,
+		GitHash:           Githash,
 	}
 
 	// Set the loglevel, info if it's unset

@@ -4,6 +4,8 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"testing"
+
+	"github.com/YaleSpinup/s3-api/common"
 )
 
 func TestPingHandler(t *testing.T) {
@@ -35,7 +37,14 @@ func TestVersionHandler(t *testing.T) {
 		t.Fatal(err)
 	}
 	rr := httptest.NewRecorder()
-	s := server{}
+	s := server{
+		version: common.Version{
+			Version:           "0.1.0",
+			VersionPrerelease: "",
+			GitHash:           "No Git Commit Provided",
+			BuildStamp:        "No BuildStamp Provided",
+		},
+	}
 	handler := http.HandlerFunc(s.VersionHandler)
 
 	handler.ServeHTTP(rr, req)

@@ -15,8 +15,8 @@ COPY go.sum .
 RUN go mod download
 COPY . .
 RUN go test ./... -cover
-RUN go build -o /go/api -ldflags="-X main.Version=$version -X main.VersionPrerelease=$prerelease -X main.githash=$githash -X main.buildstamp=$buildstamp" *.go
-RUN ./api -version
+RUN go build -o /app/api -ldflags="-X main.Version=$version -X main.VersionPrerelease=$prerelease -X main.githash=$githash -X main.buildstamp=$buildstamp" *.go
+RUN /app/api -version
 
 # final stage
 FROM alpine
