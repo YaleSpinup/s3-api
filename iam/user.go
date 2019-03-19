@@ -123,6 +123,40 @@ func (i *IAM) DeleteUser(ctx context.Context, input *iam.DeleteUserInput) (*iam.
 	return output, nil
 }
 
+// GetUser gets the details for an IAM user
+func (i *IAM) GetUser(ctx context.Context, input *iam.GetUserInput) (*iam.GetUserOutput, error) {
+	if input == nil || aws.StringValue(input.UserName) == "" {
+		return nil, apierror.New(apierror.ErrBadRequest, "invalid input", nil)
+	}
+
+	log.Infof("getting information about iam user %s", aws.StringValue(input.UserName))
+
+	output, err := i.Service.GetUser(input)
+	if err != nil {
+		if aerr, ok := err.(awserr.Error); ok {
+			switch aerr.Code() {
+			// * ErrCodeNoSuchEntityException "NoSuchEntity"
+			// The request was rejected because it referenced a resource entity that does
+			// not exist. The error message describes the resource.
+			case iam.ErrCodeNoSuchEntityException:
+				msg := fmt.Sprintf("%s: %s", aerr.Code(), aerr.Error())
+				return nil, apierror.New(apierror.ErrNotFound, msg, err)
+			// * ErrCodeServiceFailureException "ServiceFailure"
+			// The request processing has failed because of an unknown error, exception
+			// or failure.
+			case iam.ErrCodeServiceFailureException:
+				msg := fmt.Sprintf("%s: %s", aerr.Code(), aerr.Error())
+				return nil, apierror.New(apierror.ErrServiceUnavailable, msg, err)
+			default:
+				return nil, apierror.New(apierror.ErrBadRequest, aerr.Message(), err)
+			}
+		}
+		return nil, apierror.New(apierror.ErrInternalError, "unknown error occurred", err)
+	}
+
+	return output, nil
+}
+
 // CreateAccessKey creates an access key for an IAM user
 func (i *IAM) CreateAccessKey(ctx context.Context, input *iam.CreateAccessKeyInput) (*iam.CreateAccessKeyOutput, error) {
 	if input == nil || aws.StringValue(input.UserName) == "" {
@@ -333,6 +367,8 @@ func (i *IAM) ListUserGroups(ctx context.Context, input *iam.ListGroupsForUserIn
 		return groups, apierror.New(apierror.ErrBadRequest, "invalid input", nil)
 	}
 
+	log.Infof("listing groups for user %s", aws.StringValue(input.UserName))
+
 	truncated := true
 	for truncated {
 		output, err := i.Service.ListGroupsForUserWithContext(ctx, input)
@@ -357,4 +393,98 @@ func (i *IAM) ListUserGroups(ctx context.Context, input *iam.ListGroupsForUserIn
 	}
 
 	return groups, nil
+}
+
+// ListUserPolicies lists the attached policies for a user
+func (i *IAM) ListUserPolicies(ctx context.Context, input *iam.ListAttachedUserPoliciesInput) ([]*iam.AttachedPolicy, error) {
+	policies := []*iam.AttachedPolicy{}
+
+	if input == nil || aws.StringValue(input.UserName) == "" {
+		return policies, apierror.New(apierror.ErrBadRequest, "invalid input", nil)
+	}
+
+	log.Infof("listing policies for user %s", aws.StringValue(input.UserName))
+
+	truncated := true
+	for truncated {
+		output, err := i.Service.ListAttachedUserPoliciesWithContext(ctx, input)
+		if err != nil {
+			if aerr, ok := err.(awserr.Error); ok {
+				switch aerr.Code() {
+				// * ErrCodeNoSuchEntityException "NoSuchEntity"
+				// The request was rejected because it referenced a resource entity that does
+				// not exist. The error message describes the resource.
+				case iam.ErrCodeNoSuchEntityException:
+					msg := fmt.Sprintf("%s: %s", aerr.Code(), aerr.Error())
+					return policies, apierror.New(apierror.ErrNotFound, msg, err)
+				// * ErrCodeInvalidInputException "InvalidInput"
+				// The request was rejected because an invalid or out-of-range value was supplied
+				// for an input parameter.
+				case iam.ErrCodeInvalidInputException:
+					msg := fmt.Sprintf("%s: %s", aerr.Code(), aerr.Error())
+					return policies, apierror.New(apierror.ErrBadRequest, msg, err)
+				// * ErrCodeServiceFailureException "ServiceFailure"
+				// The request processing has failed because of an unknown error, exception
+				// or failure.
+				case iam.ErrCodeServiceFailureException:
+					msg := fmt.Sprintf("%s: %s", aerr.Code(), aerr.Error())
+					return policies, apierror.New(apierror.ErrServiceUnavailable, msg, err)
+				default:
+					return policies, apierror.New(apierror.ErrBadRequest, aerr.Message(), err)
+				}
+			}
+			return policies, apierror.New(apierror.ErrInternalError, "unknown error occurred", err)
+		}
+		truncated = aws.BoolValue(output.IsTruncated)
+		policies = append(policies, output.AttachedPolicies...)
+		input.Marker = output.Marker
+	}
+
+	return policies, nil
+}
+
+// DetachUserPolicy removes an IAM policy from a user
+func (i *IAM) DetachUserPolicy(ctx context.Context, input *iam.DetachUserPolicyInput) error {
+	if input == nil || aws.StringValue(input.UserName) == "" || aws.StringValue(input.PolicyArn) == "" {
+		return apierror.New(apierror.ErrBadRequest, "invalid input", nil)
+	}
+
+	log.Infof("detaching policy %s for user %s", aws.StringValue(input.PolicyArn), aws.StringValue(input.UserName))
+
+	_, err := i.Service.DetachUserPolicyWithContext(ctx, input)
+	if err != nil {
+		if aerr, ok := err.(awserr.Error); ok {
+			switch aerr.Code() {
+			// * ErrCodeNoSuchEntityException "NoSuchEntity"
+			// The request was rejected because it referenced a resource entity that does
+			// not exist. The error message describes the resource.
+			case iam.ErrCodeNoSuchEntityException:
+				msg := fmt.Sprintf("%s: %s", aerr.Code(), aerr.Error())
+				return apierror.New(apierror.ErrNotFound, msg, err)
+			// * ErrCodeLimitExceededException "LimitExceeded"
+			// The request was rejected because it attempted to create resources beyond
+			// the current AWS account limits. The error message describes the limit exceeded.
+			case iam.ErrCodeLimitExceededException:
+				msg := fmt.Sprintf("%s: %s", aerr.Code(), aerr.Error())
+				return apierror.New(apierror.ErrLimitExceeded, msg, err)
+			// * ErrCodeInvalidInputException "InvalidInput"
+			// The request was rejected because an invalid or out-of-range value was supplied
+			// for an input parameter.
+			case iam.ErrCodeInvalidInputException:
+				msg := fmt.Sprintf("%s: %s", aerr.Code(), aerr.Error())
+				return apierror.New(apierror.ErrBadRequest, msg, err)
+			// * ErrCodeServiceFailureException "ServiceFailure"
+			// The request processing has failed because of an unknown error, exception
+			// or failure.
+			case iam.ErrCodeServiceFailureException:
+				msg := fmt.Sprintf("%s: %s", aerr.Code(), aerr.Error())
+				return apierror.New(apierror.ErrServiceUnavailable, msg, err)
+			default:
+				return apierror.New(apierror.ErrBadRequest, aerr.Message(), err)
+			}
+		}
+		return apierror.New(apierror.ErrInternalError, "unknown error occurred", err)
+	}
+
+	return nil
 }

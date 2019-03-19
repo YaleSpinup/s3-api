@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"strings"
 
 	"github.com/YaleSpinup/s3-api/apierror"
 	"github.com/aws/aws-sdk-go/aws"
@@ -118,6 +119,7 @@ func (s *server) UserDeleteHandler(w http.ResponseWriter, r *http.Request) {
 	vars := mux.Vars(r)
 	account := vars["account"]
 	user := vars["user"]
+	bucket := vars["bucket"]
 
 	iamService, ok := s.iamServices[account]
 	if !ok {
@@ -155,6 +157,36 @@ func (s *server) UserDeleteHandler(w http.ResponseWriter, r *http.Request) {
 		if err != nil {
 			handleError(w, err)
 			return
+		}
+	}
+
+	// get a list of all of the attached user policies for a user.  this should be empty for "new" s3 buckets, but buckets created
+	// with the legacy service have the policy directly attached to the user with the same name as the user/bucket
+	policies, err := iamService.ListUserPolicies(r.Context(), &iam.ListAttachedUserPoliciesInput{UserName: aws.String(user)})
+	if err != nil {
+		handleError(w, err)
+		return
+	}
+
+	// detatch and delete all of the policies that we found if the name is the same as the bucket or if the name starts
+	// with the the name of the bucket
+	for _, p := range policies {
+		pname := aws.StringValue(p.PolicyName)
+		if strings.HasPrefix(pname, bucket+"-") || pname == bucket {
+			if err := iamService.DetachUserPolicy(r.Context(), &iam.DetachUserPolicyInput{
+				UserName:  aws.String(user),
+				PolicyArn: p.PolicyArn,
+			}); err != nil {
+				j, _ := json.Marshal("failed to detatch user policy: " + err.Error())
+				w.Write(j)
+				return
+			}
+
+			if _, err := iamService.DeletePolicy(r.Context(), &iam.DeletePolicyInput{PolicyArn: p.PolicyArn}); err != nil {
+				j, _ := json.Marshal("failed to delete user policy: " + err.Error())
+				w.Write(j)
+				return
+			}
 		}
 	}
 
@@ -251,7 +283,10 @@ func (s *server) UserUpdateKeyHandler(w http.ResponseWriter, r *http.Request) {
 	w.Write(j)
 }
 
-// UserListHandler lists the users for a bucket
+// UserListHandler lists the users for a bucket.  It tries to return the members of the
+// bucket admin group: <<bucket>>-BktAdmGrp, but if that returns an error, it looks for
+// a user with the same name as the bucket and returns that if it exists, otherwise it
+// returns an error code.
 func (s *server) UserListHandler(w http.ResponseWriter, r *http.Request) {
 	w = LogWriter{w}
 	vars := mux.Vars(r)
@@ -270,9 +305,17 @@ func (s *server) UserListHandler(w http.ResponseWriter, r *http.Request) {
 	// get a list of users in a group
 	users, err := iamService.ListGroupUsers(r.Context(), &iam.GetGroupInput{GroupName: aws.String(groupName)})
 	if err != nil {
-		handleError(w, err)
-		return
+		// check if there is a user with the same name as the bucket to support legacy buckets
+		user, err := iamService.GetUser(r.Context(), &iam.GetUserInput{UserName: aws.String(bucket)})
+		if err != nil {
+			handleError(w, err)
+			return
+		}
+
+		users = []*iam.User{user.User}
 	}
+
+	log.Debugf("%+v", users)
 
 	j, err := json.Marshal(users)
 	if err != nil {
@@ -284,4 +327,89 @@ func (s *server) UserListHandler(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusOK)
 	w.Write(j)
+}
+
+// UserShowHandler gets and returns details of a bucket user.  This is accomplished by getting all of the
+// users for a bucket's [group] and then comparing that to the passed user.  This would be more efficient if we
+// just GetUser for the passed in user, but then we can't be sure it's associated with the bucket.
+func (s *server) UserShowHandler(w http.ResponseWriter, r *http.Request) {
+	w = LogWriter{w}
+	vars := mux.Vars(r)
+	account := vars["account"]
+	bucket := vars["bucket"]
+	user := vars["user"]
+
+	iamService, ok := s.iamServices[account]
+	if !ok {
+		msg := fmt.Sprintf("IAM service not found for account: %s", account)
+		handleError(w, apierror.New(apierror.ErrNotFound, msg, nil))
+		return
+	}
+
+	// TODO: if we support more than admins, we need to add those group names here
+	groupName := fmt.Sprintf("%s-BktAdmGrp", bucket)
+	// get a list of users in a group
+	users, err := iamService.ListGroupUsers(r.Context(), &iam.GetGroupInput{GroupName: aws.String(groupName)})
+	if err != nil {
+		// check if there is a user with the same name as the bucket to support legacy buckets
+		u, err := iamService.GetUser(r.Context(), &iam.GetUserInput{UserName: aws.String(bucket)})
+		if err != nil {
+			handleError(w, err)
+			return
+		}
+
+		users = []*iam.User{u.User}
+	}
+
+	// range over all of the users we found and return the user if it matches the requested user
+	for _, u := range users {
+		if aws.StringValue(u.UserName) == user {
+			var userDetails = struct {
+				User       *iam.User
+				AccessKeys []*iam.AccessKeyMetadata
+				Groups     []*iam.Group
+				Policies   []*iam.AttachedPolicy
+			}{
+				User: u,
+			}
+
+			keys, err := iamService.ListAccessKeys(r.Context(), &iam.ListAccessKeysInput{UserName: aws.String(user)})
+			if err != nil {
+				handleError(w, err)
+				return
+			}
+			userDetails.AccessKeys = keys
+
+			groups, err := iamService.ListUserGroups(r.Context(), &iam.ListGroupsForUserInput{UserName: aws.String(user)})
+			if err != nil {
+				handleError(w, err)
+				return
+			}
+			userDetails.Groups = groups
+
+			policies, err := iamService.ListUserPolicies(r.Context(), &iam.ListAttachedUserPoliciesInput{UserName: aws.String(user)})
+			if err != nil {
+				handleError(w, err)
+				return
+			}
+			userDetails.Policies = policies
+
+			j, err := json.Marshal(userDetails)
+			if err != nil {
+				log.Errorf("cannot marshal reasponse(%v) into JSON: %s", u, err)
+				w.WriteHeader(http.StatusInternalServerError)
+				return
+			}
+
+			w.Header().Set("Content-Type", "application/json")
+			w.WriteHeader(http.StatusOK)
+			w.Write(j)
+
+			return
+		}
+	}
+
+	log.Warnf("requested user %s does not belong to bucket %s", user, bucket)
+	w.WriteHeader(http.StatusNotFound)
+	w.Write([]byte{})
 }

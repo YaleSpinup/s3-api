@@ -81,6 +81,23 @@ var testUserGroup3 = iam.Group{
 
 var testGroups1 = []*iam.Group{&testUserGroup1, &testUserGroup2, &testUserGroup3}
 
+var testUserUserPolicy1 = iam.AttachedPolicy{
+	PolicyName: aws.String("testpolicy1"),
+	PolicyArn:  aws.String("arn:aws:iam::12345678910:policy/testpolicy1"),
+}
+
+var testUserUserPolicy2 = iam.AttachedPolicy{
+	PolicyName: aws.String("testpolicy2"),
+	PolicyArn:  aws.String("arn:aws:iam::12345678910:policy/testpolicy2"),
+}
+
+var testUserUserPolicy3 = iam.AttachedPolicy{
+	PolicyName: aws.String("testpolicy3"),
+	PolicyArn:  aws.String("arn:aws:iam::12345678910:policy/testpolicy3"),
+}
+
+var testUserPolicies1 = []*iam.AttachedPolicy{&testUserUserPolicy1, &testUserUserPolicy2, &testUserUserPolicy3}
+
 func (m *mockIAMClient) CreateUserWithContext(ctx context.Context, input *iam.CreateUserInput, opts ...request.Option) (*iam.CreateUserOutput, error) {
 	if m.err != nil {
 		return nil, m.err
@@ -93,6 +110,13 @@ func (m *mockIAMClient) DeleteUserWithContext(ctx context.Context, input *iam.De
 		return nil, m.err
 	}
 	return &iam.DeleteUserOutput{}, nil
+}
+
+func (m *mockIAMClient) GetUser(input *iam.GetUserInput) (*iam.GetUserOutput, error) {
+	if m.err != nil {
+		return nil, m.err
+	}
+	return &iam.GetUserOutput{User: &testUser}, nil
 }
 
 func (m *mockIAMClient) CreateAccessKeyWithContext(ctx context.Context, input *iam.CreateAccessKeyInput, opts ...request.Option) (*iam.CreateAccessKeyOutput, error) {
@@ -138,12 +162,22 @@ func (m *mockIAMClient) ListGroupsForUserWithContext(ctx context.Context, input 
 	return &iam.ListGroupsForUserOutput{Groups: testGroups1}, nil
 }
 
-func TestCreateUser(t *testing.T) {
-	i := IAM{
-		Service:                newMockIAMClient(t, nil),
-		DefaultS3BucketActions: []string{"gti", "golfr", "jetta", "passat"},
-		DefaultS3ObjectActions: []string{"blue", "green", "yellow", "red"},
+func (m *mockIAMClient) ListAttachedUserPoliciesWithContext(ctx context.Context, input *iam.ListAttachedUserPoliciesInput, opts ...request.Option) (*iam.ListAttachedUserPoliciesOutput, error) {
+	if m.err != nil {
+		return nil, m.err
 	}
+	return &iam.ListAttachedUserPoliciesOutput{AttachedPolicies: testUserPolicies1}, nil
+}
+
+func (m *mockIAMClient) DetachUserPolicyWithContext(ctx context.Context, input *iam.DetachUserPolicyInput, opts ...request.Option) (*iam.DetachUserPolicyOutput, error) {
+	if m.err != nil {
+		return nil, m.err
+	}
+	return &iam.DetachUserPolicyOutput{}, nil
+}
+
+func TestCreateUser(t *testing.T) {
+	i := IAM{Service: newMockIAMClient(t, nil)}
 
 	// test success
 	expected := &iam.CreateUserOutput{User: &testUser}
@@ -266,11 +300,7 @@ func TestCreateUser(t *testing.T) {
 }
 
 func TestDeleteUser(t *testing.T) {
-	i := IAM{
-		Service:                newMockIAMClient(t, nil),
-		DefaultS3BucketActions: []string{"gti", "golfr", "jetta", "passat"},
-		DefaultS3ObjectActions: []string{"blue", "green", "yellow", "red"},
-	}
+	i := IAM{Service: newMockIAMClient(t, nil)}
 
 	// test success
 	expected := &iam.DeleteUserOutput{}
@@ -381,12 +411,87 @@ func TestDeleteUser(t *testing.T) {
 	}
 }
 
-func TestCreateAccessKey(t *testing.T) {
-	i := IAM{
-		Service:                newMockIAMClient(t, nil),
-		DefaultS3BucketActions: []string{"gti", "golfr", "jetta", "passat"},
-		DefaultS3ObjectActions: []string{"blue", "green", "yellow", "red"},
+func TestGetUser(t *testing.T) {
+	i := IAM{Service: newMockIAMClient(t, nil)}
+
+	// test success
+	expected := &iam.GetUserOutput{User: &testUser}
+	out, err := i.GetUser(context.TODO(), &iam.GetUserInput{UserName: aws.String("testuser")})
+	if err != nil {
+		t.Errorf("expected nil error, got: %s", err)
 	}
+
+	if !reflect.DeepEqual(out, expected) {
+		t.Errorf("expected %+v, got %+v", expected, out)
+	}
+
+	// test nil input
+	_, err = i.GetUser(context.TODO(), nil)
+	if aerr, ok := err.(apierror.Error); ok {
+		if aerr.Code != apierror.ErrBadRequest {
+			t.Errorf("expected error code %s, got: %s", apierror.ErrBadRequest, aerr.Code)
+		}
+	} else {
+		t.Errorf("expected apierror.Error, got: %s", reflect.TypeOf(err).String())
+	}
+
+	// test empty user name
+	_, err = i.GetUser(context.TODO(), &iam.GetUserInput{})
+	if aerr, ok := err.(apierror.Error); ok {
+		if aerr.Code != apierror.ErrBadRequest {
+			t.Errorf("expected error code %s, got: %s", apierror.ErrBadRequest, aerr.Code)
+		}
+	} else {
+		t.Errorf("expected apierror.Error, got: %s", reflect.TypeOf(err).String())
+	}
+
+	// test ErrCodeNoSuchEntityException
+	i.Service.(*mockIAMClient).err = awserr.New(iam.ErrCodeNoSuchEntityException, "entity not found", nil)
+	_, err = i.GetUser(context.TODO(), &iam.GetUserInput{UserName: aws.String("testuser")})
+	if aerr, ok := err.(apierror.Error); ok {
+		if aerr.Code != apierror.ErrNotFound {
+			t.Errorf("expected error code %s, got: %s", apierror.ErrNotFound, aerr.Code)
+		}
+	} else {
+		t.Errorf("expected apierror.Error, got: %s", reflect.TypeOf(err).String())
+	}
+
+	// test ErrCodeServiceFailureException
+	i.Service.(*mockIAMClient).err = awserr.New(iam.ErrCodeServiceFailureException, "service failed", nil)
+	_, err = i.GetUser(context.TODO(), &iam.GetUserInput{UserName: aws.String("testuser")})
+	if aerr, ok := err.(apierror.Error); ok {
+		if aerr.Code != apierror.ErrServiceUnavailable {
+			t.Errorf("expected error code %s, got: %s", apierror.ErrServiceUnavailable, aerr.Code)
+		}
+	} else {
+		t.Errorf("expected apierror.Error, got: %s", reflect.TypeOf(err).String())
+	}
+
+	// test some other, unexpected AWS error
+	i.Service.(*mockIAMClient).err = awserr.New(iam.ErrCodeEntityAlreadyExistsException, "delete conflict", nil)
+	_, err = i.GetUser(context.TODO(), &iam.GetUserInput{UserName: aws.String("testuser")})
+	if aerr, ok := err.(apierror.Error); ok {
+		if aerr.Code != apierror.ErrBadRequest {
+			t.Errorf("expected error code %s, got: %s", apierror.ErrBadRequest, aerr.Code)
+		}
+	} else {
+		t.Errorf("expected apierror.Error, got: %s", reflect.TypeOf(err).String())
+	}
+
+	// test non-aws error
+	i.Service.(*mockIAMClient).err = errors.New("things blowing up!")
+	_, err = i.GetUser(context.TODO(), &iam.GetUserInput{UserName: aws.String("testuser")})
+	if aerr, ok := err.(apierror.Error); ok {
+		if aerr.Code != apierror.ErrInternalError {
+			t.Errorf("expected error code %s, got: %s", apierror.ErrInternalError, aerr.Code)
+		}
+	} else {
+		t.Errorf("expected apierror.Error, got: %s", reflect.TypeOf(err).String())
+	}
+}
+
+func TestCreateAccessKey(t *testing.T) {
+	i := IAM{Service: newMockIAMClient(t, nil)}
 
 	// test success
 	expected := &iam.CreateAccessKeyOutput{AccessKey: &testAccessKey}
@@ -476,11 +581,7 @@ func TestCreateAccessKey(t *testing.T) {
 }
 
 func TestDeleteAccessKeys(t *testing.T) {
-	i := IAM{
-		Service:                newMockIAMClient(t, nil),
-		DefaultS3BucketActions: []string{"gti", "golfr", "jetta", "passat"},
-		DefaultS3ObjectActions: []string{"blue", "green", "yellow", "red"},
-	}
+	i := IAM{Service: newMockIAMClient(t, nil)}
 
 	// test success
 	expected := &iam.DeleteAccessKeyOutput{}
@@ -588,11 +689,7 @@ func TestDeleteAccessKeys(t *testing.T) {
 }
 
 func TestListAccessKeys(t *testing.T) {
-	i := IAM{
-		Service:                newMockIAMClient(t, nil),
-		DefaultS3BucketActions: []string{"gti", "golfr", "jetta", "passat"},
-		DefaultS3ObjectActions: []string{"blue", "green", "yellow", "red"},
-	}
+	i := IAM{Service: newMockIAMClient(t, nil)}
 
 	// test success
 	expected := testAccessKeysMetadata1
@@ -671,11 +768,7 @@ func TestListAccessKeys(t *testing.T) {
 }
 
 func TestAddUserToGroup(t *testing.T) {
-	i := IAM{
-		Service:                newMockIAMClient(t, nil),
-		DefaultS3BucketActions: []string{"gti", "golfr", "jetta", "passat"},
-		DefaultS3ObjectActions: []string{"blue", "green", "yellow", "red"},
-	}
+	i := IAM{Service: newMockIAMClient(t, nil)}
 
 	// test success
 	expected := &iam.AddUserToGroupOutput{}
@@ -765,11 +858,7 @@ func TestAddUserToGroup(t *testing.T) {
 }
 
 func TestRemoveUserFromGroup(t *testing.T) {
-	i := IAM{
-		Service:                newMockIAMClient(t, nil),
-		DefaultS3BucketActions: []string{"gti", "golfr", "jetta", "passat"},
-		DefaultS3ObjectActions: []string{"blue", "green", "yellow", "red"},
-	}
+	i := IAM{Service: newMockIAMClient(t, nil)}
 
 	// test success
 	expected := &iam.RemoveUserFromGroupOutput{}
@@ -859,11 +948,7 @@ func TestRemoveUserFromGroup(t *testing.T) {
 }
 
 func TestListUserGroups(t *testing.T) {
-	i := IAM{
-		Service:                newMockIAMClient(t, nil),
-		DefaultS3BucketActions: []string{"gti", "golfr", "jetta", "passat"},
-		DefaultS3ObjectActions: []string{"blue", "green", "yellow", "red"},
-	}
+	i := IAM{Service: newMockIAMClient(t, nil)}
 
 	// test success
 	expected := testGroups1
@@ -921,6 +1006,203 @@ func TestListUserGroups(t *testing.T) {
 	// test non-aws error
 	i.Service.(*mockIAMClient).err = errors.New("things blowing up!")
 	_, err = i.ListUserGroups(context.TODO(), &iam.ListGroupsForUserInput{UserName: aws.String("testuser")})
+	if aerr, ok := err.(apierror.Error); ok {
+		if aerr.Code != apierror.ErrInternalError {
+			t.Errorf("expected error code %s, got: %s", apierror.ErrInternalError, aerr.Code)
+		}
+	} else {
+		t.Errorf("expected apierror.Error, got: %s", reflect.TypeOf(err).String())
+	}
+}
+
+func TestListUserPolicies(t *testing.T) {
+	i := IAM{Service: newMockIAMClient(t, nil)}
+
+	// test success
+	expected := testUserPolicies1
+	out, err := i.ListUserPolicies(context.TODO(), &iam.ListAttachedUserPoliciesInput{UserName: aws.String("testuser")})
+	if err != nil {
+		t.Errorf("expected nil error, got: %s", err)
+	}
+
+	if !reflect.DeepEqual(out, expected) {
+		t.Errorf("expected %+v, got %+v", expected, out)
+	}
+
+	// test nil input
+	_, err = i.ListUserPolicies(context.TODO(), nil)
+	if aerr, ok := err.(apierror.Error); ok {
+		if aerr.Code != apierror.ErrBadRequest {
+			t.Errorf("expected error code %s, got: %s", apierror.ErrBadRequest, aerr.Code)
+		}
+	} else {
+		t.Errorf("expected apierror.Error, got: %s", reflect.TypeOf(err).String())
+	}
+
+	// test empty user name
+	_, err = i.ListUserPolicies(context.TODO(), &iam.ListAttachedUserPoliciesInput{})
+	if aerr, ok := err.(apierror.Error); ok {
+		if aerr.Code != apierror.ErrBadRequest {
+			t.Errorf("expected error code %s, got: %s", apierror.ErrBadRequest, aerr.Code)
+		}
+	} else {
+		t.Errorf("expected apierror.Error, got: %s", reflect.TypeOf(err).String())
+	}
+
+	// test ErrCodeNoSuchEntityException
+	i.Service.(*mockIAMClient).err = awserr.New(iam.ErrCodeNoSuchEntityException, "not found", nil)
+	_, err = i.ListUserPolicies(context.TODO(), &iam.ListAttachedUserPoliciesInput{UserName: aws.String("testuser")})
+	if aerr, ok := err.(apierror.Error); ok {
+		if aerr.Code != apierror.ErrNotFound {
+			t.Errorf("expected error code %s, got: %s", apierror.ErrNotFound, aerr.Code)
+		}
+	} else {
+		t.Errorf("expected apierror.Error, got: %s", reflect.TypeOf(err).String())
+	}
+
+	// test ErrCodeInvalidInputException
+	i.Service.(*mockIAMClient).err = awserr.New(iam.ErrCodeInvalidInputException, "invalid input", nil)
+	_, err = i.ListUserPolicies(context.TODO(), &iam.ListAttachedUserPoliciesInput{UserName: aws.String("testuser")})
+	if aerr, ok := err.(apierror.Error); ok {
+		if aerr.Code != apierror.ErrBadRequest {
+			t.Errorf("expected error code %s, got: %s", apierror.ErrBadRequest, aerr.Code)
+		}
+	} else {
+		t.Errorf("expected apierror.Error, got: %s", reflect.TypeOf(err).String())
+	}
+
+	// test ErrCodeServiceFailureException
+	i.Service.(*mockIAMClient).err = awserr.New(iam.ErrCodeServiceFailureException, "service failure", nil)
+	_, err = i.ListUserPolicies(context.TODO(), &iam.ListAttachedUserPoliciesInput{UserName: aws.String("testuser")})
+	if aerr, ok := err.(apierror.Error); ok {
+		if aerr.Code != apierror.ErrServiceUnavailable {
+			t.Errorf("expected error code %s, got: %s", apierror.ErrServiceUnavailable, aerr.Code)
+		}
+	} else {
+		t.Errorf("expected apierror.Error, got: %s", reflect.TypeOf(err).String())
+	}
+
+	// test some other, unexpected AWS error
+	i.Service.(*mockIAMClient).err = awserr.New(iam.ErrCodeDeleteConflictException, "delete conflict", nil)
+	_, err = i.ListUserPolicies(context.TODO(), &iam.ListAttachedUserPoliciesInput{UserName: aws.String("testuser")})
+	if aerr, ok := err.(apierror.Error); ok {
+		if aerr.Code != apierror.ErrBadRequest {
+			t.Errorf("expected error code %s, got: %s", apierror.ErrBadRequest, aerr.Code)
+		}
+	} else {
+		t.Errorf("expected apierror.Error, got: %s", reflect.TypeOf(err).String())
+	}
+
+	// test non-aws error
+	i.Service.(*mockIAMClient).err = errors.New("things blowing up!")
+	_, err = i.ListUserPolicies(context.TODO(), &iam.ListAttachedUserPoliciesInput{UserName: aws.String("testuser")})
+	if aerr, ok := err.(apierror.Error); ok {
+		if aerr.Code != apierror.ErrInternalError {
+			t.Errorf("expected error code %s, got: %s", apierror.ErrInternalError, aerr.Code)
+		}
+	} else {
+		t.Errorf("expected apierror.Error, got: %s", reflect.TypeOf(err).String())
+	}
+}
+
+func TestDetachUserPolicy(t *testing.T) {
+	i := IAM{Service: newMockIAMClient(t, nil)}
+	username := aws.String("testuser")
+	policyarn := aws.String("arn:aws:iam::12345678910:policy/testpolicy1")
+
+	// test success
+	err := i.DetachUserPolicy(context.TODO(), &iam.DetachUserPolicyInput{UserName: username, PolicyArn: policyarn})
+	if err != nil {
+		t.Errorf("expected nil error, got: %s", err)
+	}
+
+	// test nil input
+	err = i.DetachUserPolicy(context.TODO(), nil)
+	if aerr, ok := err.(apierror.Error); ok {
+		if aerr.Code != apierror.ErrBadRequest {
+			t.Errorf("expected error code %s, got: %s", apierror.ErrBadRequest, aerr.Code)
+		}
+	} else {
+		t.Errorf("expected apierror.Error, got: %s", reflect.TypeOf(err).String())
+	}
+
+	// test empty user name and policy arn
+	err = i.DetachUserPolicy(context.TODO(), &iam.DetachUserPolicyInput{})
+	if aerr, ok := err.(apierror.Error); ok {
+		if aerr.Code != apierror.ErrBadRequest {
+			t.Errorf("expected error code %s, got: %s", apierror.ErrBadRequest, aerr.Code)
+		}
+	} else {
+		t.Errorf("expected apierror.Error, got: %s", reflect.TypeOf(err).String())
+	}
+
+	// test empty username
+	err = i.DetachUserPolicy(context.TODO(), &iam.DetachUserPolicyInput{PolicyArn: policyarn})
+	if aerr, ok := err.(apierror.Error); ok {
+		if aerr.Code != apierror.ErrBadRequest {
+			t.Errorf("expected error code %s, got: %s", apierror.ErrBadRequest, aerr.Code)
+		}
+	} else {
+		t.Errorf("expected apierror.Error, got: %s", reflect.TypeOf(err).String())
+	}
+
+	// test empty policyarn
+	err = i.DetachUserPolicy(context.TODO(), &iam.DetachUserPolicyInput{UserName: username})
+	if aerr, ok := err.(apierror.Error); ok {
+		if aerr.Code != apierror.ErrBadRequest {
+			t.Errorf("expected error code %s, got: %s", apierror.ErrBadRequest, aerr.Code)
+		}
+	} else {
+		t.Errorf("expected apierror.Error, got: %s", reflect.TypeOf(err).String())
+	}
+
+	// test ErrCodeNoSuchEntityException
+	i.Service.(*mockIAMClient).err = awserr.New(iam.ErrCodeNoSuchEntityException, "not found", nil)
+	err = i.DetachUserPolicy(context.TODO(), &iam.DetachUserPolicyInput{UserName: username, PolicyArn: policyarn})
+	if aerr, ok := err.(apierror.Error); ok {
+		if aerr.Code != apierror.ErrNotFound {
+			t.Errorf("expected error code %s, got: %s", apierror.ErrNotFound, aerr.Code)
+		}
+	} else {
+		t.Errorf("expected apierror.Error, got: %s", reflect.TypeOf(err).String())
+	}
+
+	// test ErrCodeInvalidInputException
+	i.Service.(*mockIAMClient).err = awserr.New(iam.ErrCodeInvalidInputException, "invalid input", nil)
+	err = i.DetachUserPolicy(context.TODO(), &iam.DetachUserPolicyInput{UserName: username, PolicyArn: policyarn})
+	if aerr, ok := err.(apierror.Error); ok {
+		if aerr.Code != apierror.ErrBadRequest {
+			t.Errorf("expected error code %s, got: %s", apierror.ErrBadRequest, aerr.Code)
+		}
+	} else {
+		t.Errorf("expected apierror.Error, got: %s", reflect.TypeOf(err).String())
+	}
+
+	// test ErrCodeServiceFailureException
+	i.Service.(*mockIAMClient).err = awserr.New(iam.ErrCodeServiceFailureException, "service failure", nil)
+	err = i.DetachUserPolicy(context.TODO(), &iam.DetachUserPolicyInput{UserName: username, PolicyArn: policyarn})
+	if aerr, ok := err.(apierror.Error); ok {
+		if aerr.Code != apierror.ErrServiceUnavailable {
+			t.Errorf("expected error code %s, got: %s", apierror.ErrServiceUnavailable, aerr.Code)
+		}
+	} else {
+		t.Errorf("expected apierror.Error, got: %s", reflect.TypeOf(err).String())
+	}
+
+	// test some other, unexpected AWS error
+	i.Service.(*mockIAMClient).err = awserr.New(iam.ErrCodeDeleteConflictException, "delete conflict", nil)
+	err = i.DetachUserPolicy(context.TODO(), &iam.DetachUserPolicyInput{UserName: username, PolicyArn: policyarn})
+	if aerr, ok := err.(apierror.Error); ok {
+		if aerr.Code != apierror.ErrBadRequest {
+			t.Errorf("expected error code %s, got: %s", apierror.ErrBadRequest, aerr.Code)
+		}
+	} else {
+		t.Errorf("expected apierror.Error, got: %s", reflect.TypeOf(err).String())
+	}
+
+	// test non-aws error
+	i.Service.(*mockIAMClient).err = errors.New("things blowing up!")
+	err = i.DetachUserPolicy(context.TODO(), &iam.DetachUserPolicyInput{UserName: username, PolicyArn: policyarn})
 	if aerr, ok := err.(apierror.Error); ok {
 		if aerr.Code != apierror.ErrInternalError {
 			t.Errorf("expected error code %s, got: %s", apierror.ErrInternalError, aerr.Code)

@@ -269,19 +269,21 @@ func (s *server) BucketDeleteHandler(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusOK)
 
+	// TODO: if this fails with a NotFound, we should continue on because its probably a legacy bucket
 	groupName := fmt.Sprintf("%s-BktAdmGrp", bucket)
 	policies, err := iamService.ListGroupPolicies(r.Context(), &iam.ListAttachedGroupPoliciesInput{GroupName: aws.String(groupName)})
 	if err != nil {
+		log.Warnf("failed to list group policies when deleting bucket %s: %s", bucket, err)
 		j, _ := json.Marshal("failed to list group policies: " + err.Error())
 		w.Write(j)
-		return
 	}
 
 	for _, p := range policies {
-		if _, err := iamService.DetachGroupPolicy(r.Context(), &iam.DetachGroupPolicyInput{
+		if err := iamService.DetachGroupPolicy(r.Context(), &iam.DetachGroupPolicyInput{
 			GroupName: aws.String(groupName),
 			PolicyArn: p.PolicyArn,
 		}); err != nil {
+			log.Warnf("failed to detach policy %s from group %s when deleting bucket %s: %s", aws.StringValue(p.PolicyArn), groupName, bucket, err)
 			j, _ := json.Marshal("failed to detatch group policy: " + err.Error())
 			w.Write(j)
 			return
@@ -289,6 +291,7 @@ func (s *server) BucketDeleteHandler(w http.ResponseWriter, r *http.Request) {
 
 		if strings.HasPrefix(aws.StringValue(p.PolicyName), bucket+"-") {
 			if _, err := iamService.DeletePolicy(r.Context(), &iam.DeletePolicyInput{PolicyArn: p.PolicyArn}); err != nil {
+				log.Warnf("failed to delete group policy %s when deleting bucket %s: %s", aws.StringValue(p.PolicyArn), bucket, err)
 				j, _ := json.Marshal("failed to delete group policy: " + err.Error())
 				w.Write(j)
 				return
@@ -298,6 +301,7 @@ func (s *server) BucketDeleteHandler(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if _, err := iamService.DeleteGroup(r.Context(), &iam.DeleteGroupInput{GroupName: aws.String(groupName)}); err != nil {
+		log.Warnf("failed to delete group %s when deleting bucket %s: %s", groupName, bucket, err)
 		j, _ := json.Marshal("failed to delete group: " + err.Error())
 		w.Write(j)
 		return

@@ -467,8 +467,7 @@ func TestDetachGroupPolicy(t *testing.T) {
 	}
 
 	// test success
-	expected := &iam.DetachGroupPolicyOutput{}
-	out, err := i.DetachGroupPolicy(context.TODO(), &iam.DetachGroupPolicyInput{
+	err := i.DetachGroupPolicy(context.TODO(), &iam.DetachGroupPolicyInput{
 		GroupName: aws.String("testgroup"),
 		PolicyArn: aws.String("arn:aws:iam::12345678910:policy/testPolicy"),
 	})
@@ -476,12 +475,8 @@ func TestDetachGroupPolicy(t *testing.T) {
 		t.Errorf("expected nil error, got: %s", err)
 	}
 
-	if !reflect.DeepEqual(out, expected) {
-		t.Errorf("expected %+v, got %+v", expected, out)
-	}
-
 	// test nil input
-	_, err = i.DetachGroupPolicy(context.TODO(), nil)
+	err = i.DetachGroupPolicy(context.TODO(), nil)
 	if aerr, ok := err.(apierror.Error); ok {
 		if aerr.Code != apierror.ErrBadRequest {
 			t.Errorf("expected error code %s, got: %s", apierror.ErrBadRequest, aerr.Code)
@@ -491,7 +486,7 @@ func TestDetachGroupPolicy(t *testing.T) {
 	}
 
 	// test empty group name and empty policy arn
-	_, err = i.DetachGroupPolicy(context.TODO(), &iam.DetachGroupPolicyInput{})
+	err = i.DetachGroupPolicy(context.TODO(), &iam.DetachGroupPolicyInput{})
 	if aerr, ok := err.(apierror.Error); ok {
 		if aerr.Code != apierror.ErrBadRequest {
 			t.Errorf("expected error code %s, got: %s", apierror.ErrBadRequest, aerr.Code)
@@ -502,7 +497,7 @@ func TestDetachGroupPolicy(t *testing.T) {
 
 	// test ErrCodeNoSuchEntityException
 	i.Service.(*mockIAMClient).err = awserr.New(iam.ErrCodeNoSuchEntityException, "entity not found", nil)
-	_, err = i.DetachGroupPolicy(context.TODO(), &iam.DetachGroupPolicyInput{
+	err = i.DetachGroupPolicy(context.TODO(), &iam.DetachGroupPolicyInput{
 		GroupName: aws.String("testgroup"),
 		PolicyArn: aws.String("arn:aws:iam::12345678910:policy/testPolicy"),
 	})
@@ -516,7 +511,7 @@ func TestDetachGroupPolicy(t *testing.T) {
 
 	// test ErrCodeLimitExceededException
 	i.Service.(*mockIAMClient).err = awserr.New(iam.ErrCodeLimitExceededException, "limit exceeded", nil)
-	_, err = i.DetachGroupPolicy(context.TODO(), &iam.DetachGroupPolicyInput{
+	err = i.DetachGroupPolicy(context.TODO(), &iam.DetachGroupPolicyInput{
 		GroupName: aws.String("testgroup"),
 		PolicyArn: aws.String("arn:aws:iam::12345678910:policy/testPolicy"),
 	})
@@ -530,7 +525,7 @@ func TestDetachGroupPolicy(t *testing.T) {
 
 	// test ErrCodeInvalidInputException
 	i.Service.(*mockIAMClient).err = awserr.New(iam.ErrCodeInvalidInputException, "limit exceeded", nil)
-	_, err = i.DetachGroupPolicy(context.TODO(), &iam.DetachGroupPolicyInput{
+	err = i.DetachGroupPolicy(context.TODO(), &iam.DetachGroupPolicyInput{
 		GroupName: aws.String("testgroup"),
 		PolicyArn: aws.String("arn:aws:iam::12345678910:policy/testPolicy"),
 	})
@@ -544,7 +539,7 @@ func TestDetachGroupPolicy(t *testing.T) {
 
 	// test ErrCodeServiceFailureException
 	i.Service.(*mockIAMClient).err = awserr.New(iam.ErrCodeServiceFailureException, "limit exceeded", nil)
-	_, err = i.DetachGroupPolicy(context.TODO(), &iam.DetachGroupPolicyInput{
+	err = i.DetachGroupPolicy(context.TODO(), &iam.DetachGroupPolicyInput{
 		GroupName: aws.String("testgroup"),
 		PolicyArn: aws.String("arn:aws:iam::12345678910:policy/testPolicy"),
 	})
@@ -558,7 +553,7 @@ func TestDetachGroupPolicy(t *testing.T) {
 
 	// test some other, unexpected AWS error
 	i.Service.(*mockIAMClient).err = awserr.New(iam.ErrCodeDeleteConflictException, "entity already exists", nil)
-	_, err = i.DetachGroupPolicy(context.TODO(), &iam.DetachGroupPolicyInput{
+	err = i.DetachGroupPolicy(context.TODO(), &iam.DetachGroupPolicyInput{
 		GroupName: aws.String("testgroup"),
 		PolicyArn: aws.String("arn:aws:iam::12345678910:policy/testPolicy"),
 	})
@@ -572,7 +567,7 @@ func TestDetachGroupPolicy(t *testing.T) {
 
 	// test non-aws error
 	i.Service.(*mockIAMClient).err = errors.New("things blowing up!")
-	_, err = i.DetachGroupPolicy(context.TODO(), &iam.DetachGroupPolicyInput{
+	err = i.DetachGroupPolicy(context.TODO(), &iam.DetachGroupPolicyInput{
 		GroupName: aws.String("testgroup"),
 		PolicyArn: aws.String("arn:aws:iam::12345678910:policy/testPolicy"),
 	})
