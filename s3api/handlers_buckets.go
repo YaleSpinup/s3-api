@@ -11,6 +11,7 @@ import (
 	"github.com/aws/aws-sdk-go/service/iam"
 	"github.com/aws/aws-sdk-go/service/s3"
 	"github.com/gorilla/mux"
+	"github.com/pkg/errors"
 	log "github.com/sirupsen/logrus"
 )
 
@@ -52,21 +53,21 @@ func (s *server) BucketCreateHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// setup rollback function list and defer recovery and execution
+	// setup err var, rollback function list and defer execution, note that we depend on the err variable defined above this
 	var rollBackTasks []func() error
 	defer func() {
-		if err := recover(); err != nil {
-			log.Errorf("recovering from panic: %s", err)
-			executeRollBack(&rollBackTasks)
+		if err != nil {
+			log.Errorf("recovering from error: %s, executing %d rollback tasks", err, len(rollBackTasks))
+			rollBack(&rollBackTasks)
 		}
 	}()
 
 	bucketName := aws.StringValue(req.BucketInput.Bucket)
 	bucketOutput, err := s3Service.CreateBucket(r.Context(), &req.BucketInput)
 	if err != nil {
-		handleError(w, err)
 		msg := fmt.Sprintf("failed to create bucket: %s", err)
-		panic(msg)
+		handleError(w, errors.Wrap(err, msg))
+		return
 	}
 
 	// append bucket delete to rollback tasks
@@ -83,16 +84,16 @@ func (s *server) BucketCreateHandler(w http.ResponseWriter, r *http.Request) {
 	err = s3Service.TagBucket(r.Context(), bucketName, req.Tags)
 	if err != nil {
 		msg := fmt.Sprintf("failed to tag bucket %s: %s", bucketName, err.Error())
-		handleError(w, apierror.New(apierror.ErrInternalError, msg, err))
-		panic(msg)
+		handleError(w, errors.Wrap(err, msg))
+		return
 	}
 
 	// build the default IAM bucket admin policy (from the config and known inputs)
 	defaultPolicy, err := iamService.DefaultBucketAdminPolicy(aws.String(bucketName))
 	if err != nil {
 		msg := fmt.Sprintf("failed creating default IAM policy for bucket %s: %s", bucketName, err.Error())
-		handleError(w, apierror.New(apierror.ErrInternalError, msg, err))
-		panic(msg)
+		handleError(w, errors.Wrap(err, msg))
+		return
 	}
 
 	policyOutput, err := iamService.CreatePolicy(r.Context(), &iam.CreatePolicyInput{
@@ -102,9 +103,9 @@ func (s *server) BucketCreateHandler(w http.ResponseWriter, r *http.Request) {
 	})
 
 	if err != nil {
-		handleError(w, err)
 		msg := fmt.Sprintf("failed to create policy: %s", err.Error())
-		panic(msg)
+		handleError(w, errors.Wrap(err, msg))
+		return
 	}
 
 	// append policy delete to rollback tasks
@@ -124,9 +125,9 @@ func (s *server) BucketCreateHandler(w http.ResponseWriter, r *http.Request) {
 	})
 
 	if err != nil {
-		handleError(w, err)
 		msg := fmt.Sprintf("failed to create group: %s", err.Error())
-		panic(msg)
+		handleError(w, errors.Wrap(err, msg))
+		return
 	}
 
 	// append group delete to rollback tasks
@@ -144,9 +145,9 @@ func (s *server) BucketCreateHandler(w http.ResponseWriter, r *http.Request) {
 		GroupName: aws.String(groupName),
 		PolicyArn: policyOutput.Policy.Arn,
 	}); err != nil {
-		handleError(w, err)
 		msg := fmt.Sprintf("failed to create group: %s", err.Error())
-		panic(msg)
+		handleError(w, errors.Wrap(err, msg))
+		return
 	}
 
 	output := struct {

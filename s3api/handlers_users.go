@@ -10,6 +10,7 @@ import (
 	"github.com/aws/aws-sdk-go/aws"
 	"github.com/aws/aws-sdk-go/service/iam"
 	"github.com/gorilla/mux"
+	"github.com/pkg/errors"
 	log "github.com/sirupsen/logrus"
 )
 
@@ -35,20 +36,20 @@ func (s *server) UserCreateHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// setup rollback function list and defer recovery and execution
+	// setup err var, rollback function list and defer execution, note that we depend on the err variable defined above this
 	var rollBackTasks []func() error
 	defer func() {
-		if err := recover(); err != nil {
-			log.Errorf("recovering from panic: %s", err)
-			executeRollBack(&rollBackTasks)
+		if err != nil {
+			log.Errorf("recovering from error: %s, executing %d rollback tasks", err, len(rollBackTasks))
+			rollBack(&rollBackTasks)
 		}
 	}()
 
 	userOutput, err := iamService.CreateUser(r.Context(), &req)
 	if err != nil {
-		handleError(w, err)
 		msg := fmt.Sprintf("failed to create user for bucket %s: %s", bucket, err)
-		panic(msg)
+		handleError(w, errors.Wrap(err, msg))
+		return
 	}
 
 	// append user delete to rollback tasks
@@ -64,9 +65,9 @@ func (s *server) UserCreateHandler(w http.ResponseWriter, r *http.Request) {
 
 	keyOutput, err := iamService.CreateAccessKey(r.Context(), &iam.CreateAccessKeyInput{UserName: userOutput.User.UserName})
 	if err != nil {
-		handleError(w, err)
 		msg := fmt.Sprintf("failed to create access key for user: %s, bucket %s", aws.StringValue(userOutput.User.UserName), bucket)
-		panic(msg)
+		handleError(w, errors.Wrap(err, msg))
+		return
 	}
 
 	// append access key delete to rollback tasks
@@ -88,9 +89,9 @@ func (s *server) UserCreateHandler(w http.ResponseWriter, r *http.Request) {
 		UserName:  userOutput.User.UserName,
 		GroupName: aws.String(groupName),
 	}); err != nil {
-		handleError(w, err)
 		msg := fmt.Sprintf("failed to add user: %s to group %s for bucket %s", aws.StringValue(userOutput.User.UserName), groupName, bucket)
-		panic(msg)
+		handleError(w, errors.Wrap(err, msg))
+		return
 	}
 
 	output := struct {
@@ -222,20 +223,20 @@ func (s *server) UserUpdateKeyHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// setup rollback function list and defer recovery and execution
+	// setup err var, rollback function list and defer execution, note that we depend on the err variable defined above this
 	var rollBackTasks []func() error
 	defer func() {
-		if err := recover(); err != nil {
-			log.Errorf("recovering from panic: %s", err)
-			executeRollBack(&rollBackTasks)
+		if err != nil {
+			log.Errorf("recovering from error: %s, executing %d rollback tasks", err, len(rollBackTasks))
+			rollBack(&rollBackTasks)
 		}
 	}()
 
 	newKeyOutput, err := iamService.CreateAccessKey(r.Context(), &iam.CreateAccessKeyInput{UserName: aws.String(user)})
 	if err != nil {
-		handleError(w, err)
 		msg := fmt.Sprintf("failed to create access key for user: %s, bucket %s", user, bucket)
-		panic(msg)
+		handleError(w, errors.Wrap(err, msg))
+		return
 	}
 
 	// append access key delete to rollback tasks
@@ -257,7 +258,8 @@ func (s *server) UserUpdateKeyHandler(w http.ResponseWriter, r *http.Request) {
 	for _, k := range keys {
 		_, err = iamService.DeleteAccessKey(r.Context(), &iam.DeleteAccessKeyInput{UserName: aws.String(user), AccessKeyId: k.AccessKeyId})
 		if err != nil {
-			handleError(w, err)
+			msg := fmt.Sprintf("unable to delete access key id %s for user %s", user, aws.StringValue(k.AccessKeyId))
+			handleError(w, errors.Wrap(err, msg))
 			return
 		}
 		deletedKeyIds = append(deletedKeyIds, k.AccessKeyId)
