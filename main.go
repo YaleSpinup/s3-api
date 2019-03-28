@@ -36,7 +36,11 @@ func main() {
 		vers()
 	}
 
-	log.Infof("Starting S3-API version %s%s", Version, VersionPrerelease)
+	cwd, err := os.Getwd()
+	if err != nil {
+		log.Fatal("unable to get working directory")
+	}
+	log.Infof("Starting S3-API version %s%s (%s)", Version, VersionPrerelease, cwd)
 
 	configFile, err := os.Open(*configFileName)
 	if err != nil {
