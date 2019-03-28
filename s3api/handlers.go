@@ -6,6 +6,7 @@ import (
 	"net/http"
 
 	"github.com/YaleSpinup/s3-api/apierror"
+	"github.com/pkg/errors"
 	log "github.com/sirupsen/logrus"
 )
 
@@ -48,7 +49,7 @@ func (s *server) VersionHandler(w http.ResponseWriter, r *http.Request) {
 // handleError handles standard apierror return codes
 func handleError(w http.ResponseWriter, err error) {
 	log.Error(err.Error())
-	if aerr, ok := err.(apierror.Error); ok {
+	if aerr, ok := errors.Cause(err).(apierror.Error); ok {
 		switch aerr.Code {
 		case apierror.ErrForbidden:
 			w.WriteHeader(http.StatusForbidden)

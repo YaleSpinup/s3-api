@@ -109,6 +109,14 @@ func (m *mockS3Client) PutBucketPolicyWithContext(ctx context.Context, input *s3
 	return &s3.PutBucketPolicyOutput{}, nil
 }
 
+func (m *mockS3Client) PutBucketEncryptionWithContext(ctx context.Context, input *s3.PutBucketEncryptionInput, opts ...request.Option) (*s3.PutBucketEncryptionOutput, error) {
+	if m.err != nil {
+		return nil, m.err
+	}
+
+	return &s3.PutBucketEncryptionOutput{}, nil
+}
+
 func (m *mockS3Client) ListObjectsV2WithContext(ctx context.Context, input *s3.ListObjectsV2Input, opts ...request.Option) (*s3.ListObjectsV2Output, error) {
 	if m.err != nil {
 		return nil, m.err
@@ -570,6 +578,62 @@ func TestUpdateBucketPolicy(t *testing.T) {
 		Bucket: aws.String("testbucket"),
 		Policy: aws.String("somepolicy"),
 	})
+	if aerr, ok := err.(apierror.Error); ok {
+		if aerr.Code != apierror.ErrInternalError {
+			t.Errorf("expected error code %s, got: %s", apierror.ErrInternalError, aerr.Code)
+		}
+	} else {
+		t.Errorf("expected apierror.Error, got: %s", reflect.TypeOf(err).String())
+	}
+}
+
+func TestUpdateBucketEncryption(t *testing.T) {
+	s := S3{Service: newMockS3Client(t, nil)}
+
+	input := s3.PutBucketEncryptionInput{
+		Bucket:                            aws.String("testbucket"),
+		ServerSideEncryptionConfiguration: &s3.ServerSideEncryptionConfiguration{},
+	}
+	// test success
+	err := s.UpdateBucketEncryption(context.TODO(), &input)
+	if err != nil {
+		t.Errorf("expected nil error, got: %s", err)
+	}
+
+	// test nil input
+	err = s.UpdateBucketEncryption(context.TODO(), nil)
+	if aerr, ok := err.(apierror.Error); ok {
+		if aerr.Code != apierror.ErrBadRequest {
+			t.Errorf("expected error code %s, got: %s", apierror.ErrBadRequest, aerr.Code)
+		}
+	} else {
+		t.Errorf("expected apierror.Error, got: %s", reflect.TypeOf(err).String())
+	}
+
+	// test empty bucket name and encryption configuration
+	err = s.UpdateBucketEncryption(context.TODO(), &s3.PutBucketEncryptionInput{})
+	if aerr, ok := err.(apierror.Error); ok {
+		if aerr.Code != apierror.ErrBadRequest {
+			t.Errorf("expected error code %s, got: %s", apierror.ErrBadRequest, aerr.Code)
+		}
+	} else {
+		t.Errorf("expected apierror.Error, got: %s", reflect.TypeOf(err).String())
+	}
+
+	// test some other, unexpected AWS error
+	s.Service.(*mockS3Client).err = awserr.New(s3.ErrCodeNoSuchKey, "no such key", nil)
+	err = s.UpdateBucketEncryption(context.TODO(), &input)
+	if aerr, ok := err.(apierror.Error); ok {
+		if aerr.Code != apierror.ErrBadRequest {
+			t.Errorf("expected error code %s, got: %s", apierror.ErrBadRequest, aerr.Code)
+		}
+	} else {
+		t.Errorf("expected apierror.Error, got: %s", reflect.TypeOf(err).String())
+	}
+
+	// test non-aws error
+	s.Service.(*mockS3Client).err = errors.New("things blowing up!")
+	err = s.UpdateBucketEncryption(context.TODO(), &input)
 	if aerr, ok := err.(apierror.Error); ok {
 		if aerr.Code != apierror.ErrInternalError {
 			t.Errorf("expected error code %s, got: %s", apierror.ErrInternalError, aerr.Code)

@@ -88,6 +88,25 @@ func (s *server) BucketCreateHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// enable AWS managed serverside encryption for the bucket
+	err = s3Service.UpdateBucketEncryption(r.Context(), &s3.PutBucketEncryptionInput{
+		Bucket: aws.String(bucketName),
+		ServerSideEncryptionConfiguration: &s3.ServerSideEncryptionConfiguration{
+			Rules: []*s3.ServerSideEncryptionRule{
+				&s3.ServerSideEncryptionRule{
+					ApplyServerSideEncryptionByDefault: &s3.ServerSideEncryptionByDefault{
+						SSEAlgorithm: aws.String("AES256"),
+					},
+				},
+			},
+		},
+	})
+	if err != nil {
+		msg := fmt.Sprintf("failed to enable encryption for bucket %s: %s", bucketName, err.Error())
+		handleError(w, errors.Wrap(err, msg))
+		return
+	}
+
 	// build the default IAM bucket admin policy (from the config and known inputs)
 	defaultPolicy, err := iamService.DefaultBucketAdminPolicy(aws.String(bucketName))
 	if err != nil {

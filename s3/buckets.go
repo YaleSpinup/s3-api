@@ -216,6 +216,28 @@ func (s *S3) UpdateBucketPolicy(ctx context.Context, input *s3.PutBucketPolicyIn
 	return nil
 }
 
+// UpdateBucketEncryption sets the bucket encryption
+func (s *S3) UpdateBucketEncryption(ctx context.Context, input *s3.PutBucketEncryptionInput) error {
+	if input == nil || aws.StringValue(input.Bucket) == "" || input.ServerSideEncryptionConfiguration == nil {
+		return apierror.New(apierror.ErrBadRequest, "invalid input", nil)
+	}
+
+	log.Infof("applying bucket encryption to %s", aws.StringValue(input.Bucket))
+
+	_, err := s.Service.PutBucketEncryptionWithContext(ctx, input)
+	if err != nil {
+		if aerr, ok := err.(awserr.Error); ok {
+			switch aerr.Code() {
+			default:
+				return apierror.New(apierror.ErrBadRequest, aerr.Message(), err)
+			}
+		}
+
+		return apierror.New(apierror.ErrInternalError, "unknown error occurred", err)
+	}
+	return nil
+}
+
 // BucketEmpty lists the objects in a bucket with a max of 1, if there are any objects returned, we return false
 func (s *S3) BucketEmpty(ctx context.Context, bucket string) (bool, error) {
 	if bucket == "" {
