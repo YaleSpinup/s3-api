@@ -861,18 +861,13 @@ func TestRemoveUserFromGroup(t *testing.T) {
 	i := IAM{Service: newMockIAMClient(t, nil)}
 
 	// test success
-	expected := &iam.RemoveUserFromGroupOutput{}
-	out, err := i.RemoveUserFromGroup(context.TODO(), &iam.RemoveUserFromGroupInput{UserName: aws.String("testuser"), GroupName: aws.String("testgroup")})
+	err := i.RemoveUserFromGroup(context.TODO(), &iam.RemoveUserFromGroupInput{UserName: aws.String("testuser"), GroupName: aws.String("testgroup")})
 	if err != nil {
 		t.Errorf("expected nil error, got: %s", err)
 	}
 
-	if !reflect.DeepEqual(out, expected) {
-		t.Errorf("expected %+v, got %+v", expected, out)
-	}
-
 	// test nil input
-	_, err = i.RemoveUserFromGroup(context.TODO(), nil)
+	err = i.RemoveUserFromGroup(context.TODO(), nil)
 	if aerr, ok := err.(apierror.Error); ok {
 		if aerr.Code != apierror.ErrBadRequest {
 			t.Errorf("expected error code %s, got: %s", apierror.ErrBadRequest, aerr.Code)
@@ -882,7 +877,7 @@ func TestRemoveUserFromGroup(t *testing.T) {
 	}
 
 	// test empty user name and group name
-	_, err = i.RemoveUserFromGroup(context.TODO(), &iam.RemoveUserFromGroupInput{})
+	err = i.RemoveUserFromGroup(context.TODO(), &iam.RemoveUserFromGroupInput{})
 	if aerr, ok := err.(apierror.Error); ok {
 		if aerr.Code != apierror.ErrBadRequest {
 			t.Errorf("expected error code %s, got: %s", apierror.ErrBadRequest, aerr.Code)
@@ -893,7 +888,7 @@ func TestRemoveUserFromGroup(t *testing.T) {
 
 	// test ErrCodeNoSuchEntityException
 	i.Service.(*mockIAMClient).err = awserr.New(iam.ErrCodeNoSuchEntityException, "not found", nil)
-	_, err = i.RemoveUserFromGroup(context.TODO(), &iam.RemoveUserFromGroupInput{UserName: aws.String("testuser"), GroupName: aws.String("testgroup")})
+	err = i.RemoveUserFromGroup(context.TODO(), &iam.RemoveUserFromGroupInput{UserName: aws.String("testuser"), GroupName: aws.String("testgroup")})
 	if aerr, ok := err.(apierror.Error); ok {
 		if aerr.Code != apierror.ErrNotFound {
 			t.Errorf("expected error code %s, got: %s", apierror.ErrNotFound, aerr.Code)
@@ -904,7 +899,7 @@ func TestRemoveUserFromGroup(t *testing.T) {
 
 	// test ErrCodeLimitExceededException
 	i.Service.(*mockIAMClient).err = awserr.New(iam.ErrCodeLimitExceededException, "limit exceeded", nil)
-	_, err = i.RemoveUserFromGroup(context.TODO(), &iam.RemoveUserFromGroupInput{UserName: aws.String("testuser"), GroupName: aws.String("testgroup")})
+	err = i.RemoveUserFromGroup(context.TODO(), &iam.RemoveUserFromGroupInput{UserName: aws.String("testuser"), GroupName: aws.String("testgroup")})
 	if aerr, ok := err.(apierror.Error); ok {
 		if aerr.Code != apierror.ErrLimitExceeded {
 			t.Errorf("expected error code %s, got: %s", apierror.ErrLimitExceeded, aerr.Code)
@@ -915,7 +910,7 @@ func TestRemoveUserFromGroup(t *testing.T) {
 
 	// test ErrCodeServiceFailureException
 	i.Service.(*mockIAMClient).err = awserr.New(iam.ErrCodeServiceFailureException, "service failure", nil)
-	_, err = i.RemoveUserFromGroup(context.TODO(), &iam.RemoveUserFromGroupInput{UserName: aws.String("testuser"), GroupName: aws.String("testgroup")})
+	err = i.RemoveUserFromGroup(context.TODO(), &iam.RemoveUserFromGroupInput{UserName: aws.String("testuser"), GroupName: aws.String("testgroup")})
 	if aerr, ok := err.(apierror.Error); ok {
 		if aerr.Code != apierror.ErrServiceUnavailable {
 			t.Errorf("expected error code %s, got: %s", apierror.ErrServiceUnavailable, aerr.Code)
@@ -926,7 +921,7 @@ func TestRemoveUserFromGroup(t *testing.T) {
 
 	// test some other, unexpected AWS error
 	i.Service.(*mockIAMClient).err = awserr.New(iam.ErrCodeDeleteConflictException, "delete conflict", nil)
-	_, err = i.RemoveUserFromGroup(context.TODO(), &iam.RemoveUserFromGroupInput{UserName: aws.String("testuser"), GroupName: aws.String("testgroup")})
+	err = i.RemoveUserFromGroup(context.TODO(), &iam.RemoveUserFromGroupInput{UserName: aws.String("testuser"), GroupName: aws.String("testgroup")})
 	if aerr, ok := err.(apierror.Error); ok {
 		if aerr.Code != apierror.ErrBadRequest {
 			t.Errorf("expected error code %s, got: %s", apierror.ErrBadRequest, aerr.Code)
@@ -937,7 +932,7 @@ func TestRemoveUserFromGroup(t *testing.T) {
 
 	// test non-aws error
 	i.Service.(*mockIAMClient).err = errors.New("things blowing up!")
-	_, err = i.RemoveUserFromGroup(context.TODO(), &iam.RemoveUserFromGroupInput{UserName: aws.String("testuser"), GroupName: aws.String("testgroup")})
+	err = i.RemoveUserFromGroup(context.TODO(), &iam.RemoveUserFromGroupInput{UserName: aws.String("testuser"), GroupName: aws.String("testgroup")})
 	if aerr, ok := err.(apierror.Error); ok {
 		if aerr.Code != apierror.ErrInternalError {
 			t.Errorf("expected error code %s, got: %s", apierror.ErrInternalError, aerr.Code)

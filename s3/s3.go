@@ -12,7 +12,9 @@ import (
 
 // S3 is a wrapper around the aws S3 service with some default config info
 type S3 struct {
-	Service s3iface.S3API
+	Service             s3iface.S3API
+	LoggingBucket       string
+	LoggingBucketPrefix string
 }
 
 // NewSession creates a new S3 session
@@ -24,6 +26,8 @@ func NewSession(account common.Account) S3 {
 		Region:      aws.String(account.Region),
 	}))
 	s.Service = s3.New(sess)
+	s.LoggingBucket = account.AccessLog.Bucket
+	s.LoggingBucketPrefix = account.AccessLog.Prefix
 	return s
 }
 

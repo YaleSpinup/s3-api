@@ -89,7 +89,7 @@ func (s *server) CreateWebsiteHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// enable AWS managed serverside encryption for the bucket
+	// enable AWS managed serverside encryption for the website/bucket
 	err = s3Service.UpdateBucketEncryption(r.Context(), &s3.PutBucketEncryptionInput{
 		Bucket: aws.String(bucketName),
 		ServerSideEncryptionConfiguration: &s3.ServerSideEncryptionConfiguration{
@@ -104,6 +104,14 @@ func (s *server) CreateWebsiteHandler(w http.ResponseWriter, r *http.Request) {
 	})
 	if err != nil {
 		msg := fmt.Sprintf("failed to enable encryption for bucket %s: %s", bucketName, err.Error())
+		handleError(w, errors.Wrap(err, msg))
+		return
+	}
+
+	// enable logging access for the website/bucket to a central repo
+	err = s3Service.UpdateBucketLogging(r.Context(), bucketName, s3Service.LoggingBucket, s3Service.LoggingBucketPrefix)
+	if err != nil {
+		msg := fmt.Sprintf("failed to enable logging for bucket %s: %s", bucketName, err.Error())
 		handleError(w, errors.Wrap(err, msg))
 		return
 	}

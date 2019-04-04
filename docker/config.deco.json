@@ -52,7 +52,11 @@
       ],
       "defaultS3ObjectActions": [
         "s3:*"
-      ]
+      ],
+      "accessLog": {
+        "bucket": "{{ .spinup_logging_bucket }}",
+        "prefix": "s3"
+      }
     }
   },
   "token": "{{ .api_token }}",

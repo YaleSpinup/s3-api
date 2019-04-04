@@ -39,6 +39,10 @@ PUT /v1/s3/{account}/websites/{website}/users/{user}
 DELETE /v1/s3/{account}/websites/{website}/users/{user}
 ```
 
+## Authentication
+
+Authentication is accomplished via a pre-shared key.  This is done via the `X-Auth-Token` header.
+
 ## Access to buckets
 
 When creating a bucket, by default, an IAM policy (of the same name) is created with full access to that

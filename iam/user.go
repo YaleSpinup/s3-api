@@ -320,14 +320,14 @@ func (i *IAM) AddUserToGroup(ctx context.Context, input *iam.AddUserToGroupInput
 }
 
 // RemoveUserFromGroup removes an existing user from a group
-func (i *IAM) RemoveUserFromGroup(ctx context.Context, input *iam.RemoveUserFromGroupInput) (*iam.RemoveUserFromGroupOutput, error) {
+func (i *IAM) RemoveUserFromGroup(ctx context.Context, input *iam.RemoveUserFromGroupInput) error {
 	if input == nil || aws.StringValue(input.UserName) == "" || aws.StringValue(input.GroupName) == "" {
-		return nil, apierror.New(apierror.ErrBadRequest, "invalid input", nil)
+		return apierror.New(apierror.ErrBadRequest, "invalid input", nil)
 	}
 
 	log.Infof("removing user %s from group %s", aws.StringValue(input.UserName), aws.StringValue(input.GroupName))
 
-	output, err := i.Service.RemoveUserFromGroupWithContext(ctx, input)
+	_, err := i.Service.RemoveUserFromGroupWithContext(ctx, input)
 	if err != nil {
 		if aerr, ok := err.(awserr.Error); ok {
 			switch aerr.Code() {
@@ -336,27 +336,27 @@ func (i *IAM) RemoveUserFromGroup(ctx context.Context, input *iam.RemoveUserFrom
 			// not exist. The error message describes the resource.
 			case iam.ErrCodeNoSuchEntityException:
 				msg := fmt.Sprintf("%s: %s", aerr.Code(), aerr.Error())
-				return nil, apierror.New(apierror.ErrNotFound, msg, err)
+				return apierror.New(apierror.ErrNotFound, msg, err)
 			// * ErrCodeLimitExceededException "LimitExceeded"
 			// The request was rejected because it attempted to create resources beyond
 			// the current AWS account limits. The error message describes the limit exceeded.
 			case iam.ErrCodeLimitExceededException:
 				msg := fmt.Sprintf("%s: %s", aerr.Code(), aerr.Error())
-				return nil, apierror.New(apierror.ErrLimitExceeded, msg, err)
+				return apierror.New(apierror.ErrLimitExceeded, msg, err)
 			// * ErrCodeServiceFailureException "ServiceFailure"
 			// The request processing has failed because of an unknown error, exception
 			// or failure.
 			case iam.ErrCodeServiceFailureException:
 				msg := fmt.Sprintf("%s: %s", aerr.Code(), aerr.Error())
-				return nil, apierror.New(apierror.ErrServiceUnavailable, msg, err)
+				return apierror.New(apierror.ErrServiceUnavailable, msg, err)
 			default:
-				return nil, apierror.New(apierror.ErrBadRequest, aerr.Message(), err)
+				return apierror.New(apierror.ErrBadRequest, aerr.Message(), err)
 			}
 		}
-		return nil, apierror.New(apierror.ErrInternalError, "unknown error occurred", err)
+		return apierror.New(apierror.ErrInternalError, "unknown error occurred", err)
 	}
 
-	return output, nil
+	return nil
 }
 
 // ListUserGroups returns a list of groups that a user belongs to

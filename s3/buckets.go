@@ -3,6 +3,7 @@ package s3
 import (
 	"context"
 	"fmt"
+	"strings"
 
 	"github.com/YaleSpinup/s3-api/apierror"
 	"github.com/aws/aws-sdk-go/aws"
@@ -226,6 +227,53 @@ func (s *S3) UpdateBucketEncryption(ctx context.Context, input *s3.PutBucketEncr
 
 	_, err := s.Service.PutBucketEncryptionWithContext(ctx, input)
 	if err != nil {
+		if aerr, ok := err.(awserr.Error); ok {
+			switch aerr.Code() {
+			default:
+				return apierror.New(apierror.ErrBadRequest, aerr.Message(), err)
+			}
+		}
+
+		return apierror.New(apierror.ErrInternalError, "unknown error occurred", err)
+	}
+	return nil
+}
+
+// UpdateBucketLogging configures the bucket logging
+func (s *S3) UpdateBucketLogging(ctx context.Context, bucket, logBucket, logPrefix string) error {
+	if bucket == "" || logBucket == "" {
+		return apierror.New(apierror.ErrBadRequest, "invalid input", nil)
+	}
+
+	log.Infof("applying bucket logging configuration to %s", bucket)
+
+	prefix := bucket
+	if logPrefix != "" {
+		if strings.HasSuffix(logPrefix, "/") {
+			prefix = logPrefix + prefix
+		} else {
+			prefix = logPrefix + "/" + prefix
+		}
+	}
+
+	if _, err := s.Service.PutBucketLoggingWithContext(ctx, &s3.PutBucketLoggingInput{
+		Bucket: aws.String(bucket),
+		BucketLoggingStatus: &s3.BucketLoggingStatus{
+			LoggingEnabled: &s3.LoggingEnabled{
+				TargetBucket: aws.String(logBucket),
+				TargetGrants: []*s3.TargetGrant{
+					{
+						Grantee: &s3.Grantee{
+							Type: aws.String("Group"),
+							URI:  aws.String("http://acs.amazonaws.com/groups/global/AllUsers"),
+						},
+						Permission: aws.String("READ"),
+					},
+				},
+				TargetPrefix: aws.String(prefix),
+			},
+		},
+	}); err != nil {
 		if aerr, ok := err.(awserr.Error); ok {
 			switch aerr.Code() {
 			default:
