@@ -107,12 +107,14 @@ func (s *server) BucketCreateHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// enable logging access for the bucket to a central repo
-	err = s3Service.UpdateBucketLogging(r.Context(), bucketName, s3Service.LoggingBucket, s3Service.LoggingBucketPrefix)
-	if err != nil {
-		msg := fmt.Sprintf("failed to enable logging for bucket %s: %s", bucketName, err.Error())
-		handleError(w, errors.Wrap(err, msg))
-		return
+	// enable logging access for the bucket to a central repo if the target bucket is set
+	if s3Service.LoggingBucket != "" {
+		err = s3Service.UpdateBucketLogging(r.Context(), bucketName, s3Service.LoggingBucket, s3Service.LoggingBucketPrefix)
+		if err != nil {
+			msg := fmt.Sprintf("failed to enable logging for bucket %s: %s", bucketName, err.Error())
+			handleError(w, errors.Wrap(err, msg))
+			return
+		}
 	}
 
 	// build the default IAM bucket admin policy (from the config and known inputs)

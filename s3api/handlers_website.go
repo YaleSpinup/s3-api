@@ -109,11 +109,13 @@ func (s *server) CreateWebsiteHandler(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// enable logging access for the website/bucket to a central repo
-	err = s3Service.UpdateBucketLogging(r.Context(), bucketName, s3Service.LoggingBucket, s3Service.LoggingBucketPrefix)
-	if err != nil {
-		msg := fmt.Sprintf("failed to enable logging for bucket %s: %s", bucketName, err.Error())
-		handleError(w, errors.Wrap(err, msg))
-		return
+	if s3Service.LoggingBucket != "" {
+		err = s3Service.UpdateBucketLogging(r.Context(), bucketName, s3Service.LoggingBucket, s3Service.LoggingBucketPrefix)
+		if err != nil {
+			msg := fmt.Sprintf("failed to enable logging for bucket %s: %s", bucketName, err.Error())
+			handleError(w, errors.Wrap(err, msg))
+			return
+		}
 	}
 
 	err = s3Service.UpdateWebsiteConfig(r.Context(), &s3.PutBucketWebsiteInput{
