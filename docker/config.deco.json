@@ -52,7 +52,68 @@
       ],
       "defaultS3ObjectActions": [
         "s3:*"
-      ]
+      ],
+      "accessLog": {
+        "bucket": "{{ .spinup_logging_bucket }}",
+        "prefix": "s3"
+      }
+    },
+    "spinupsec": {
+      "region": "us-east-1",
+      "akid": "{{ .spinupsec_akid }}",
+      "secret": "{{ .spinupsec_secret }}",
+      "defaultS3BucketActions": [
+        "s3:AbortMultipartUpload",
+        "s3:DeleteBucketWebsite",
+        "s3:DeleteObject",
+        "s3:DeleteObjectVersion",
+        "s3:GetAccelerateConfiguration",
+        "s3:GetBucketAcl",
+        "s3:GetBucketCORS",
+        "s3:GetBucketLocation",
+        "s3:GetBucketLogging",
+        "s3:GetBucketNotification",
+        "s3:GetBucketPolicy",
+        "s3:GetBucketTagging",
+        "s3:GetBucketVersioning",
+        "s3:GetBucketWebsite",
+        "s3:GetLifecycleConfiguration",
+        "s3:GetObject",
+        "s3:GetObjectAcl",
+        "s3:GetObjectVersion",
+        "s3:GetObjectVersionAcl",
+        "s3:GetReplicationConfiguration",
+        "s3:ListAllMyBuckets",
+        "s3:ListBucket",
+        "s3:ListBucketMultipartUploads",
+        "s3:ListBucketVersions",
+        "s3:ListMultipartUploadParts",
+        "s3:PutAccelerateConfiguration",
+        "s3:PutBucketAcl",
+        "s3:PutBucketCORS",
+        "s3:PutBucketLogging",
+        "s3:PutBucketNotification",
+        "s3:PutBucketPolicy",
+        "s3:PutBucketRequestPayment",
+        "s3:PutBucketTagging",
+        "s3:PutBucketVersioning",
+        "s3:PutBucketWebsite",
+        "s3:PutLifecycleConfiguration",
+        "s3:PutReplicationConfiguration",
+        "s3:PutObject",
+        "s3:PutObjectAcl",
+        "s3:PutObjectVersionAcl",
+        "s3:ReplicateDelete",
+        "s3:ReplicateObject",
+        "s3:RestoreObject"
+      ],
+      "defaultS3ObjectActions": [
+        "s3:*"
+      ],
+      "accessLog": {
+        "bucket": "{{ .spinupsec_logging_bucket }}",
+        "prefix": "s3"
+      }
     }
   },
   "token": "{{ .api_token }}",

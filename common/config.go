@@ -24,6 +24,13 @@ type Account struct {
 	Secret                 string
 	DefaultS3BucketActions []string
 	DefaultS3ObjectActions []string
+	AccessLog              AccessLog
+}
+
+// AccessLog is the configuration for a bucket's access log
+type AccessLog struct {
+	Bucket string
+	Prefix string
 }
 
 type Version struct {

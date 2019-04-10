@@ -20,7 +20,11 @@ var testConfig = []byte(
 			],
 			"defaultS3ObjectActions": [
 				"s3:*"
-			]
+			],
+			"accessLog": {
+				"bucket": "foobucket",
+				"prefix": "spinup"
+			}
 		  },
 		  "provider2": {
 			"region": "us-west-1",
@@ -48,6 +52,10 @@ func TestReadConfig(t *testing.T) {
 				},
 				DefaultS3ObjectActions: []string{
 					"s3:*",
+				},
+				AccessLog: AccessLog{
+					Bucket: "foobucket",
+					Prefix: "spinup",
 				},
 			},
 			"provider2": Account{

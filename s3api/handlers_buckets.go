@@ -107,6 +107,16 @@ func (s *server) BucketCreateHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// enable logging access for the bucket to a central repo if the target bucket is set
+	if s3Service.LoggingBucket != "" {
+		err = s3Service.UpdateBucketLogging(r.Context(), bucketName, s3Service.LoggingBucket, s3Service.LoggingBucketPrefix)
+		if err != nil {
+			msg := fmt.Sprintf("failed to enable logging for bucket %s: %s", bucketName, err.Error())
+			handleError(w, errors.Wrap(err, msg))
+			return
+		}
+	}
+
 	// build the default IAM bucket admin policy (from the config and known inputs)
 	defaultPolicy, err := iamService.DefaultBucketAdminPolicy(aws.String(bucketName))
 	if err != nil {
@@ -317,6 +327,22 @@ func (s *server) BucketDeleteHandler(w http.ResponseWriter, r *http.Request) {
 				return
 			}
 			break
+		}
+	}
+
+	users, err := iamService.ListGroupUsers(r.Context(), &iam.GetGroupInput{GroupName: aws.String(groupName)})
+	if err != nil {
+		log.Warnf("failed to list group's users when deleting bucket %s: %s", bucket, err)
+		j, _ := json.Marshal("failed to list group users: " + err.Error())
+		w.Write(j)
+	}
+
+	for _, u := range users {
+		if err := iamService.RemoveUserFromGroup(r.Context(), &iam.RemoveUserFromGroupInput{UserName: u.UserName, GroupName: aws.String(groupName)}); err != nil {
+			log.Warnf("failed to remove user %s from group %s when deleting bucket %s: %s", aws.StringValue(u.UserName), groupName, bucket, err)
+			j, _ := json.Marshal("failed to remove user from group group: " + err.Error())
+			w.Write(j)
+			return
 		}
 	}
 

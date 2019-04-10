@@ -154,7 +154,7 @@ func (s *server) UserDeleteHandler(w http.ResponseWriter, r *http.Request) {
 
 	// remove the user from all group membership
 	for _, g := range groups {
-		_, err = iamService.RemoveUserFromGroup(r.Context(), &iam.RemoveUserFromGroupInput{UserName: aws.String(user), GroupName: g.GroupName})
+		err = iamService.RemoveUserFromGroup(r.Context(), &iam.RemoveUserFromGroupInput{UserName: aws.String(user), GroupName: g.GroupName})
 		if err != nil {
 			handleError(w, err)
 			return
