@@ -7,6 +7,7 @@ import (
 
 	"github.com/YaleSpinup/s3-api/apierror"
 	"github.com/aws/aws-sdk-go/aws"
+	"github.com/aws/aws-sdk-go/service/cloudfront"
 	"github.com/aws/aws-sdk-go/service/iam"
 	"github.com/aws/aws-sdk-go/service/s3"
 	"github.com/gorilla/mux"
@@ -42,6 +43,13 @@ func (s *server) CreateWebsiteHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	cloudFrontService, ok := s.cloudFrontServices[account]
+	if !ok {
+		msg := fmt.Sprintf("CloudFront service not found for account: %s", account)
+		handleError(w, apierror.New(apierror.ErrNotFound, msg, nil))
+		return
+	}
+
 	var req struct {
 		Tags                 []*s3.Tag
 		BucketInput          s3.CreateBucketInput
@@ -64,6 +72,13 @@ func (s *server) CreateWebsiteHandler(w http.ResponseWriter, r *http.Request) {
 	}()
 
 	bucketName := aws.StringValue(req.BucketInput.Bucket)
+	_, err = cloudFrontService.WebsiteDomain(bucketName)
+	if err != nil {
+		msg := fmt.Sprintf("failed to validate website domain %s", bucketName)
+		handleError(w, apierror.New(apierror.ErrBadRequest, msg, err))
+		return
+	}
+
 	bucketOutput, err := s3Service.CreateBucket(r.Context(), &req.BucketInput)
 	if err != nil {
 		msg := fmt.Sprintf("failed to create bucket %s", bucketName)
@@ -74,10 +89,8 @@ func (s *server) CreateWebsiteHandler(w http.ResponseWriter, r *http.Request) {
 	// append bucket delete to rollback tasks
 	rbfunc := func() error {
 		return func() error {
-			if _, err := s3Service.DeleteEmptyBucket(r.Context(), &s3.DeleteBucketInput{Bucket: aws.String(bucketName)}); err != nil {
-				return err
-			}
-			return nil
+			_, err := s3Service.DeleteEmptyBucket(r.Context(), &s3.DeleteBucketInput{Bucket: aws.String(bucketName)})
+			return err
 		}()
 	}
 	rollBackTasks = append(rollBackTasks, rbfunc)
@@ -163,10 +176,8 @@ func (s *server) CreateWebsiteHandler(w http.ResponseWriter, r *http.Request) {
 	// append policy delete to rollback tasks
 	rbfunc = func() error {
 		return func() error {
-			if _, err := iamService.DeletePolicy(r.Context(), &iam.DeletePolicyInput{PolicyArn: policyOutput.Policy.Arn}); err != nil {
-				return err
-			}
-			return nil
+			_, err := iamService.DeletePolicy(r.Context(), &iam.DeletePolicyInput{PolicyArn: policyOutput.Policy.Arn})
+			return err
 		}()
 	}
 	rollBackTasks = append(rollBackTasks, rbfunc)
@@ -185,10 +196,8 @@ func (s *server) CreateWebsiteHandler(w http.ResponseWriter, r *http.Request) {
 	// append group delete to rollback tasks
 	rbfunc = func() error {
 		return func() error {
-			if _, err := iamService.DeleteGroup(r.Context(), &iam.DeleteGroupInput{GroupName: aws.String(groupName)}); err != nil {
-				return err
-			}
-			return nil
+			_, err := iamService.DeleteGroup(r.Context(), &iam.DeleteGroupInput{GroupName: aws.String(groupName)})
+			return err
 		}()
 	}
 	rollBackTasks = append(rollBackTasks, rbfunc)
@@ -202,14 +211,51 @@ func (s *server) CreateWebsiteHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// append detach group policy to rollback tasks
+	rbfunc = func() error {
+		return func() error {
+			return iamService.DetachGroupPolicy(r.Context(), &iam.DetachGroupPolicyInput{
+				GroupName: aws.String(groupName),
+				PolicyArn: policyOutput.Policy.Arn,
+			})
+		}()
+	}
+	rollBackTasks = append(rollBackTasks, rbfunc)
+
+	// normalize tags
+	cfTags := []*cloudfront.Tag{}
+	for _, tag := range req.Tags {
+		t := &cloudfront.Tag{
+			Key:   tag.Key,
+			Value: tag.Value,
+		}
+		cfTags = append(cfTags, t)
+	}
+
+	defaultWebsiteDistribution, err := cloudFrontService.DefaultWebsiteDistributionConfig(bucketName)
+	if err != nil {
+		msg := fmt.Sprintf("failed to generate default website distribution config for %s: %s", bucketName, err.Error())
+		handleError(w, errors.Wrap(err, msg))
+		return
+	}
+
+	distribution, err := cloudFrontService.CreateDistribution(r.Context(), defaultWebsiteDistribution, &cloudfront.Tags{Items: cfTags})
+	if err != nil {
+		msg := fmt.Sprintf("failed to create cloudfront distribution for website %s: %s", bucketName, err.Error())
+		handleError(w, errors.Wrap(err, msg))
+		return
+	}
+
 	output := struct {
-		Bucket *string
-		Policy *iam.Policy
-		Group  *iam.Group
+		Bucket       *string
+		Policy       *iam.Policy
+		Group        *iam.Group
+		Distribution *cloudfront.Distribution
 	}{
 		bucketOutput.Location,
 		policyOutput.Policy,
 		group.Group,
+		distribution,
 	}
 
 	j, err := json.Marshal(output)

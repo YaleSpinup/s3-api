@@ -30,9 +30,3 @@ func NewSession(account common.Account) S3 {
 	s.LoggingBucketPrefix = account.AccessLog.Prefix
 	return s
 }
-
-// KeyValuePair maps a key to a value
-type KeyValuePair struct {
-	Key   string
-	Value string
-}

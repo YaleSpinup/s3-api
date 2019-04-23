@@ -5,6 +5,7 @@ import (
 	"os"
 	"time"
 
+	"github.com/YaleSpinup/s3-api/cloudfront"
 	"github.com/YaleSpinup/s3-api/common"
 	"github.com/YaleSpinup/s3-api/iam"
 	"github.com/YaleSpinup/s3-api/s3"
@@ -15,19 +16,21 @@ import (
 )
 
 type server struct {
-	s3Services  map[string]s3.S3
-	iamServices map[string]iam.IAM
-	router      *mux.Router
-	version     common.Version
+	s3Services         map[string]s3.S3
+	iamServices        map[string]iam.IAM
+	cloudFrontServices map[string]cloudfront.CloudFront
+	router             *mux.Router
+	version            common.Version
 }
 
 // NewServer creates a new server and starts it
 func NewServer(config common.Config) error {
 	s := server{
-		s3Services:  make(map[string]s3.S3),
-		iamServices: make(map[string]iam.IAM),
-		router:      mux.NewRouter(),
-		version:     config.Version,
+		s3Services:         make(map[string]s3.S3),
+		iamServices:        make(map[string]iam.IAM),
+		cloudFrontServices: make(map[string]cloudfront.CloudFront),
+		router:             mux.NewRouter(),
+		version:            config.Version,
 	}
 
 	// Create a shared S3 session
@@ -35,6 +38,7 @@ func NewServer(config common.Config) error {
 		log.Debugf("Creating new S3 service for account '%s' with key '%s' in region '%s'", name, c.Akid, c.Region)
 		s.s3Services[name] = s3.NewSession(c)
 		s.iamServices[name] = iam.NewSession(c)
+		s.cloudFrontServices[name] = cloudfront.NewSession(c)
 	}
 
 	publicURLs := map[string]string{
