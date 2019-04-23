@@ -56,6 +56,14 @@
       "accessLog": {
         "bucket": "{{ .spinup_logging_bucket }}",
         "prefix": "s3"
+      },
+      "domains": {
+        "yalepages.org": {
+          "certArn": "{{ .yalepages_org_arn }}"
+        },
+        "yalespace.org": {
+          "certArn": "{{ .yalespace_org_arn }}"
+        }
       }
     },
     "spinupsec": {
