@@ -24,6 +24,11 @@ var testConfig = []byte(
 			"accessLog": {
 				"bucket": "foobucket",
 				"prefix": "spinup"
+			},
+			"domains": {
+				"example.com": {
+					"certArn": "arn:123456789:thingy"
+				}
 			}
 		  },
 		  "provider2": {
@@ -56,6 +61,11 @@ func TestReadConfig(t *testing.T) {
 				AccessLog: AccessLog{
 					Bucket: "foobucket",
 					Prefix: "spinup",
+				},
+				Domains: map[string]Domain{
+					"example.com": Domain{
+						CertArn: "arn:123456789:thingy",
+					},
 				},
 			},
 			"provider2": Account{

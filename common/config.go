@@ -25,6 +25,7 @@ type Account struct {
 	DefaultS3BucketActions []string
 	DefaultS3ObjectActions []string
 	AccessLog              AccessLog
+	Domains                map[string]Domain
 }
 
 // AccessLog is the configuration for a bucket's access log
@@ -33,6 +34,12 @@ type AccessLog struct {
 	Prefix string
 }
 
+// Domain is the domain configuration for an S3 site
+type Domain struct {
+	CertArn string
+}
+
+// Version carries around the API version information
 type Version struct {
 	Version           string
 	VersionPrerelease string
