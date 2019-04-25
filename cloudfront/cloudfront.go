@@ -35,8 +35,9 @@ func NewSession(account common.Account) CloudFront {
 	return c
 }
 
-// ValidateWebsite validates the name of the website, ensuring we have a cert for the domain.  It splits the website
-// name in 2 pieces since we are using a wildcard.  This would need to change if we supported certificates per website.
+// WebsiteDomain validates the name of the website, ensuring we have a cert for the domain and returning the domain.  It
+// splits the website name in 2 pieces since we are using a wildcard.  This would need to change if we supported
+// certificates per website.
 func (c *CloudFront) WebsiteDomain(name string) (*common.Domain, error) {
 	log.Infof("validating website name %s", name)
 
