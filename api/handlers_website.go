@@ -24,6 +24,8 @@ import (
 // 5. create the admin bucket policy
 // 6. create the bucket admin group, '<bucketName>-BktAdmGrp'
 // 7. attach the bucket admin policy to the bucket admin group
+// 8. create cloudfront distribution with s3 website origin (for https)
+// 9. create alias record in route53
 // Note: this does _not_ create any users for managing the bucket
 func (s *server) CreateWebsiteHandler(w http.ResponseWriter, r *http.Request) {
 	w = LogWriter{w}

@@ -492,5 +492,5 @@ func ErrCode(msg string, err error) error {
 		}
 	}
 
-	return apierror.New(apierror.ErrBadRequest, msg, err)
+	return apierror.New(apierror.ErrInternalError, msg, err)
 }
