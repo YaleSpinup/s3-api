@@ -14,13 +14,13 @@ COPY go.mod .
 COPY go.sum .
 RUN go mod download
 COPY . .
-RUN go build -o /app/api  -ldflags="-X main.Version=$version -X main.VersionPrerelease=$prerelease -X main.githash=$githash -X main.buildstamp=$buildstamp" *.go
-RUN /app/api -version
+RUN go build -o /app/api.out  -ldflags="-X main.Version=$version -X main.VersionPrerelease=$prerelease -X main.githash=$githash -X main.buildstamp=$buildstamp" *.go
+RUN /app/api.out -version
 
 # final stage
 FROM alpine
 RUN apk add --no-cache ca-certificates
 WORKDIR /app
-COPY --from=build-env /app/api /app/api
+COPY --from=build-env /app/api.out /app/api
 EXPOSE 80
 ENTRYPOINT ["./api"]

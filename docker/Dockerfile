@@ -15,15 +15,15 @@ COPY go.sum .
 RUN go mod download
 COPY . .
 RUN go test ./... -cover
-RUN go build -o /app/api -ldflags="-X main.Version=$version -X main.VersionPrerelease=$prerelease -X main.githash=$githash -X main.buildstamp=$buildstamp" *.go
-RUN /app/api -version
+RUN go build -o /app/api.out -ldflags="-X main.Version=$version -X main.VersionPrerelease=$prerelease -X main.githash=$githash -X main.buildstamp=$buildstamp" *.go
+RUN /app/api.out -version
 
 # final stage
 FROM alpine
 MAINTAINER Camden Fisher <camden.fisher@yale.edu>
 
 WORKDIR /app
-COPY --from=build-env /app/api /app/api
+COPY --from=build-env /app/api.out /app/api
 RUN chmod 555 /app/api
 
 RUN apk add --no-cache bash ca-certificates wget python gettext && \
