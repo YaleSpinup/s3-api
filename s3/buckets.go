@@ -255,21 +255,13 @@ func (s *S3) UpdateBucketLogging(ctx context.Context, bucket, logBucket, logPref
 			prefix = logPrefix + "/" + prefix
 		}
 	}
+	prefix = prefix + "/"
 
 	if _, err := s.Service.PutBucketLoggingWithContext(ctx, &s3.PutBucketLoggingInput{
 		Bucket: aws.String(bucket),
 		BucketLoggingStatus: &s3.BucketLoggingStatus{
 			LoggingEnabled: &s3.LoggingEnabled{
 				TargetBucket: aws.String(logBucket),
-				TargetGrants: []*s3.TargetGrant{
-					{
-						Grantee: &s3.Grantee{
-							Type: aws.String("Group"),
-							URI:  aws.String("http://acs.amazonaws.com/groups/global/AllUsers"),
-						},
-						Permission: aws.String("READ"),
-					},
-				},
 				TargetPrefix: aws.String(prefix),
 			},
 		},
@@ -284,6 +276,32 @@ func (s *S3) UpdateBucketLogging(ctx context.Context, bucket, logBucket, logPref
 		return apierror.New(apierror.ErrInternalError, "unknown error occurred", err)
 	}
 	return nil
+}
+
+// GetBucketLogging gets a buckets logging configuration
+func (s *S3) GetBucketLogging(ctx context.Context, bucket string) (*s3.LoggingEnabled, error) {
+	if bucket == "" {
+		return nil, apierror.New(apierror.ErrBadRequest, "invalid input", nil)
+	}
+
+	log.Infof("getting the logging configuration for bucket %s", bucket)
+
+	out, err := s.Service.GetBucketLoggingWithContext(ctx, &s3.GetBucketLoggingInput{Bucket: aws.String(bucket)})
+	if err != nil {
+		if aerr, ok := err.(awserr.Error); ok {
+			switch aerr.Code() {
+			case s3.ErrCodeNoSuchBucket, "NotFound":
+				msg := fmt.Sprintf("bucket %s not found: %s", bucket, aerr.Error())
+				return nil, apierror.New(apierror.ErrNotFound, msg, err)
+			default:
+				return nil, apierror.New(apierror.ErrBadRequest, aerr.Message(), err)
+			}
+		}
+
+		return nil, apierror.New(apierror.ErrInternalError, "unknown error occurred", err)
+	}
+
+	return out.LoggingEnabled, nil
 }
 
 // BucketEmpty lists the objects in a bucket with a max of 1, if there are any objects returned, we return false

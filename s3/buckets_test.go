@@ -129,17 +129,17 @@ var testBucketLoggingPrefixes = map[string]testLogBucket{
 	"bucket1": testLogBucket{
 		TargetBucket:   "logBucket",
 		PassedPrefix:   "",
-		CompletePrefix: "bucket1",
+		CompletePrefix: "bucket1/",
 	},
 	"bucket2": testLogBucket{
 		TargetBucket:   "logBucket",
 		PassedPrefix:   "foo",
-		CompletePrefix: "foo/bucket2",
+		CompletePrefix: "foo/bucket2/",
 	},
 	"bucket3": testLogBucket{
 		TargetBucket:   "logBucket",
 		PassedPrefix:   "bar/",
-		CompletePrefix: "bar/bucket3",
+		CompletePrefix: "bar/bucket3/",
 	},
 }
 
@@ -162,21 +162,6 @@ func (m *mockS3Client) PutBucketLoggingWithContext(ctx context.Context, input *s
 
 	if input.BucketLoggingStatus.LoggingEnabled.TargetBucket == nil {
 		return nil, errors.New("expected non-nil logging target bucket in input")
-	}
-
-	targetGrants := []*s3.TargetGrant{
-		{
-			Grantee: &s3.Grantee{
-				Type: aws.String("Group"),
-				URI:  aws.String("http://acs.amazonaws.com/groups/global/AllUsers"),
-			},
-			Permission: aws.String("READ"),
-		},
-	}
-
-	if !reflect.DeepEqual(targetGrants, input.BucketLoggingStatus.LoggingEnabled.TargetGrants) {
-		msg := fmt.Sprintf("expected targetGrants %+v, got %+v", targetGrants, input.BucketLoggingStatus.LoggingEnabled.TargetGrants)
-		return nil, errors.New(msg)
 	}
 
 	// if the passed bucket exists in the test bucket list, validate we got the prefix and target we expected, otherwise just return happily
@@ -205,6 +190,24 @@ func (m *mockS3Client) ListObjectsV2WithContext(ctx context.Context, input *s3.L
 	}
 
 	return &s3.ListObjectsV2Output{KeyCount: aws.Int64(int64(0))}, nil
+}
+
+func (m *mockS3Client) GetBucketLoggingWithContext(ctx context.Context, input *s3.GetBucketLoggingInput, opts ...request.Option) (*s3.GetBucketLoggingOutput, error) {
+	if m.err != nil {
+		return nil, m.err
+	}
+
+	// if the passed bucket exists in the test bucket list, validate we got the prefix and target we expected, otherwise just return happily
+	if v, ok := testBucketLoggingPrefixes[aws.StringValue(input.Bucket)]; ok {
+		return &s3.GetBucketLoggingOutput{
+			LoggingEnabled: &s3.LoggingEnabled{
+				TargetBucket: aws.String(v.TargetBucket),
+				TargetPrefix: aws.String(v.CompletePrefix),
+			},
+		}, nil
+	}
+
+	return nil, awserr.New(s3.ErrCodeNoSuchBucket, "Not found", errors.New("no such bucket"))
 }
 
 func TestBucketExists(t *testing.T) {
@@ -772,6 +775,58 @@ func TestUpdateBucketLogging(t *testing.T) {
 	// test non-aws error
 	s.Service.(*mockS3Client).err = errors.New("things blowing up!")
 	err = s.UpdateBucketLogging(context.TODO(), "foobucket", "target", "")
+	if aerr, ok := err.(apierror.Error); ok {
+		if aerr.Code != apierror.ErrInternalError {
+			t.Errorf("expected error code %s, got: %s", apierror.ErrInternalError, aerr.Code)
+		}
+	} else {
+		t.Errorf("expected apierror.Error, got: %s", reflect.TypeOf(err).String())
+	}
+}
+
+func TestGetBucketLogging(t *testing.T) {
+	s := S3{Service: newMockS3Client(t, nil)}
+
+	for b, v := range testBucketLoggingPrefixes {
+		// test success
+		expected := &s3.LoggingEnabled{
+			TargetBucket: aws.String(v.TargetBucket),
+			TargetPrefix: aws.String(v.CompletePrefix),
+		}
+		out, err := s.GetBucketLogging(context.TODO(), b)
+		if err != nil {
+			t.Errorf("expected nil error, got: %s", err)
+		}
+
+		if !reflect.DeepEqual(out, expected) {
+			t.Errorf("expected %+v, got %+v", expected, out)
+		}
+	}
+
+	// test empty bucket
+	_, err := s.GetBucketLogging(context.TODO(), "")
+	if aerr, ok := err.(apierror.Error); ok {
+		if aerr.Code != apierror.ErrBadRequest {
+			t.Errorf("expected error code %s, got: %s", apierror.ErrBadRequest, aerr.Code)
+		}
+	} else {
+		t.Errorf("expected apierror.Error, got: %s", reflect.TypeOf(err).String())
+	}
+
+	// test some other, unexpected AWS error
+	s.Service.(*mockS3Client).err = awserr.New(s3.ErrCodeNoSuchKey, "no such key", nil)
+	_, err = s.GetBucketLogging(context.TODO(), "foobucket")
+	if aerr, ok := err.(apierror.Error); ok {
+		if aerr.Code != apierror.ErrBadRequest {
+			t.Errorf("expected error code %s, got: %s", apierror.ErrBadRequest, aerr.Code)
+		}
+	} else {
+		t.Errorf("expected apierror.Error, got: %s", reflect.TypeOf(err).String())
+	}
+
+	// test non-aws error
+	s.Service.(*mockS3Client).err = errors.New("things blowing up!")
+	_, err = s.GetBucketLogging(context.TODO(), "foobucket")
 	if aerr, ok := err.(apierror.Error); ok {
 		if aerr.Code != apierror.ErrInternalError {
 			t.Errorf("expected error code %s, got: %s", apierror.ErrInternalError, aerr.Code)
