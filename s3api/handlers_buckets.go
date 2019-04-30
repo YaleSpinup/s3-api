@@ -382,13 +382,21 @@ func (s *server) BucketShowHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	logging, err := s3Service.GetBucketLogging(r.Context(), bucket)
+	if err != nil {
+		handleError(w, err)
+		return
+	}
+
 	// setup output struct
 	output := struct {
-		Tags  []*s3.Tag
-		Empty bool
+		Tags    []*s3.Tag
+		Logging *s3.LoggingEnabled
+		Empty   bool
 	}{
-		Tags:  tags,
-		Empty: empty,
+		Tags:    tags,
+		Logging: logging,
+		Empty:   empty,
 	}
 
 	j, err := json.Marshal(output)
