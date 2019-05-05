@@ -36,7 +36,8 @@ type AccessLog struct {
 
 // Domain is the domain configuration for an S3 site
 type Domain struct {
-	CertArn string
+	CertArn      string
+	HostedZoneID string
 }
 
 // Version carries around the API version information

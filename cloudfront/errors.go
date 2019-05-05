@@ -485,7 +485,7 @@ func ErrCode(msg string, err error) error {
 			//
 			// One or more of your trusted signers don't exist.
 			cloudfront.ErrCodeTrustedSignerDoesNotExist:
-			return apierror.New(apierror.ErrBadRequest, msg, aerr)
+			return apierror.New(apierror.ErrNotFound, msg, aerr)
 		default:
 			m := msg + ": " + aerr.Message()
 			return apierror.New(apierror.ErrBadRequest, m, aerr)

@@ -9,6 +9,7 @@ import (
 	"github.com/aws/aws-sdk-go/aws"
 	"github.com/aws/aws-sdk-go/service/cloudfront"
 	"github.com/aws/aws-sdk-go/service/iam"
+	"github.com/aws/aws-sdk-go/service/route53"
 	"github.com/aws/aws-sdk-go/service/s3"
 	"github.com/gorilla/mux"
 	"github.com/pkg/errors"
@@ -52,6 +53,13 @@ func (s *server) CreateWebsiteHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	route53Service, ok := s.route53Services[account]
+	if !ok {
+		msg := fmt.Sprintf("Route53 service not found for account: %s", account)
+		handleError(w, apierror.New(apierror.ErrNotFound, msg, nil))
+		return
+	}
+
 	var req struct {
 		Tags                 []*s3.Tag
 		BucketInput          s3.CreateBucketInput
@@ -74,7 +82,7 @@ func (s *server) CreateWebsiteHandler(w http.ResponseWriter, r *http.Request) {
 	}()
 
 	bucketName := aws.StringValue(req.BucketInput.Bucket)
-	_, err = cloudFrontService.WebsiteDomain(bucketName)
+	domain, err := cloudFrontService.WebsiteDomain(bucketName)
 	if err != nil {
 		msg := fmt.Sprintf("failed to validate website domain %s", bucketName)
 		handleError(w, apierror.New(apierror.ErrBadRequest, msg, err))
@@ -247,17 +255,41 @@ func (s *server) CreateWebsiteHandler(w http.ResponseWriter, r *http.Request) {
 		handleError(w, errors.Wrap(err, msg))
 		return
 	}
+	// TODO: rollback for cloudfront distribution
+	// rbfunc = func() error {
+	// 	return func() error {
+	// 		return cloudFrontService.DeleteDistribution(r.Context(), ...)
+	// 	}()
+	// }
+	// rollBackTasks = append(rollBackTasks, rbfunc)
+
+	dnsChange, err := route53Service.CreateRecord(r.Context(), domain.HostedZoneID, &route53.ResourceRecordSet{
+		AliasTarget: &route53.AliasTarget{
+			DNSName:              distribution.DomainName,
+			HostedZoneId:         aws.String("Z2FDTNDATAQYW2"),
+			EvaluateTargetHealth: aws.Bool(false),
+		},
+		Name: aws.String(bucketName),
+		Type: aws.String("A"),
+	})
+	if err != nil {
+		msg := fmt.Sprintf("failed to create route53 alias record for website %s: %s", bucketName, err.Error())
+		handleError(w, errors.Wrap(err, msg))
+		return
+	}
 
 	output := struct {
 		Bucket       *string
 		Policy       *iam.Policy
 		Group        *iam.Group
 		Distribution *cloudfront.Distribution
+		DnsChange    *route53.ChangeInfo
 	}{
 		bucketOutput.Location,
 		policyOutput.Policy,
 		group.Group,
 		distribution,
+		dnsChange,
 	}
 
 	j, err := json.Marshal(output)

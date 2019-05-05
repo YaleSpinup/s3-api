@@ -8,6 +8,7 @@ import (
 	"github.com/YaleSpinup/s3-api/cloudfront"
 	"github.com/YaleSpinup/s3-api/common"
 	"github.com/YaleSpinup/s3-api/iam"
+	"github.com/YaleSpinup/s3-api/route53"
 	"github.com/YaleSpinup/s3-api/s3"
 	"github.com/gorilla/handlers"
 	"github.com/gorilla/mux"
@@ -19,6 +20,7 @@ type server struct {
 	s3Services         map[string]s3.S3
 	iamServices        map[string]iam.IAM
 	cloudFrontServices map[string]cloudfront.CloudFront
+	route53Services    map[string]route53.Route53
 	router             *mux.Router
 	version            common.Version
 }
@@ -29,6 +31,7 @@ func NewServer(config common.Config) error {
 		s3Services:         make(map[string]s3.S3),
 		iamServices:        make(map[string]iam.IAM),
 		cloudFrontServices: make(map[string]cloudfront.CloudFront),
+		route53Services:    make(map[string]route53.Route53),
 		router:             mux.NewRouter(),
 		version:            config.Version,
 	}
@@ -39,6 +42,7 @@ func NewServer(config common.Config) error {
 		s.s3Services[name] = s3.NewSession(c)
 		s.iamServices[name] = iam.NewSession(c)
 		s.cloudFrontServices[name] = cloudfront.NewSession(c)
+		s.route53Services[name] = route53.NewSession(c)
 	}
 
 	publicURLs := map[string]string{

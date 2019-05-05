@@ -107,8 +107,8 @@ func TestCreateDistribution(t *testing.T) {
 	c.Service.(*mockCloudFrontClient).err = awserr.New(cloudfront.ErrCodeNoSuchFieldLevelEncryptionProfile, "InvalidArgument", nil)
 	_, err = c.CreateDistribution(context.TODO(), distConfig, tags)
 	if aerr, ok := err.(apierror.Error); ok {
-		if aerr.Code != apierror.ErrBadRequest {
-			t.Errorf("expected error code %s, got: %s", apierror.ErrServiceUnavailable, aerr.Code)
+		if aerr.Code != apierror.ErrNotFound {
+			t.Errorf("expected error code %s, got: %s", apierror.ErrNotFound, aerr.Code)
 		}
 	} else {
 		t.Errorf("expected apierror.Error, got: %s", reflect.TypeOf(err).String())
@@ -258,4 +258,3 @@ func TestListDistribution(t *testing.T) {
 		t.Errorf("expected apierror.Error, got: %s", reflect.TypeOf(err).String())
 	}
 }
-
