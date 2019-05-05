@@ -536,5 +536,5 @@ E Camden Fisher <camden.fisher@yale.edu>
 
 ## License
 
-The MIT License (MIT)  
+GNU Affero General Public License v3.0 (GNU AGPLv3)  
 Copyright (c) 2019 Yale University
