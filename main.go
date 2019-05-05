@@ -8,7 +8,7 @@ import (
 	"os"
 
 	"github.com/YaleSpinup/s3-api/common"
-	"github.com/YaleSpinup/s3-api/s3api"
+	"github.com/YaleSpinup/s3-api/api"
 
 	log "github.com/sirupsen/logrus"
 )
@@ -78,7 +78,7 @@ func main() {
 	}
 	log.Debugf("Read config: %+v", config)
 
-	if err := s3api.NewServer(config); err != nil {
+	if err := api.NewServer(config); err != nil {
 		log.Fatal(err)
 	}
 }
