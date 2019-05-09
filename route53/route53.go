@@ -12,14 +12,14 @@ import (
 
 // Route53 is a wrapper around the aws route53 service with some default config info
 type Route53 struct {
-	Service         route53iface.Route53API
-	Domains         map[string]common.Domain
+	Service route53iface.Route53API
+	Domains map[string]common.Domain
 }
 
 // NewSession creates a new cloudfront session
 func NewSession(account common.Account) Route53 {
 	r := Route53{}
-	log.Infof("creating new session with key id %s in region %s", account.Akid, account.Region)
+	log.Infof("creating new aws session for route53 with key id %s in region %s", account.Akid, account.Region)
 	sess := session.Must(session.NewSession(&aws.Config{
 		Credentials: credentials.NewStaticCredentials(account.Akid, account.Secret, ""),
 		Region:      aws.String(account.Region),
