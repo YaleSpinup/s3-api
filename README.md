@@ -445,6 +445,9 @@ POST `/v1/s3/{account}/websites`
     ],
     "BucketInput": {
         "Bucket": "foobar.bulldogs.cloud"
+    },
+    "WebsiteConfiguration": {
+        "IndexDocument": { "Suffix": "index.html" }
     }
 }
 ```
