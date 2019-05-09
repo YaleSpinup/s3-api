@@ -356,6 +356,15 @@ func TestGetRecord(t *testing.T) {
 		t.Errorf("expected %+v, got %+v", expected, out)
 	}
 
+	out, err = r.GetRecord(context.TODO(), testHostedZoneID, "foobar.hyper.converged.", "A")
+	if err != nil {
+		t.Errorf("expected nil error, got: %s", err)
+	}
+
+	if !reflect.DeepEqual(out, expected) {
+		t.Errorf("expected %+v, got %+v", expected, out)
+	}
+
 	// test with wrong name
 	out, err = r.GetRecord(context.TODO(), testHostedZoneID, "foobaz.hyper.converged", "A")
 	if err == nil || out != nil {

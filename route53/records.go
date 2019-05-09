@@ -47,15 +47,15 @@ func (r *Route53) GetRecord(ctx context.Context, zoneID, host, recordType string
 		return nil, err
 	}
 
-	for _, r := range records {
-		if !strings.HasSuffix(host, ".") {
-			host = host + "."
-		}
+	if !strings.HasSuffix(host, ".") {
+		host = host + "."
+	}
 
-		log.Debugf("checking %+v against host %s and type %s", r, host, recordType)
+	for _, record := range records {
+		log.Debugf("checking %+v against host %s and type %s", record, host, recordType)
 
-		if aws.StringValue(r.Name) == host && aws.StringValue(r.Type) == recordType {
-			return r, nil
+		if aws.StringValue(record.Name) == host && aws.StringValue(record.Type) == recordType {
+			return record, nil
 		}
 	}
 
