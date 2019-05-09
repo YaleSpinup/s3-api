@@ -7,6 +7,8 @@ import (
 	"github.com/pkg/errors"
 )
 
+// ErrCode processes the error codes comming back from route53 and converts them into apierror, a
+// standardized form consumable by downstream systems.
 func ErrCode(msg string, err error) error {
 	if aerr, ok := errors.Cause(err).(awserr.Error); ok {
 		switch aerr.Code() {

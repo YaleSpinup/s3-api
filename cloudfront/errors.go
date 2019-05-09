@@ -190,6 +190,7 @@ func ErrCode(msg string, err error) error {
 			// cloudfront.ErrCodeCNAMEAlreadyExists for service response error code
 			// "CNAMEAlreadyExists".
 			cloudfront.ErrCodeCNAMEAlreadyExists,
+
 			// cloudfront.ErrCodeDistributionAlreadyExists for service response error code
 			// "DistributionAlreadyExists".
 			//
