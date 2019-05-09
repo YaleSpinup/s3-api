@@ -225,13 +225,30 @@ HEAD `/v1/s3/{account}/buckets/foobarbucketname`
 
 ### Get information for a bucket
 
-Getting details about a bucket currently only returns tagging information  and if the bucket is empty
-
 GET `/v1/s3/{account}/buckets/foobarbucketname`
+
+#### Response
+
+```json
+{
+    "Tags": [
+        { "Key": "Application", "Value": "HowToGet" },
+        { "Key": "COA", "Value": "Take.My.Money.$$$$" },
+        { "Key": "CreatedBy", "Value": "Big Bird" }
+    ],
+    "Logging": {
+        "TargetBucket": "foobar-buckets-access-logs",
+        "TargetGrants": null,
+        "TargetPrefix": "s3/foobarbucketname/"
+    },
+    "Empty": true
+}
+```
 
 | Response Code                 | Definition                      |  
 | ----------------------------- | --------------------------------|  
-| **200 OK**                    | deleted bucket                  |  
+| **200 OK**                    | okay                            |  
+| **404 Not Found**             | bucket was not found            |  
 | **400 Bad Request**           | badly formed request            |  
 | **500 Internal Server Error** | a server error occurred         |
 
@@ -570,11 +587,50 @@ HEAD `/v1/s3/{account}/websites/{website}`
 
 ### Get information for a website
 
-Getting details about a website currently only returns tagging information and if the bucket is empty
-
 GET `/v1/s3/{account}/websites/{website}`
 
-*See [Get information for a bucket](#get-information-for-a-bucket)*
+#### Response
+
+```json
+{
+    "Tags": [
+        { "Key": "Application", "Value": "HowToGet" },
+        { "Key": "COA", "Value": "Take.My.Money.$$$$" },
+        { "Key": "CreatedBy", "Value": "Big Bird" }
+    ],
+    "Logging": {
+        "TargetBucket": "foobar-sites-access-logs",
+        "TargetGrants": null,
+        "TargetPrefix": "s3/foobar.bulldogs.cloud/"
+    },
+    "Empty": true,
+    "DNSRecord": {
+        "AliasTarget": {
+            "DNSName": "abcdefgh12345.cloudfront.net.",
+            "EvaluateTargetHealth": false,
+            "HostedZoneId": "ABCDEFGHIJ12345"
+        },
+        "Failover": null,
+        "GeoLocation": null,
+        "HealthCheckId": null,
+        "MultiValueAnswer": null,
+        "Name": "foobar.bulldogs.cloud.",
+        "Region": null,
+        "ResourceRecords": null,
+        "SetIdentifier": null,
+        "TTL": null,
+        "TrafficPolicyInstanceId": null,
+        "Type": "A",
+        "Weight": null
+    }
+}
+```
+
+| Response Code                 | Definition                      |  
+| ----------------------------- | --------------------------------|  
+| **200 OK**                    | okay                            |  
+| **400 Bad Request**           | badly formed request            |  
+| **500 Internal Server Error** | a server error occurred         |
 
 ### Update a website
 

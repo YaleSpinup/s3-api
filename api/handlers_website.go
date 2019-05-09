@@ -368,25 +368,17 @@ func (s *server) WebsiteShowHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// rec, err := route53Service.ListRecords(r.Context(), "Z2R5TQ1SRDQ9JF")
-	// if err != nil {
-	// 	handleError(w, err)
-	// 	return
-	// }
-
 	// setup output struct
 	output := struct {
 		Tags      []*s3.Tag
 		Logging   *s3.LoggingEnabled
 		Empty     bool
 		DNSRecord *route53.ResourceRecordSet
-		// Records []*route53.ResourceRecordSet
 	}{
 		Tags:      tags,
 		Logging:   logging,
 		Empty:     empty,
 		DNSRecord: dns,
-		// Records: rec,
 	}
 
 	j, err := json.Marshal(output)
