@@ -63,6 +63,43 @@ func (r *Route53) GetRecord(ctx context.Context, zoneID, host, recordType string
 	return nil, apierror.New(apierror.ErrNotFound, msg, nil)
 }
 
+// GetRecordByName gets a route53 resource record by name and by type if one is specified
+func (r *Route53) GetRecordByName(ctx context.Context, zoneID, name, recordType string) (*route53.ResourceRecordSet, error) {
+	log.Infof("getting route53 record for zone ID %s, name %s, type '%s'", zoneID, name, recordType)
+
+	if !strings.HasSuffix(name, ".") {
+		name = name + "."
+	}
+
+	input := &route53.ListResourceRecordSetsInput{
+		HostedZoneId: aws.String(zoneID),
+		MaxItems:     aws.String("100"),
+	}
+
+	var recordSet *route53.ResourceRecordSet
+	err := r.Service.ListResourceRecordSetsPagesWithContext(ctx, input,
+		func(out *route53.ListResourceRecordSetsOutput, lastPage bool) bool {
+			for _, rs := range out.ResourceRecordSets {
+				log.Debugf("checking %+v against name %s and type %s", rs, name, recordType)
+				if aws.StringValue(rs.Name) == name && aws.StringValue(rs.Type) == recordType {
+					recordSet = rs
+					return false
+				}
+			}
+			return true
+		})
+	if err != nil {
+		return nil, ErrCode("failed to list route53 resource record sets", err)
+	}
+
+	if recordSet == nil {
+		msg := fmt.Sprintf("route53 record not found in zone %s with name %s and type '%s'", zoneID, name, recordType)
+		err = apierror.New(apierror.ErrNotFound, msg, nil)
+	}
+
+	return recordSet, err
+}
+
 // ListRecords lists the route53 resource records for a zone
 func (r *Route53) ListRecords(ctx context.Context, zoneID string) ([]*route53.ResourceRecordSet, error) {
 	recordSets := []*route53.ResourceRecordSet{}

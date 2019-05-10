@@ -362,7 +362,13 @@ func (s *server) WebsiteShowHandler(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// get the route53 resource record details
-	dns, err := route53Service.GetRecord(r.Context(), domain.HostedZoneID, website, "A")
+	dns, err := route53Service.GetRecordByName(r.Context(), domain.HostedZoneID, website, "A")
+	if err != nil {
+		handleError(w, err)
+		return
+	}
+
+	dist, err := cloudFrontService.GetDistributionByName(r.Context(), website)
 	if err != nil {
 		handleError(w, err)
 		return
@@ -370,15 +376,17 @@ func (s *server) WebsiteShowHandler(w http.ResponseWriter, r *http.Request) {
 
 	// setup output struct
 	output := struct {
-		Tags      []*s3.Tag
-		Logging   *s3.LoggingEnabled
-		Empty     bool
-		DNSRecord *route53.ResourceRecordSet
+		Tags         []*s3.Tag
+		Logging      *s3.LoggingEnabled
+		Empty        bool
+		DNSRecord    *route53.ResourceRecordSet
+		Distribution *cloudfront.DistributionSummary
 	}{
-		Tags:      tags,
-		Logging:   logging,
-		Empty:     empty,
-		DNSRecord: dns,
+		Tags:         tags,
+		Logging:      logging,
+		Empty:        empty,
+		DNSRecord:    dns,
+		Distribution: dist,
 	}
 
 	j, err := json.Marshal(output)

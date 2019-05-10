@@ -625,7 +625,92 @@ GET `/v1/s3/{account}/websites/{website}`
         "TrafficPolicyInstanceId": null,
         "Type": "A",
         "Weight": null
-    }
+    },
+    "Distribution": {
+        "ARN": "arn:aws:cloudfront::12345678910:distribution/ABCDEFGHIJKL",
+        "DistributionConfig": {
+            "Aliases": {
+                "Items": [
+                    "foobar.bulldogs.cloud"
+                ],
+                "Quantity": 1
+            },
+            "CallerReference": "12345678-9012-3456-6789-094d26464c6c",
+            "Comment": "foobar.bulldogs.cloud",
+            "DefaultCacheBehavior": {
+                ...
+                "TargetOriginId": "foobar.bulldogs.cloud",
+                "TrustedSigners": {
+                    "Enabled": false,
+                    "Items": null,
+                    "Quantity": 0
+                },
+                "ViewerProtocolPolicy": "redirect-to-https"
+            },
+            "DefaultRootObject": "index.html",
+            "Enabled": true,
+            "HttpVersion": "http2",
+            "IsIPV6Enabled": true,
+            "Logging": {
+                "Bucket": "",
+                "Enabled": false,
+                "IncludeCookies": false,
+                "Prefix": ""
+            },
+            "Origins": {
+                "Items": [
+                    {
+                        ...
+                        "CustomOriginConfig": {
+                            "HTTPPort": 80,
+                            "HTTPSPort": 443,
+                            "OriginKeepaliveTimeout": 5,
+                            "OriginProtocolPolicy": "http-only",
+                            "OriginReadTimeout": 30,
+                            "OriginSslProtocols": {
+                                "Items": [
+                                    "TLSv1",
+                                    "TLSv1.1",
+                                    "TLSv1.2"
+                                ],
+                                "Quantity": 3
+                            }
+                        },
+                        "DomainName": "foobar.bulldogs.cloud.s3-website-us-east-1.amazonaws.com",
+                        "Id": "foobar.bulldogs.cloud",
+                        "OriginPath": "",
+                        "S3OriginConfig": null
+                    }
+                ],
+                "Quantity": 1
+            },
+            "PriceClass": "PriceClass_100",
+            "Restrictions": {
+                "GeoRestriction": {
+                    "Items": [
+                        "US"
+                    ],
+                    "Quantity": 1,
+                    "RestrictionType": "whitelist"
+                }
+            },
+            "ViewerCertificate": {
+                "ACMCertificateArn": "arn:aws:acm:us-east-1:12345678910:certificate/111111111-2222-3333-4444-55555555555",
+                "Certificate": "arn:aws:acm:us-east-1:12345678910:certificate/111111111-2222-3333-4444-55555555555",
+                "CertificateSource": "acm",
+                "CloudFrontDefaultCertificate": null,
+                "IAMCertificateId": null,
+                "MinimumProtocolVersion": "TLSv1.1_2016",
+                "SSLSupportMethod": "sni-only"
+            },
+            ...
+        },
+        "DomainName": "1234567abcdef.cloudfront.net",
+        "Id": "ABCDEFGHIJKLMNOP",
+        "InProgressInvalidationBatches": 0,
+        "LastModifiedTime": "2019-05-09T10:50:35.79Z",
+        "Status": "InProgress"
+    },
 }
 ```
 
