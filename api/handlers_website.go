@@ -303,3 +303,92 @@ func (s *server) CreateWebsiteHandler(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusOK)
 	w.Write(j)
 }
+
+// WebsiteShowHandler returns information about a static website
+func (s *server) WebsiteShowHandler(w http.ResponseWriter, r *http.Request) {
+	w = LogWriter{w}
+	vars := mux.Vars(r)
+	account := vars["account"]
+	website := vars["website"]
+
+	s3Service, ok := s.s3Services[account]
+	if !ok {
+		log.Errorf("account not found: %s", account)
+		w.WriteHeader(http.StatusNotFound)
+		return
+	}
+
+	cloudFrontService, ok := s.cloudFrontServices[account]
+	if !ok {
+		msg := fmt.Sprintf("CloudFront service not found for account: %s", account)
+		handleError(w, apierror.New(apierror.ErrNotFound, msg, nil))
+		return
+	}
+
+	route53Service, ok := s.route53Services[account]
+	if !ok {
+		msg := fmt.Sprintf("Route53 service not found for account: %s", account)
+		handleError(w, apierror.New(apierror.ErrNotFound, msg, nil))
+		return
+	}
+
+	// get the tags on the bucket backing the website
+	// TODO get tags for other resources (cloudfront, route53, etc)
+	tags, err := s3Service.GetBucketTags(r.Context(), website)
+	if err != nil {
+		handleError(w, err)
+		return
+	}
+
+	// check if the bucket backing the website is empty
+	empty, err := s3Service.BucketEmpty(r.Context(), website)
+	if err != nil {
+		handleError(w, err)
+		return
+	}
+
+	// get details about the logging configuration for the s3 bucket backing the website
+	logging, err := s3Service.GetBucketLogging(r.Context(), website)
+	if err != nil {
+		handleError(w, err)
+		return
+	}
+
+	// determine which domain is being referenced
+	domain, err := cloudFrontService.WebsiteDomain(website)
+	if err != nil {
+		handleError(w, err)
+		return
+	}
+
+	// get the route53 resource record details
+	dns, err := route53Service.GetRecord(r.Context(), domain.HostedZoneID, website, "A")
+	if err != nil {
+		handleError(w, err)
+		return
+	}
+
+	// setup output struct
+	output := struct {
+		Tags      []*s3.Tag
+		Logging   *s3.LoggingEnabled
+		Empty     bool
+		DNSRecord *route53.ResourceRecordSet
+	}{
+		Tags:      tags,
+		Logging:   logging,
+		Empty:     empty,
+		DNSRecord: dns,
+	}
+
+	j, err := json.Marshal(output)
+	if err != nil {
+		log.Errorf("cannot marshal response (%v) into JSON: %s", output, err)
+		w.WriteHeader(http.StatusInternalServerError)
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusOK)
+	w.Write(j)
+}
