@@ -59,10 +59,12 @@
       },
       "domains": {
         "yalepages.org": {
-          "certArn": "{{ .yalepages_org_arn }}"
+          "certArn": "{{ .yalepages_org_arn }}",
+          "hostedZoneID": "{{ .yalepages_zone_id }}"
         },
         "yalespace.org": {
-          "certArn": "{{ .yalespace_org_arn }}"
+          "certArn": "{{ .yalespace_org_arn }}",
+          "hostedZoneID": "{{ .yalespace_zone_id }}"
         }
       }
     },

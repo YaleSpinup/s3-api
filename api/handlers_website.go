@@ -9,6 +9,7 @@ import (
 	"github.com/aws/aws-sdk-go/aws"
 	"github.com/aws/aws-sdk-go/service/cloudfront"
 	"github.com/aws/aws-sdk-go/service/iam"
+	"github.com/aws/aws-sdk-go/service/route53"
 	"github.com/aws/aws-sdk-go/service/s3"
 	"github.com/gorilla/mux"
 	"github.com/pkg/errors"
@@ -24,6 +25,8 @@ import (
 // 5. create the admin bucket policy
 // 6. create the bucket admin group, '<bucketName>-BktAdmGrp'
 // 7. attach the bucket admin policy to the bucket admin group
+// 8. create cloudfront distribution with s3 website origin (for https)
+// 9. create alias record in route53
 // Note: this does _not_ create any users for managing the bucket
 func (s *server) CreateWebsiteHandler(w http.ResponseWriter, r *http.Request) {
 	w = LogWriter{w}
@@ -50,6 +53,13 @@ func (s *server) CreateWebsiteHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	route53Service, ok := s.route53Services[account]
+	if !ok {
+		msg := fmt.Sprintf("Route53 service not found for account: %s", account)
+		handleError(w, apierror.New(apierror.ErrNotFound, msg, nil))
+		return
+	}
+
 	var req struct {
 		Tags                 []*s3.Tag
 		BucketInput          s3.CreateBucketInput
@@ -72,7 +82,7 @@ func (s *server) CreateWebsiteHandler(w http.ResponseWriter, r *http.Request) {
 	}()
 
 	bucketName := aws.StringValue(req.BucketInput.Bucket)
-	_, err = cloudFrontService.WebsiteDomain(bucketName)
+	domain, err := cloudFrontService.WebsiteDomain(bucketName)
 	if err != nil {
 		msg := fmt.Sprintf("failed to validate website domain %s", bucketName)
 		handleError(w, apierror.New(apierror.ErrBadRequest, msg, err))
@@ -245,22 +255,135 @@ func (s *server) CreateWebsiteHandler(w http.ResponseWriter, r *http.Request) {
 		handleError(w, errors.Wrap(err, msg))
 		return
 	}
+	// TODO: rollback for cloudfront distribution
+	// rbfunc = func() error {
+	// 	return func() error {
+	// 		return cloudFrontService.DeleteDistribution(r.Context(), ...)
+	// 	}()
+	// }
+	// rollBackTasks = append(rollBackTasks, rbfunc)
+
+	dnsChange, err := route53Service.CreateRecord(r.Context(), domain.HostedZoneID, &route53.ResourceRecordSet{
+		AliasTarget: &route53.AliasTarget{
+			DNSName:              distribution.DomainName,
+			HostedZoneId:         aws.String("Z2FDTNDATAQYW2"),
+			EvaluateTargetHealth: aws.Bool(false),
+		},
+		Name: aws.String(bucketName),
+		Type: aws.String("A"),
+	})
+	if err != nil {
+		msg := fmt.Sprintf("failed to create route53 alias record for website %s: %s", bucketName, err.Error())
+		handleError(w, errors.Wrap(err, msg))
+		return
+	}
 
 	output := struct {
 		Bucket       *string
 		Policy       *iam.Policy
 		Group        *iam.Group
 		Distribution *cloudfront.Distribution
+		DnsChange    *route53.ChangeInfo
 	}{
 		bucketOutput.Location,
 		policyOutput.Policy,
 		group.Group,
 		distribution,
+		dnsChange,
 	}
 
 	j, err := json.Marshal(output)
 	if err != nil {
 		log.Errorf("cannot marshal reasponse(%v) into JSON: %s", output, err)
+		w.WriteHeader(http.StatusInternalServerError)
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusOK)
+	w.Write(j)
+}
+
+// WebsiteShowHandler returns information about a static website
+func (s *server) WebsiteShowHandler(w http.ResponseWriter, r *http.Request) {
+	w = LogWriter{w}
+	vars := mux.Vars(r)
+	account := vars["account"]
+	website := vars["website"]
+
+	s3Service, ok := s.s3Services[account]
+	if !ok {
+		log.Errorf("account not found: %s", account)
+		w.WriteHeader(http.StatusNotFound)
+		return
+	}
+
+	cloudFrontService, ok := s.cloudFrontServices[account]
+	if !ok {
+		msg := fmt.Sprintf("CloudFront service not found for account: %s", account)
+		handleError(w, apierror.New(apierror.ErrNotFound, msg, nil))
+		return
+	}
+
+	route53Service, ok := s.route53Services[account]
+	if !ok {
+		msg := fmt.Sprintf("Route53 service not found for account: %s", account)
+		handleError(w, apierror.New(apierror.ErrNotFound, msg, nil))
+		return
+	}
+
+	// get the tags on the bucket backing the website
+	// TODO get tags for other resources (cloudfront, route53, etc)
+	tags, err := s3Service.GetBucketTags(r.Context(), website)
+	if err != nil {
+		handleError(w, err)
+		return
+	}
+
+	// check if the bucket backing the website is empty
+	empty, err := s3Service.BucketEmpty(r.Context(), website)
+	if err != nil {
+		handleError(w, err)
+		return
+	}
+
+	// get details about the logging configuration for the s3 bucket backing the website
+	logging, err := s3Service.GetBucketLogging(r.Context(), website)
+	if err != nil {
+		handleError(w, err)
+		return
+	}
+
+	// determine which domain is being referenced
+	domain, err := cloudFrontService.WebsiteDomain(website)
+	if err != nil {
+		handleError(w, err)
+		return
+	}
+
+	// get the route53 resource record details
+	dns, err := route53Service.GetRecord(r.Context(), domain.HostedZoneID, website, "A")
+	if err != nil {
+		handleError(w, err)
+		return
+	}
+
+	// setup output struct
+	output := struct {
+		Tags      []*s3.Tag
+		Logging   *s3.LoggingEnabled
+		Empty     bool
+		DNSRecord *route53.ResourceRecordSet
+	}{
+		Tags:      tags,
+		Logging:   logging,
+		Empty:     empty,
+		DNSRecord: dns,
+	}
+
+	j, err := json.Marshal(output)
+	if err != nil {
+		log.Errorf("cannot marshal response (%v) into JSON: %s", output, err)
 		w.WriteHeader(http.StatusInternalServerError)
 		return
 	}

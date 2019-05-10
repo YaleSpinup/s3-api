@@ -225,13 +225,30 @@ HEAD `/v1/s3/{account}/buckets/foobarbucketname`
 
 ### Get information for a bucket
 
-Getting details about a bucket currently only returns tagging information  and if the bucket is empty
-
 GET `/v1/s3/{account}/buckets/foobarbucketname`
+
+#### Response
+
+```json
+{
+    "Tags": [
+        { "Key": "Application", "Value": "HowToGet" },
+        { "Key": "COA", "Value": "Take.My.Money.$$$$" },
+        { "Key": "CreatedBy", "Value": "Big Bird" }
+    ],
+    "Logging": {
+        "TargetBucket": "foobar-buckets-access-logs",
+        "TargetGrants": null,
+        "TargetPrefix": "s3/foobarbucketname/"
+    },
+    "Empty": true
+}
+```
 
 | Response Code                 | Definition                      |  
 | ----------------------------- | --------------------------------|  
-| **200 OK**                    | deleted bucket                  |  
+| **200 OK**                    | okay                            |  
+| **404 Not Found**             | bucket was not found            |  
 | **400 Bad Request**           | badly formed request            |  
 | **500 Internal Server Error** | a server error occurred         |
 
@@ -428,6 +445,9 @@ POST `/v1/s3/{account}/websites`
     ],
     "BucketInput": {
         "Bucket": "foobar.bulldogs.cloud"
+    },
+    "WebsiteConfiguration": {
+        "IndexDocument": { "Suffix": "index.html" }
     }
 }
 ```
@@ -456,6 +476,97 @@ POST `/v1/s3/{account}/websites`
         "GroupId": "GROUPID123",
         "GroupName": "foobar.bulldogs.cloud-BktAdmGrp",
         "Path": "/"
+    },
+    "Distribution": {
+        "ARN": "arn:aws:cloudfront::12345678910:distribution/ABCDEFGHIJKL",
+        "DistributionConfig": {
+            "Aliases": {
+                "Items": [
+                    "foobar.bulldogs.cloud"
+                ],
+                "Quantity": 1
+            },
+            "CallerReference": "12345678-9012-3456-6789-094d26464c6c",
+            "Comment": "foobar.bulldogs.cloud",
+            "DefaultCacheBehavior": {
+                ...
+                "TargetOriginId": "foobar.bulldogs.cloud",
+                "TrustedSigners": {
+                    "Enabled": false,
+                    "Items": null,
+                    "Quantity": 0
+                },
+                "ViewerProtocolPolicy": "redirect-to-https"
+            },
+            "DefaultRootObject": "index.html",
+            "Enabled": true,
+            "HttpVersion": "http2",
+            "IsIPV6Enabled": true,
+            "Logging": {
+                "Bucket": "",
+                "Enabled": false,
+                "IncludeCookies": false,
+                "Prefix": ""
+            },
+            "Origins": {
+                "Items": [
+                    {
+                        ...
+                        "CustomOriginConfig": {
+                            "HTTPPort": 80,
+                            "HTTPSPort": 443,
+                            "OriginKeepaliveTimeout": 5,
+                            "OriginProtocolPolicy": "http-only",
+                            "OriginReadTimeout": 30,
+                            "OriginSslProtocols": {
+                                "Items": [
+                                    "TLSv1",
+                                    "TLSv1.1",
+                                    "TLSv1.2"
+                                ],
+                                "Quantity": 3
+                            }
+                        },
+                        "DomainName": "foobar.bulldogs.cloud.s3-website-us-east-1.amazonaws.com",
+                        "Id": "foobar.bulldogs.cloud",
+                        "OriginPath": "",
+                        "S3OriginConfig": null
+                    }
+                ],
+                "Quantity": 1
+            },
+            "PriceClass": "PriceClass_100",
+            "Restrictions": {
+                "GeoRestriction": {
+                    "Items": [
+                        "US"
+                    ],
+                    "Quantity": 1,
+                    "RestrictionType": "whitelist"
+                }
+            },
+            "ViewerCertificate": {
+                "ACMCertificateArn": "arn:aws:acm:us-east-1:12345678910:certificate/111111111-2222-3333-4444-55555555555",
+                "Certificate": "arn:aws:acm:us-east-1:12345678910:certificate/111111111-2222-3333-4444-55555555555",
+                "CertificateSource": "acm",
+                "CloudFrontDefaultCertificate": null,
+                "IAMCertificateId": null,
+                "MinimumProtocolVersion": "TLSv1.1_2016",
+                "SSLSupportMethod": "sni-only"
+            },
+            ...
+        },
+        "DomainName": "1234567abcdef.cloudfront.net",
+        "Id": "ABCDEFGHIJKLMNOP",
+        "InProgressInvalidationBatches": 0,
+        "LastModifiedTime": "2019-05-09T10:50:35.79Z",
+        "Status": "InProgress"
+    },
+    "DnsChange": {
+        "Comment": "Created by s3-api",
+        "Id": "/change/C176E51B123456",
+        "Status": "PENDING",
+        "SubmittedAt": "2019-05-09T10:50:37.194Z"
     }
 }
 ```
@@ -479,11 +590,50 @@ HEAD `/v1/s3/{account}/websites/{website}`
 
 ### Get information for a website
 
-Getting details about a website currently only returns tagging information and if the bucket is empty
-
 GET `/v1/s3/{account}/websites/{website}`
 
-*See [Get information for a bucket](#get-information-for-a-bucket)*
+#### Response
+
+```json
+{
+    "Tags": [
+        { "Key": "Application", "Value": "HowToGet" },
+        { "Key": "COA", "Value": "Take.My.Money.$$$$" },
+        { "Key": "CreatedBy", "Value": "Big Bird" }
+    ],
+    "Logging": {
+        "TargetBucket": "foobar-sites-access-logs",
+        "TargetGrants": null,
+        "TargetPrefix": "s3/foobar.bulldogs.cloud/"
+    },
+    "Empty": true,
+    "DNSRecord": {
+        "AliasTarget": {
+            "DNSName": "abcdefgh12345.cloudfront.net.",
+            "EvaluateTargetHealth": false,
+            "HostedZoneId": "ABCDEFGHIJ12345"
+        },
+        "Failover": null,
+        "GeoLocation": null,
+        "HealthCheckId": null,
+        "MultiValueAnswer": null,
+        "Name": "foobar.bulldogs.cloud.",
+        "Region": null,
+        "ResourceRecords": null,
+        "SetIdentifier": null,
+        "TTL": null,
+        "TrafficPolicyInstanceId": null,
+        "Type": "A",
+        "Weight": null
+    }
+}
+```
+
+| Response Code                 | Definition                      |  
+| ----------------------------- | --------------------------------|  
+| **200 OK**                    | okay                            |  
+| **400 Bad Request**           | badly formed request            |  
+| **500 Internal Server Error** | a server error occurred         |
 
 ### Update a website
 
@@ -536,5 +686,5 @@ E Camden Fisher <camden.fisher@yale.edu>
 
 ## License
 
-The MIT License (MIT)  
+GNU Affero General Public License v3.0 (GNU AGPLv3)  
 Copyright (c) 2019 Yale University

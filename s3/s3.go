@@ -20,7 +20,7 @@ type S3 struct {
 // NewSession creates a new S3 session
 func NewSession(account common.Account) S3 {
 	s := S3{}
-	log.Infof("creating new session with key id %s in region %s", account.Akid, account.Region)
+	log.Infof("creating new aws session for S3 with key id %s in region %s", account.Akid, account.Region)
 	sess := session.Must(session.NewSession(&aws.Config{
 		Credentials: credentials.NewStaticCredentials(account.Akid, account.Secret, ""),
 		Region:      aws.String(account.Region),

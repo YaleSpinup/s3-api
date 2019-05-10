@@ -37,7 +37,7 @@ type IAM struct {
 // NewSession creates a new IAM session
 func NewSession(account common.Account) IAM {
 	i := IAM{}
-	log.Infof("creating new session with key id %s in region %s", account.Akid, account.Region)
+	log.Infof("creating new aws session for IAM with key id %s in region %s", account.Akid, account.Region)
 	sess := session.Must(session.NewSession(&aws.Config{
 		Credentials: credentials.NewStaticCredentials(account.Akid, account.Secret, ""),
 		Region:      aws.String(account.Region),

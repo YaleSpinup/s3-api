@@ -190,6 +190,7 @@ func ErrCode(msg string, err error) error {
 			// cloudfront.ErrCodeCNAMEAlreadyExists for service response error code
 			// "CNAMEAlreadyExists".
 			cloudfront.ErrCodeCNAMEAlreadyExists,
+
 			// cloudfront.ErrCodeDistributionAlreadyExists for service response error code
 			// "DistributionAlreadyExists".
 			//
@@ -485,12 +486,12 @@ func ErrCode(msg string, err error) error {
 			//
 			// One or more of your trusted signers don't exist.
 			cloudfront.ErrCodeTrustedSignerDoesNotExist:
-			return apierror.New(apierror.ErrBadRequest, msg, aerr)
+			return apierror.New(apierror.ErrNotFound, msg, aerr)
 		default:
 			m := msg + ": " + aerr.Message()
 			return apierror.New(apierror.ErrBadRequest, m, aerr)
 		}
 	}
 
-	return apierror.New(apierror.ErrBadRequest, msg, err)
+	return apierror.New(apierror.ErrInternalError, msg, err)
 }
