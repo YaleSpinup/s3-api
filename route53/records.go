@@ -38,31 +38,6 @@ func (r *Route53) CreateRecord(ctx context.Context, zoneID string, record *route
 	return out.ChangeInfo, nil
 }
 
-// GetRecord gets a route53 resource record
-func (r *Route53) GetRecord(ctx context.Context, zoneID, host, recordType string) (*route53.ResourceRecordSet, error) {
-	log.Infof("getting route53 record for zone ID %s, host %s", zoneID, host)
-
-	records, err := r.ListRecords(ctx, zoneID)
-	if err != nil {
-		return nil, err
-	}
-
-	if !strings.HasSuffix(host, ".") {
-		host = host + "."
-	}
-
-	for _, record := range records {
-		log.Debugf("checking %+v against host %s and type %s", record, host, recordType)
-
-		if aws.StringValue(record.Name) == host && aws.StringValue(record.Type) == recordType {
-			return record, nil
-		}
-	}
-
-	msg := fmt.Sprintf("route53 record not found in zone %s with name %s and type %s", zoneID, host, recordType)
-	return nil, apierror.New(apierror.ErrNotFound, msg, nil)
-}
-
 // GetRecordByName gets a route53 resource record by name and by type if one is specified
 func (r *Route53) GetRecordByName(ctx context.Context, zoneID, name, recordType string) (*route53.ResourceRecordSet, error) {
 	log.Infof("getting route53 record for zone ID %s, name %s, type '%s'", zoneID, name, recordType)

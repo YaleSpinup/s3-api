@@ -354,100 +354,6 @@ func TestListRecords(t *testing.T) {
 	}
 }
 
-func TestGetRecord(t *testing.T) {
-	r := Route53{
-		Service: newmockRoute53Client(t, nil),
-		Domains: map[string]common.Domain{
-			"hyper.converged": common.Domain{
-				CertArn: "arn:aws:acm::12345678910:certificate/111111111-2222-3333-4444-555555555555",
-			},
-		},
-	}
-
-	expected := &testResourceRecordSet
-	out, err := r.GetRecord(context.TODO(), testHostedZoneID, "foobar.hyper.converged", "A")
-	if err != nil {
-		t.Errorf("expected nil error, got: %s", err)
-	}
-
-	if !reflect.DeepEqual(out, expected) {
-		t.Errorf("expected %+v, got %+v", expected, out)
-	}
-
-	out, err = r.GetRecord(context.TODO(), testHostedZoneID, "foobar.hyper.converged.", "A")
-	if err != nil {
-		t.Errorf("expected nil error, got: %s", err)
-	}
-
-	if !reflect.DeepEqual(out, expected) {
-		t.Errorf("expected %+v, got %+v", expected, out)
-	}
-
-	// test with wrong name
-	out, err = r.GetRecord(context.TODO(), testHostedZoneID, "foobaz.hyper.converged", "A")
-	if err == nil || out != nil {
-		t.Error("expected error got nil")
-	}
-
-	if aerr, ok := err.(apierror.Error); ok {
-		if aerr.Code != apierror.ErrNotFound {
-			t.Errorf("expected error code %s, got: %s", apierror.ErrNotFound, aerr.Code)
-		}
-	} else {
-		t.Errorf("expected apierror.Error, got: %s", reflect.TypeOf(err).String())
-	}
-
-	// test with wrong type
-	out, err = r.GetRecord(context.TODO(), testHostedZoneID, "foobar.hyper.converged", "CNAME")
-	if err == nil || out != nil {
-		t.Error("expected error got nil")
-	}
-
-	if aerr, ok := err.(apierror.Error); ok {
-		if aerr.Code != apierror.ErrNotFound {
-			t.Errorf("expected error code %s, got: %s", apierror.ErrNotFound, aerr.Code)
-		}
-	} else {
-		t.Errorf("expected apierror.Error, got: %s", reflect.TypeOf(err).String())
-	}
-
-	// Test an error from the ListRecords call
-	//
-	// * ErrCodeNoSuchHostedZone "NoSuchHostedZone"
-	// No hosted zone exists with the ID that you specified.
-	r.Service.(*mockRoute53Client).err = awserr.New(route53.ErrCodeNoSuchHostedZone, "NoSuchHostedZone", nil)
-	_, err = r.GetRecord(context.TODO(), testHostedZoneID, "some.other.host", "A")
-	if aerr, ok := err.(apierror.Error); ok {
-		if aerr.Code != apierror.ErrNotFound {
-			t.Errorf("expected error code %s, got: %s", apierror.ErrNotFound, aerr.Code)
-		}
-	} else {
-		t.Errorf("expected apierror.Error, got: %s", reflect.TypeOf(err).String())
-	}
-
-	// test some other, unexpected AWS error
-	r.Service.(*mockRoute53Client).err = awserr.New("UnknownThingyBrokeYo", "ThingyBroke", nil)
-	_, err = r.GetRecord(context.TODO(), testHostedZoneID, "some.other.host", "A")
-	if aerr, ok := err.(apierror.Error); ok {
-		if aerr.Code != apierror.ErrBadRequest {
-			t.Errorf("expected error code %s, got: %s", apierror.ErrBadRequest, aerr.Code)
-		}
-	} else {
-		t.Errorf("expected apierror.Error, got: %s", reflect.TypeOf(err).String())
-	}
-
-	// test non-aws error
-	r.Service.(*mockRoute53Client).err = errors.New("things blowing up!")
-	_, err = r.GetRecord(context.TODO(), testHostedZoneID, "some.other.host", "A")
-	if aerr, ok := err.(apierror.Error); ok {
-		if aerr.Code != apierror.ErrInternalError {
-			t.Errorf("expected error code %s, got: %s", apierror.ErrInternalError, aerr.Code)
-		}
-	} else {
-		t.Errorf("expected apierror.Error, got: %s", reflect.TypeOf(err).String())
-	}
-}
-
 func TestGetRecordByName(t *testing.T) {
 	r := Route53{
 		Service: newmockRoute53Client(t, nil),
@@ -460,6 +366,15 @@ func TestGetRecordByName(t *testing.T) {
 
 	expected := &testResourceRecordSet
 	out, err := r.GetRecordByName(context.TODO(), testHostedZoneID, "foobar.hyper.converged", "A")
+	if err != nil {
+		t.Errorf("expected nil error, got: %s", err)
+	}
+
+	if !reflect.DeepEqual(out, expected) {
+		t.Errorf("expected %+v, got %+v", expected, out)
+	}
+
+	out, err = r.GetRecordByName(context.TODO(), testHostedZoneID, "foobar.hyper.converged.", "A")
 	if err != nil {
 		t.Errorf("expected nil error, got: %s", err)
 	}
