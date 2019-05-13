@@ -2,6 +2,7 @@ package cloudfront
 
 import (
 	"context"
+	"fmt"
 
 	"github.com/YaleSpinup/s3-api/apierror"
 	"github.com/aws/aws-sdk-go/aws"
@@ -48,4 +49,37 @@ func (c *CloudFront) ListDistributions(ctx context.Context) ([]*cloudfront.Distr
 	}
 
 	return distributions, nil
+}
+
+// GetDistributionByName gets a cloudfront distribution by the name (by searching until it finds the matching alias)
+func (c *CloudFront) GetDistributionByName(ctx context.Context, name string) (*cloudfront.DistributionSummary, error) {
+	log.Infof("searching for cloudfront distribution %s", name)
+
+	input := &cloudfront.ListDistributionsInput{MaxItems: aws.Int64(100)}
+
+	var distribution *cloudfront.DistributionSummary
+	err := c.Service.ListDistributionsPagesWithContext(ctx, input,
+		func(out *cloudfront.ListDistributionsOutput, lastPage bool) bool {
+			for _, dist := range out.DistributionList.Items {
+				log.Debugf("checking %+v aliases against name %s", dist, name)
+				for _, alias := range dist.Aliases.Items {
+					log.Debugf("checking alias %s against name %s", aws.StringValue(alias), name)
+					if aws.StringValue(alias) == name {
+						distribution = dist
+						return false
+					}
+				}
+			}
+			return true
+		})
+	if err != nil {
+		return nil, ErrCode("failed to list cloudfront distributions", err)
+	}
+
+	if distribution == nil {
+		msg := fmt.Sprintf("cloudfront distribution not found with name %s", name)
+		err = apierror.New(apierror.ErrNotFound, msg, nil)
+	}
+
+	return distribution, err
 }
