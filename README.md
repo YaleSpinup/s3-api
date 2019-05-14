@@ -732,7 +732,54 @@ PUT `/v1/s3/{account}/websites/{website}`
 
 DELETE `/v1/s3/{account}/websites/{website}`
 
-*See [Delete a bucket](#delete-a-bucket)*
+#### Response
+
+Responds with a status code and the deleted objects
+
+```json
+{
+    "Website": "foobar.bulldogs.cloud",
+    "Users": [],
+    "Policy": "foobar.bulldogs.cloud-BktAdmPlc",
+    "Group": "foobar.bulldogs.cloud-BktAdmGrp",
+    "DNSRecord": {
+        "AliasTarget": {
+            "DNSName": "abcdefgh12345.cloudfront.net.",
+            "EvaluateTargetHealth": false,
+            "HostedZoneId": "ABCDEFGHIJ12345"
+        },
+        "Name": "foobar.bulldogs.cloud.",
+        "Type": "A",
+        ...
+    },
+    "Distribution": {
+        "ARN": "arn:aws:cloudfront::12345678910:distribution/ABCDEFGHIJKL",
+        "DistributionConfig": {
+            "Aliases": {
+                "Items": [
+                    "foobar.bulldogs.cloud"
+                ],
+                "Quantity": 1
+            },
+            ...
+        },
+        "DomainName": "1234567abcdef.cloudfront.net",
+        "Id": "ABCDEFGHIJKLMNOP",
+        "Status": "InProgress"
+        ...
+    },
+}
+```
+
+| Response Code                 | Definition                      |  
+| ----------------------------- | --------------------------------|  
+| **200 OK**                    | deleted bucket                  |  
+| **400 Bad Request**           | badly formed request            |  
+| **403 Forbidden**             | you don't have access to bucket |  
+| **404 Not Found**             | account or bucket not found     |  
+| **409 Conflict**              | bucket is not empty             |
+| **500 Internal Server Error** | a server error occurred         |
+
 
 ### Create a website user
 

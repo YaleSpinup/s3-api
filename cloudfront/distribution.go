@@ -29,11 +29,38 @@ func (c *CloudFront) CreateDistribution(ctx context.Context, distribution *cloud
 	return out.Distribution, nil
 }
 
+// DisableDistribution disables a cloudfront distribution
+func (c *CloudFront) DisableDistribution(ctx context.Context, id string) (*cloudfront.Distribution, error) {
+	if id == "" {
+		return nil, apierror.New(apierror.ErrBadRequest, "invalid input", nil)
+	}
+
+	log.Infof("disabling cloudfront distributions Id: %s", id)
+
+	// Get the distribution config from the passed distribution id.  This is required to get the most recent ETag for the distribution.
+	config, err := c.Service.GetDistributionConfigWithContext(ctx, &cloudfront.GetDistributionConfigInput{Id: aws.String(id)})
+	if err != nil {
+		return nil, ErrCode("failed to get details about cloudfront distribution Id: "+id, err)
+	}
+
+	config.DistributionConfig.Enabled = aws.Bool(false)
+	out, err := c.Service.UpdateDistributionWithContext(ctx, &cloudfront.UpdateDistributionInput{
+		DistributionConfig: config.DistributionConfig,
+		IfMatch:            config.ETag,
+		Id:                 aws.String(id),
+	})
+	if err != nil {
+		return nil, ErrCode("failed to disable cloudfront distribution Id:"+id, err)
+	}
+
+	return out.Distribution, nil
+}
+
 // ListDistributions lists all cloudfront distributions
 func (c *CloudFront) ListDistributions(ctx context.Context) ([]*cloudfront.DistributionSummary, error) {
 	distributions := []*cloudfront.DistributionSummary{}
 
-	log.Info("listing cloudfrnot distributions ")
+	log.Info("listing cloudfront distributions")
 
 	input := cloudfront.ListDistributionsInput{MaxItems: aws.Int64(100)}
 	truncated := true

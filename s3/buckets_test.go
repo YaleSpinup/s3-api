@@ -315,18 +315,13 @@ func TestDeleteBucket(t *testing.T) {
 	s := S3{Service: newMockS3Client(t, nil)}
 
 	// test success
-	expected := &s3.DeleteBucketOutput{}
-	out, err := s.DeleteEmptyBucket(context.TODO(), &s3.DeleteBucketInput{Bucket: aws.String("testbucket")})
+	err := s.DeleteEmptyBucket(context.TODO(), &s3.DeleteBucketInput{Bucket: aws.String("testbucket")})
 	if err != nil {
 		t.Errorf("expected nil error, got: %s", err)
 	}
 
-	if !reflect.DeepEqual(out, expected) {
-		t.Errorf("expected %+v, got %+v", expected, out)
-	}
-
 	// test nil input
-	_, err = s.DeleteEmptyBucket(context.TODO(), nil)
+	err = s.DeleteEmptyBucket(context.TODO(), nil)
 	if aerr, ok := err.(apierror.Error); ok {
 		if aerr.Code != apierror.ErrBadRequest {
 			t.Errorf("expected error code %s, got: %s", apierror.ErrBadRequest, aerr.Code)
@@ -336,7 +331,7 @@ func TestDeleteBucket(t *testing.T) {
 	}
 
 	// test empty bucket name
-	_, err = s.DeleteEmptyBucket(context.TODO(), &s3.DeleteBucketInput{})
+	err = s.DeleteEmptyBucket(context.TODO(), &s3.DeleteBucketInput{})
 	if aerr, ok := err.(apierror.Error); ok {
 		if aerr.Code != apierror.ErrBadRequest {
 			t.Errorf("expected error code %s, got: %s", apierror.ErrBadRequest, aerr.Code)
@@ -347,7 +342,7 @@ func TestDeleteBucket(t *testing.T) {
 
 	// test ErrCodeNoSuchBucket
 	s.Service.(*mockS3Client).err = awserr.New(s3.ErrCodeNoSuchBucket, "bucket not found", nil)
-	_, err = s.DeleteEmptyBucket(context.TODO(), &s3.DeleteBucketInput{Bucket: aws.String("testbucket")})
+	err = s.DeleteEmptyBucket(context.TODO(), &s3.DeleteBucketInput{Bucket: aws.String("testbucket")})
 	if aerr, ok := err.(apierror.Error); ok {
 		if aerr.Code != apierror.ErrNotFound {
 			t.Errorf("expected error code %s, got: %s", apierror.ErrNotFound, aerr.Code)
@@ -358,7 +353,7 @@ func TestDeleteBucket(t *testing.T) {
 
 	// test NotFound
 	s.Service.(*mockS3Client).err = awserr.New("NotFound", "bucket not found", nil)
-	_, err = s.DeleteEmptyBucket(context.TODO(), &s3.DeleteBucketInput{Bucket: aws.String("testbucket")})
+	err = s.DeleteEmptyBucket(context.TODO(), &s3.DeleteBucketInput{Bucket: aws.String("testbucket")})
 	if aerr, ok := err.(apierror.Error); ok {
 		if aerr.Code != apierror.ErrNotFound {
 			t.Errorf("expected error code %s, got: %s", apierror.ErrNotFound, aerr.Code)
@@ -369,7 +364,7 @@ func TestDeleteBucket(t *testing.T) {
 
 	// test BucketNotEmpty
 	s.Service.(*mockS3Client).err = awserr.New("BucketNotEmpty", "bucket not empty", nil)
-	_, err = s.DeleteEmptyBucket(context.TODO(), &s3.DeleteBucketInput{Bucket: aws.String("testbucket")})
+	err = s.DeleteEmptyBucket(context.TODO(), &s3.DeleteBucketInput{Bucket: aws.String("testbucket")})
 	if aerr, ok := err.(apierror.Error); ok {
 		if aerr.Code != apierror.ErrConflict {
 			t.Errorf("expected error code %s, got: %s", apierror.ErrConflict, aerr.Code)
@@ -380,7 +375,7 @@ func TestDeleteBucket(t *testing.T) {
 
 	// test Forbidden
 	s.Service.(*mockS3Client).err = awserr.New("Forbidden", "bucket not empty", nil)
-	_, err = s.DeleteEmptyBucket(context.TODO(), &s3.DeleteBucketInput{Bucket: aws.String("testbucket")})
+	err = s.DeleteEmptyBucket(context.TODO(), &s3.DeleteBucketInput{Bucket: aws.String("testbucket")})
 	if aerr, ok := err.(apierror.Error); ok {
 		if aerr.Code != apierror.ErrForbidden {
 			t.Errorf("expected error code %s, got: %s", apierror.ErrForbidden, aerr.Code)
@@ -391,7 +386,7 @@ func TestDeleteBucket(t *testing.T) {
 
 	// test some other, unexpected AWS error
 	s.Service.(*mockS3Client).err = awserr.New(s3.ErrCodeNoSuchKey, "no such key", nil)
-	_, err = s.DeleteEmptyBucket(context.TODO(), &s3.DeleteBucketInput{Bucket: aws.String("testbucket")})
+	err = s.DeleteEmptyBucket(context.TODO(), &s3.DeleteBucketInput{Bucket: aws.String("testbucket")})
 	if aerr, ok := err.(apierror.Error); ok {
 		if aerr.Code != apierror.ErrBadRequest {
 			t.Errorf("expected error code %s, got: %s", apierror.ErrBadRequest, aerr.Code)
@@ -402,7 +397,7 @@ func TestDeleteBucket(t *testing.T) {
 
 	// test non-aws error
 	s.Service.(*mockS3Client).err = errors.New("things blowing up!")
-	_, err = s.DeleteEmptyBucket(context.TODO(), &s3.DeleteBucketInput{Bucket: aws.String("testbucket")})
+	err = s.DeleteEmptyBucket(context.TODO(), &s3.DeleteBucketInput{Bucket: aws.String("testbucket")})
 	if aerr, ok := err.(apierror.Error); ok {
 		if aerr.Code != apierror.ErrInternalError {
 			t.Errorf("expected error code %s, got: %s", apierror.ErrInternalError, aerr.Code)

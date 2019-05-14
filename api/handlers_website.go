@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"strings"
 
 	"github.com/YaleSpinup/s3-api/apierror"
 	"github.com/aws/aws-sdk-go/aws"
@@ -99,7 +100,7 @@ func (s *server) CreateWebsiteHandler(w http.ResponseWriter, r *http.Request) {
 	// append bucket delete to rollback tasks
 	rbfunc := func() error {
 		return func() error {
-			_, err := s3Service.DeleteEmptyBucket(r.Context(), &s3.DeleteBucketInput{Bucket: aws.String(bucketName)})
+			err := s3Service.DeleteEmptyBucket(r.Context(), &s3.DeleteBucketInput{Bucket: aws.String(bucketName)})
 			return err
 		}()
 	}
@@ -255,13 +256,15 @@ func (s *server) CreateWebsiteHandler(w http.ResponseWriter, r *http.Request) {
 		handleError(w, errors.Wrap(err, msg))
 		return
 	}
-	// TODO: rollback for cloudfront distribution
-	// rbfunc = func() error {
-	// 	return func() error {
-	// 		return cloudFrontService.DeleteDistribution(r.Context(), ...)
-	// 	}()
-	// }
-	// rollBackTasks = append(rollBackTasks, rbfunc)
+
+	// append disable cloudfront distribution to rollback tasks
+	rbfunc = func() error {
+		return func() error {
+			_, err := cloudFrontService.DisableDistribution(r.Context(), aws.StringValue(distribution.Id))
+			return err
+		}()
+	}
+	rollBackTasks = append(rollBackTasks, rbfunc)
 
 	dnsChange, err := route53Service.CreateRecord(r.Context(), domain.HostedZoneID, &route53.ResourceRecordSet{
 		AliasTarget: &route53.AliasTarget{
@@ -272,6 +275,7 @@ func (s *server) CreateWebsiteHandler(w http.ResponseWriter, r *http.Request) {
 		Name: aws.String(bucketName),
 		Type: aws.String("A"),
 	})
+
 	if err != nil {
 		msg := fmt.Sprintf("failed to create route53 alias record for website %s: %s", bucketName, err.Error())
 		handleError(w, errors.Wrap(err, msg))
@@ -392,6 +396,177 @@ func (s *server) WebsiteShowHandler(w http.ResponseWriter, r *http.Request) {
 	j, err := json.Marshal(output)
 	if err != nil {
 		log.Errorf("cannot marshal response (%v) into JSON: %s", output, err)
+		w.WriteHeader(http.StatusInternalServerError)
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusOK)
+	w.Write(j)
+}
+
+// WebsiteDeleteHandler deletes all of the resources for a static website.  The operations are
+// 1. the website bucket is deleted, this will fail if the bucket is not empty
+// 2. a list of policies attached to the bucket admin group (<bucketName>-BktAdmGrp) is gathered
+// 3. each of those policies is detached from the group and if it starts with '<bucketName>-', it is deleted
+// 4. the bucket admin group is deleted
+// 5. delete the route53 dns record
+// 6. disable the cloudfront distribution
+func (s *server) WebsiteDeleteHandler(w http.ResponseWriter, r *http.Request) {
+	w = LogWriter{w}
+	vars := mux.Vars(r)
+	account := vars["account"]
+	website := vars["website"]
+
+	s3Service, ok := s.s3Services[account]
+	if !ok {
+		log.Errorf("account not found: %s", account)
+		w.WriteHeader(http.StatusNotFound)
+		return
+	}
+
+	iamService, ok := s.iamServices[account]
+	if !ok {
+		msg := fmt.Sprintf("IAM service not found for account: %s", account)
+		handleError(w, apierror.New(apierror.ErrNotFound, msg, nil))
+		return
+	}
+
+	cloudFrontService, ok := s.cloudFrontServices[account]
+	if !ok {
+		msg := fmt.Sprintf("CloudFront service not found for account: %s", account)
+		handleError(w, apierror.New(apierror.ErrNotFound, msg, nil))
+		return
+	}
+
+	route53Service, ok := s.route53Services[account]
+	if !ok {
+		msg := fmt.Sprintf("Route53 service not found for account: %s", account)
+		handleError(w, apierror.New(apierror.ErrNotFound, msg, nil))
+		return
+	}
+
+	domain, err := cloudFrontService.WebsiteDomain(website)
+	if err != nil {
+		msg := fmt.Sprintf("failed to validate website domain %s", website)
+		handleError(w, apierror.New(apierror.ErrBadRequest, msg, err))
+		return
+	}
+
+	err = s3Service.DeleteEmptyBucket(r.Context(), &s3.DeleteBucketInput{Bucket: aws.String(website)})
+	if err != nil {
+		handleError(w, err)
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusOK)
+
+	groupName := fmt.Sprintf("%s-BktAdmGrp", website)
+	policies, err := iamService.ListGroupPolicies(r.Context(), &iam.ListAttachedGroupPoliciesInput{GroupName: aws.String(groupName)})
+	if err != nil {
+		log.Warnf("failed to list group policies when deleting website %s: %s", website, err)
+		j, _ := json.Marshal("failed to list group policies: " + err.Error())
+		w.Write(j)
+	}
+
+	var deletedPolicy *string
+	for _, p := range policies {
+		if err := iamService.DetachGroupPolicy(r.Context(), &iam.DetachGroupPolicyInput{
+			GroupName: aws.String(groupName),
+			PolicyArn: p.PolicyArn,
+		}); err != nil {
+			log.Warnf("failed to detach policy %s from group %s when deleting website %s: %s", aws.StringValue(p.PolicyArn), groupName, website, err)
+			j, _ := json.Marshal("failed to detatch group policy: " + err.Error())
+			w.Write(j)
+			return
+		}
+
+		if strings.HasPrefix(aws.StringValue(p.PolicyName), website+"-") {
+			if _, err := iamService.DeletePolicy(r.Context(), &iam.DeletePolicyInput{PolicyArn: p.PolicyArn}); err != nil {
+				log.Warnf("failed to delete group policy %s when deleting website %s: %s", aws.StringValue(p.PolicyArn), website, err)
+				j, _ := json.Marshal("failed to delete group policy: " + err.Error())
+				w.Write(j)
+				return
+			}
+			deletedPolicy = p.PolicyName
+			break
+		}
+	}
+
+	users, err := iamService.ListGroupUsers(r.Context(), &iam.GetGroupInput{GroupName: aws.String(groupName)})
+	if err != nil {
+		log.Warnf("failed to list group's users when deleting website %s: %s", website, err)
+		j, _ := json.Marshal("failed to list group users: " + err.Error())
+		w.Write(j)
+	}
+
+	for _, u := range users {
+		if err := iamService.RemoveUserFromGroup(r.Context(), &iam.RemoveUserFromGroupInput{UserName: u.UserName, GroupName: aws.String(groupName)}); err != nil {
+			log.Warnf("failed to remove user %s from group %s when deleting website %s: %s", aws.StringValue(u.UserName), groupName, website, err)
+			j, _ := json.Marshal("failed to remove user from group group: " + err.Error())
+			w.Write(j)
+			return
+		}
+	}
+
+	if _, err := iamService.DeleteGroup(r.Context(), &iam.DeleteGroupInput{GroupName: aws.String(groupName)}); err != nil {
+		log.Warnf("failed to delete group %s when deleting website %s: %s", groupName, website, err)
+		j, _ := json.Marshal("failed to delete group: " + err.Error())
+		w.Write(j)
+		return
+	}
+
+	// find the cloudfront distribution from the website name
+	distributionSummary, err := cloudFrontService.GetDistributionByName(r.Context(), website)
+	if err != nil {
+		handleError(w, err)
+		return
+	}
+
+	// delete the alias record from route53
+	dnsChange, err := route53Service.DeleteRecord(r.Context(), domain.HostedZoneID, &route53.ResourceRecordSet{
+		AliasTarget: &route53.AliasTarget{
+			DNSName:              distributionSummary.DomainName,
+			HostedZoneId:         aws.String("Z2FDTNDATAQYW2"),
+			EvaluateTargetHealth: aws.Bool(false),
+		},
+		Name: aws.String(website),
+		Type: aws.String("A"),
+	})
+	if err != nil {
+		msg := fmt.Sprintf("failed to delete route53 alias record for website %s: %s", website, err.Error())
+		handleError(w, errors.Wrap(err, msg))
+		return
+	}
+
+	// disable the distribution, deletion will occur asynchronously
+	distribution, err := cloudFrontService.DisableDistribution(r.Context(), aws.StringValue(distributionSummary.Id))
+	if err != nil {
+		msg := fmt.Sprintf("failed to disable cloudfront distribution for website %s: %s", website, err.Error())
+		handleError(w, errors.Wrap(err, msg))
+		return
+	}
+
+	output := struct {
+		Website      *string
+		Users        []*iam.User
+		Policy       *string
+		Group        *string
+		Distribution *cloudfront.Distribution
+		DnsChange    *route53.ChangeInfo
+	}{
+		aws.String(website),
+		users,
+		deletedPolicy,
+		aws.String(groupName),
+		distribution,
+		dnsChange,
+	}
+
+	j, err := json.Marshal(output)
+	if err != nil {
+		log.Errorf("cannot marshal reasponse(%v) into JSON: %s", output, err)
 		w.WriteHeader(http.StatusInternalServerError)
 		return
 	}
