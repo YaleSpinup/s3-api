@@ -129,6 +129,9 @@ func (s *S3) GetBucketTags(ctx context.Context, bucket string) ([]*s3.Tag, error
 	if err != nil {
 		if aerr, ok := err.(awserr.Error); ok {
 			switch aerr.Code() {
+			case s3.ErrCodeNoSuchBucket, "NotFound":
+				msg := fmt.Sprintf("bucket %s not found: %s", bucket, aerr.Error())
+				return []*s3.Tag{}, apierror.New(apierror.ErrNotFound, msg, err)
 			case "NoSuchTagSet":
 				return []*s3.Tag{}, nil
 			default:
@@ -156,6 +159,9 @@ func (s *S3) TagBucket(ctx context.Context, bucket string, tags []*s3.Tag) error
 	}); err != nil {
 		if aerr, ok := err.(awserr.Error); ok {
 			switch aerr.Code() {
+			case s3.ErrCodeNoSuchBucket, "NotFound":
+				msg := fmt.Sprintf("bucket %s not found: %s", bucket, aerr.Error())
+				return apierror.New(apierror.ErrNotFound, msg, err)
 			default:
 				return apierror.New(apierror.ErrBadRequest, aerr.Message(), err)
 			}
@@ -185,6 +191,9 @@ func (s *S3) UpdateWebsiteConfig(ctx context.Context, input *s3.PutBucketWebsite
 	if err != nil {
 		if aerr, ok := err.(awserr.Error); ok {
 			switch aerr.Code() {
+			case s3.ErrCodeNoSuchBucket, "NotFound":
+				msg := fmt.Sprintf("bucket %s not found: %s", aws.StringValue(input.Bucket), aerr.Error())
+				return apierror.New(apierror.ErrNotFound, msg, err)
 			default:
 				return apierror.New(apierror.ErrBadRequest, aerr.Message(), err)
 			}
@@ -207,6 +216,9 @@ func (s *S3) UpdateBucketPolicy(ctx context.Context, input *s3.PutBucketPolicyIn
 	if err != nil {
 		if aerr, ok := err.(awserr.Error); ok {
 			switch aerr.Code() {
+			case s3.ErrCodeNoSuchBucket, "NotFound":
+				msg := fmt.Sprintf("bucket %s not found: %s", aws.StringValue(input.Bucket), aerr.Error())
+				return apierror.New(apierror.ErrNotFound, msg, err)
 			default:
 				return apierror.New(apierror.ErrBadRequest, aerr.Message(), err)
 			}
@@ -229,6 +241,9 @@ func (s *S3) UpdateBucketEncryption(ctx context.Context, input *s3.PutBucketEncr
 	if err != nil {
 		if aerr, ok := err.(awserr.Error); ok {
 			switch aerr.Code() {
+			case s3.ErrCodeNoSuchBucket, "NotFound":
+				msg := fmt.Sprintf("bucket %s not found: %s", aws.StringValue(input.Bucket), aerr.Error())
+				return apierror.New(apierror.ErrNotFound, msg, err)
 			default:
 				return apierror.New(apierror.ErrBadRequest, aerr.Message(), err)
 			}
@@ -268,6 +283,9 @@ func (s *S3) UpdateBucketLogging(ctx context.Context, bucket, logBucket, logPref
 	}); err != nil {
 		if aerr, ok := err.(awserr.Error); ok {
 			switch aerr.Code() {
+			case s3.ErrCodeNoSuchBucket, "NotFound":
+				msg := fmt.Sprintf("bucket %s not found: %s", bucket, aerr.Error())
+				return apierror.New(apierror.ErrNotFound, msg, err)
 			default:
 				return apierror.New(apierror.ErrBadRequest, aerr.Message(), err)
 			}
