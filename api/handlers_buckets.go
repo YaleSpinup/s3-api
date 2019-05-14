@@ -73,7 +73,7 @@ func (s *server) BucketCreateHandler(w http.ResponseWriter, r *http.Request) {
 	// append bucket delete to rollback tasks
 	rbfunc := func() error {
 		return func() error {
-			if _, err := s3Service.DeleteEmptyBucket(r.Context(), &s3.DeleteBucketInput{Bucket: aws.String(bucketName)}); err != nil {
+			if err := s3Service.DeleteEmptyBucket(r.Context(), &s3.DeleteBucketInput{Bucket: aws.String(bucketName)}); err != nil {
 				return err
 			}
 			return nil
@@ -290,7 +290,7 @@ func (s *server) BucketDeleteHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	_, err := s3Service.DeleteEmptyBucket(r.Context(), &s3.DeleteBucketInput{Bucket: aws.String(bucket)})
+	err := s3Service.DeleteEmptyBucket(r.Context(), &s3.DeleteBucketInput{Bucket: aws.String(bucket)})
 	if err != nil {
 		handleError(w, err)
 		return

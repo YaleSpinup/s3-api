@@ -71,35 +71,35 @@ func (s *S3) CreateBucket(ctx context.Context, input *s3.CreateBucketInput) (*s3
 }
 
 // DeleteEmptyBucket handles deleting an empty bucket
-func (s *S3) DeleteEmptyBucket(ctx context.Context, input *s3.DeleteBucketInput) (*s3.DeleteBucketOutput, error) {
+func (s *S3) DeleteEmptyBucket(ctx context.Context, input *s3.DeleteBucketInput) error {
 	if input == nil || aws.StringValue(input.Bucket) == "" {
-		return nil, apierror.New(apierror.ErrBadRequest, "invalid input", nil)
+		return apierror.New(apierror.ErrBadRequest, "invalid input", nil)
 	}
 
 	log.Infof("deleting bucket: %s", aws.StringValue(input.Bucket))
 
-	output, err := s.Service.DeleteBucketWithContext(ctx, input)
+	_, err := s.Service.DeleteBucketWithContext(ctx, input)
 	if err != nil {
 		if aerr, ok := err.(awserr.Error); ok {
 			switch aerr.Code() {
 			case s3.ErrCodeNoSuchBucket, "NotFound":
 				msg := fmt.Sprintf("bucket %s not found: %s", aws.StringValue(input.Bucket), aerr.Error())
-				return nil, apierror.New(apierror.ErrNotFound, msg, err)
+				return apierror.New(apierror.ErrNotFound, msg, err)
 			case "BucketNotEmpty":
 				msg := fmt.Sprintf("trying to delete bucket %s that is not empty: %s", aws.StringValue(input.Bucket), aerr.Error())
-				return nil, apierror.New(apierror.ErrConflict, msg, err)
+				return apierror.New(apierror.ErrConflict, msg, err)
 			case "Forbidden":
 				msg := fmt.Sprintf("forbidden to access requested bucket %s: %s", aws.StringValue(input.Bucket), aerr.Error())
-				return nil, apierror.New(apierror.ErrForbidden, msg, err)
+				return apierror.New(apierror.ErrForbidden, msg, err)
 			default:
-				return nil, apierror.New(apierror.ErrBadRequest, aerr.Message(), err)
+				return apierror.New(apierror.ErrBadRequest, aerr.Message(), err)
 			}
 		}
 
-		return nil, apierror.New(apierror.ErrInternalError, "unknown error occurred", err)
+		return apierror.New(apierror.ErrInternalError, "unknown error occurred", err)
 	}
 
-	return output, err
+	return err
 }
 
 // ListBuckets handles getting a list of buckets in an account

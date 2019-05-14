@@ -26,6 +26,7 @@ var testDistribution1 = &cloudfront.DistributionSummary{
 	},
 	DomainName: aws.String("zzzzzzzzzzzzz.cloudfront.net"),
 	Enabled:    aws.Bool(true),
+	Id:         aws.String("AAAABBBBCCCCDDDD"),
 	Origins: &cloudfront.Origins{
 		Items: []*cloudfront.Origin{
 			&cloudfront.Origin{
@@ -49,6 +50,7 @@ var testDistribution2 = &cloudfront.DistributionSummary{
 	},
 	DomainName: aws.String("yyyyyyyyyyyyyy.cloudfront.net"),
 	Enabled:    aws.Bool(true),
+	Id:         aws.String("EEEEFFFFGGGGHHHH"),
 	Origins: &cloudfront.Origins{
 		Items: []*cloudfront.Origin{
 			&cloudfront.Origin{
@@ -72,6 +74,7 @@ var testDistribution3 = &cloudfront.DistributionSummary{
 	},
 	DomainName: aws.String("xxxxxxxxxxxxxxxx.cloudfront.net"),
 	Enabled:    aws.Bool(true),
+	Id:         aws.String("IIIIJJJJKKKKLLLL"),
 	Origins: &cloudfront.Origins{
 		Items: []*cloudfront.Origin{
 			&cloudfront.Origin{
@@ -122,6 +125,66 @@ func (m *mockCloudFrontClient) ListDistributionsPagesWithContext(ctx context.Con
 	}, true)
 
 	return nil
+}
+
+func (m *mockCloudFrontClient) GetDistributionConfigWithContext(ctx context.Context, input *cloudfront.GetDistributionConfigInput, opts ...request.Option) (*cloudfront.GetDistributionConfigOutput, error) {
+	if m.err != nil {
+		return nil, m.err
+	}
+
+	var dist *cloudfront.DistributionSummary
+	for _, d := range []*cloudfront.DistributionSummary{testDistribution1, testDistribution2, testDistribution3} {
+		if aws.StringValue(d.Id) == aws.StringValue(input.Id) {
+			dist = d
+			break
+		}
+	}
+
+	if dist == nil {
+		return nil, awserr.New(cloudfront.ErrCodeNoSuchDistribution, "Distribution Not Found", nil)
+	}
+
+	return &cloudfront.GetDistributionConfigOutput{
+		DistributionConfig: &cloudfront.DistributionConfig{
+			Aliases:              dist.Aliases,
+			Comment:              dist.Comment,
+			DefaultCacheBehavior: dist.DefaultCacheBehavior,
+			Enabled:              dist.Enabled,
+			Origins:              dist.Origins,
+		},
+		ETag: aws.String("ETAGETAGETAGETAG"),
+	}, nil
+}
+
+func (m *mockCloudFrontClient) UpdateDistributionWithContext(ctx context.Context, input *cloudfront.UpdateDistributionInput, opts ...request.Option) (*cloudfront.UpdateDistributionOutput, error) {
+	if m.err != nil {
+		return nil, m.err
+	}
+
+	var dist *cloudfront.DistributionSummary
+	for _, d := range []*cloudfront.DistributionSummary{testDistribution1, testDistribution2, testDistribution3} {
+		if aws.StringValue(d.Id) == aws.StringValue(input.Id) {
+			dist = d
+			break
+		}
+	}
+
+	if dist == nil {
+		return nil, awserr.New(cloudfront.ErrCodeNoSuchDistribution, "Distribution Not Found", nil)
+	}
+
+	if aws.StringValue(input.IfMatch) != "ETAGETAGETAGETAG" {
+		return nil, awserr.New(cloudfront.ErrCodeInvalidIfMatchVersion, "ETag missing or invalid", nil)
+	}
+
+	return &cloudfront.UpdateDistributionOutput{
+		Distribution: &cloudfront.Distribution{
+			ARN:                dist.ARN,
+			DistributionConfig: input.DistributionConfig,
+			Status:             aws.String("InProgress"),
+		},
+		ETag: aws.String("GATEGATEGATEGATE"),
+	}, nil
 }
 
 func TestCreateDistribution(t *testing.T) {
@@ -286,6 +349,87 @@ func TestCreateDistribution(t *testing.T) {
 	if aerr, ok := err.(apierror.Error); ok {
 		if aerr.Code != apierror.ErrInternalError {
 			t.Errorf("expected error code %s, got: %s", apierror.ErrInternalError, aerr.Code)
+		}
+	} else {
+		t.Errorf("expected apierror.Error, got: %s", reflect.TypeOf(err).String())
+	}
+}
+
+func TestDisableDistribution(t *testing.T) {
+	c := CloudFront{
+		Service: newmockCloudFrontClient(t, nil),
+		Domains: map[string]common.Domain{
+			"hyper.converged": common.Domain{
+				CertArn: "arn:aws:acm::12345678910:certificate/111111111-2222-3333-4444-555555555555",
+			},
+		},
+		WebsiteEndpoint: "s3-website-us-east-1.amazonaws.com",
+	}
+
+	tests := map[*cloudfront.DistributionSummary]*cloudfront.Distribution{
+		testDistribution1: &cloudfront.Distribution{
+			ARN: testDistribution1.ARN,
+			DistributionConfig: &cloudfront.DistributionConfig{
+				Aliases:              testDistribution1.Aliases,
+				Comment:              testDistribution1.Comment,
+				DefaultCacheBehavior: testDistribution1.DefaultCacheBehavior,
+				Origins:              testDistribution1.Origins,
+				Enabled:              aws.Bool(false),
+			},
+			Status: aws.String("InProgress"),
+		},
+		testDistribution2: &cloudfront.Distribution{
+			ARN: testDistribution2.ARN,
+			DistributionConfig: &cloudfront.DistributionConfig{
+				Aliases:              testDistribution2.Aliases,
+				Comment:              testDistribution2.Comment,
+				DefaultCacheBehavior: testDistribution2.DefaultCacheBehavior,
+				Origins:              testDistribution2.Origins,
+				Enabled:              aws.Bool(false),
+			},
+			Status: aws.String("InProgress"),
+		},
+		testDistribution3: &cloudfront.Distribution{
+			ARN: testDistribution3.ARN,
+			DistributionConfig: &cloudfront.DistributionConfig{
+				Aliases:              testDistribution3.Aliases,
+				Comment:              testDistribution3.Comment,
+				DefaultCacheBehavior: testDistribution3.DefaultCacheBehavior,
+				Origins:              testDistribution3.Origins,
+				Enabled:              aws.Bool(false),
+			},
+			Status: aws.String("InProgress"),
+		},
+	}
+
+	// test success
+	for _, testDist := range []*cloudfront.DistributionSummary{testDistribution1, testDistribution2, testDistribution3} {
+		expected := tests[testDist]
+		out, err := c.DisableDistribution(context.TODO(), aws.StringValue(testDist.Id))
+		if err != nil {
+			t.Errorf("expected nil error, got: %s", err)
+		}
+
+		if !reflect.DeepEqual(out, expected) {
+			t.Errorf("expected %+v, got %+v", expected, out)
+		}
+	}
+
+	// test empty id input
+	_, err := c.DisableDistribution(context.TODO(), "")
+	if aerr, ok := err.(apierror.Error); ok {
+		if aerr.Code != apierror.ErrBadRequest {
+			t.Errorf("expected error code %s, got: %s", apierror.ErrBadRequest, aerr.Code)
+		}
+	} else {
+		t.Errorf("expected apierror.Error, got: %s", reflect.TypeOf(err).String())
+	}
+
+	// test not found id input
+	_, err = c.DisableDistribution(context.TODO(), "notfoundid")
+	if aerr, ok := err.(apierror.Error); ok {
+		if aerr.Code != apierror.ErrNotFound {
+			t.Errorf("expected error code %s, got: %s", apierror.ErrNotFound, aerr.Code)
 		}
 	} else {
 		t.Errorf("expected apierror.Error, got: %s", reflect.TypeOf(err).String())

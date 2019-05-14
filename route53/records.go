@@ -12,7 +12,7 @@ import (
 	log "github.com/sirupsen/logrus"
 )
 
-// CreateRecord creates a route53 resource record
+// CreateRecord creates a route53 resource record.  This will fail if the record already exists.
 func (r *Route53) CreateRecord(ctx context.Context, zoneID string, record *route53.ResourceRecordSet) (*route53.ChangeInfo, error) {
 	if record == nil {
 		return nil, apierror.New(apierror.ErrBadRequest, "invalid input", nil)
@@ -38,7 +38,33 @@ func (r *Route53) CreateRecord(ctx context.Context, zoneID string, record *route
 	return out.ChangeInfo, nil
 }
 
-// GetRecordByName gets a route53 resource record by name and by type if one is specified
+// DeleteRecord deletes a route53 resource record.
+func (r *Route53) DeleteRecord(ctx context.Context, zoneID string, record *route53.ResourceRecordSet) (*route53.ChangeInfo, error) {
+	if record == nil {
+		return nil, apierror.New(apierror.ErrBadRequest, "invalid input", nil)
+	}
+
+	out, err := r.Service.ChangeResourceRecordSetsWithContext(ctx, &route53.ChangeResourceRecordSetsInput{
+		ChangeBatch: &route53.ChangeBatch{
+			Changes: []*route53.Change{
+				&route53.Change{
+					Action:            aws.String("DELETE"),
+					ResourceRecordSet: record,
+				},
+			},
+			Comment: aws.String("Deleted by s3-api"),
+		},
+		HostedZoneId: aws.String(zoneID),
+	})
+
+	if err != nil {
+		return nil, ErrCode("failed to delete route53 record", err)
+	}
+
+	return out.ChangeInfo, nil
+}
+
+// GetRecordByName gets a route53 resource record by name and by type if one is specified.
 func (r *Route53) GetRecordByName(ctx context.Context, zoneID, name, recordType string) (*route53.ResourceRecordSet, error) {
 	log.Infof("getting route53 record for zone ID %s, name %s, type '%s'", zoneID, name, recordType)
 
