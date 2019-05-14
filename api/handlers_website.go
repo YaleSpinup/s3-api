@@ -410,8 +410,8 @@ func (s *server) WebsiteShowHandler(w http.ResponseWriter, r *http.Request) {
 // 2. a list of policies attached to the bucket admin group (<bucketName>-BktAdmGrp) is gathered
 // 3. each of those policies is detached from the group and if it starts with '<bucketName>-', it is deleted
 // 4. the bucket admin group is deleted
-// 5. delete the route53 dns record
-// 6. disable the cloudfront distribution
+// 5. the route53 dns record is deleted
+// 6. the cloudfront distribution is disabled for async processing
 func (s *server) WebsiteDeleteHandler(w http.ResponseWriter, r *http.Request) {
 	w = LogWriter{w}
 	vars := mux.Vars(r)

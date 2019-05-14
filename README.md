@@ -773,11 +773,11 @@ Responds with a status code and the deleted objects
 
 | Response Code                 | Definition                      |  
 | ----------------------------- | --------------------------------|  
-| **200 OK**                    | deleted bucket                  |  
+| **200 OK**                    | deleted website                 |  
 | **400 Bad Request**           | badly formed request            |  
-| **403 Forbidden**             | you don't have access to bucket |  
-| **404 Not Found**             | account or bucket not found     |  
-| **409 Conflict**              | bucket is not empty             |
+| **403 Forbidden**             | you don't have access           |  
+| **404 Not Found**             | account or website not found    |  
+| **409 Conflict**              | website bucket is not empty     |
 | **500 Internal Server Error** | a server error occurred         |
 
 
