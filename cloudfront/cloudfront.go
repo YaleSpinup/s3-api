@@ -17,7 +17,7 @@ import (
 // CloudFront is a wrapper around the aws cloudfront service with some default config info
 type CloudFront struct {
 	Service         cloudfrontiface.CloudFrontAPI
-	Domains         map[string]common.Domain
+	Domains         map[string]*common.Domain
 	WebsiteEndpoint string
 }
 
@@ -57,7 +57,7 @@ func (c *CloudFront) WebsiteDomain(name string) (*common.Domain, error) {
 		return nil, errors.New("domain not found for website")
 	}
 
-	return &domain, nil
+	return domain, nil
 }
 
 // DefaultWebsiteDistributionConfig generates the cloudfront distribution configuration for an s3 website

@@ -56,7 +56,32 @@ func (c *CloudFront) DisableDistribution(ctx context.Context, id string) (*cloud
 	return out.Distribution, nil
 }
 
-// ListDistributions lists all cloudfront distributions
+// DeleteDistribution deletes a cloudfront distribution
+func (c *CloudFront) DeleteDistribution(ctx context.Context, id string) error {
+	if id == "" {
+		return apierror.New(apierror.ErrBadRequest, "invalid input", nil)
+	}
+
+	log.Infof("deleting cloudfront distributions Id: %s", id)
+
+	// Get the distribution config from the passed distribution id.  This is required to get the most recent ETag for the distribution.
+	config, err := c.Service.GetDistributionConfigWithContext(ctx, &cloudfront.GetDistributionConfigInput{Id: aws.String(id)})
+	if err != nil {
+		return ErrCode("failed to get details about cloudfront distribution Id: "+id, err)
+	}
+
+	_, err = c.Service.DeleteDistributionWithContext(ctx, &cloudfront.DeleteDistributionInput{
+		IfMatch: config.ETag,
+		Id:      aws.String(id),
+	})
+	if err != nil {
+		return ErrCode("failed to delete cloudfront distribution Id:"+id, err)
+	}
+
+	return nil
+}
+
+// ListDistributions lists all cloudfront distributions.
 func (c *CloudFront) ListDistributions(ctx context.Context) ([]*cloudfront.DistributionSummary, error) {
 	distributions := []*cloudfront.DistributionSummary{}
 
@@ -70,8 +95,35 @@ func (c *CloudFront) ListDistributions(ctx context.Context) ([]*cloudfront.Distr
 			return nil, ErrCode("failed to list cloudfront distributions", err)
 		}
 
-		truncated = aws.BoolValue(output.DistributionList.IsTruncated)
 		distributions = append(distributions, output.DistributionList.Items...)
+		truncated = aws.BoolValue(output.DistributionList.IsTruncated)
+		input.Marker = output.DistributionList.Marker
+	}
+
+	return distributions, nil
+}
+
+// ListDistributions lists all cloudfront distributions and passes each DistributionSummary into the filter func to decide if it should be added or discarded
+func (c *CloudFront) ListDistributionsWithFilter(ctx context.Context, filter func(*cloudfront.DistributionSummary) bool) ([]*cloudfront.DistributionSummary, error) {
+	distributions := []*cloudfront.DistributionSummary{}
+
+	log.Info("listing cloudfront distributions")
+
+	input := cloudfront.ListDistributionsInput{MaxItems: aws.Int64(100)}
+	truncated := true
+	for truncated {
+		output, err := c.Service.ListDistributionsWithContext(ctx, &input)
+		if err != nil {
+			return nil, ErrCode("failed to list cloudfront distributions", err)
+		}
+
+		for _, item := range output.DistributionList.Items {
+			if filter(item) {
+				distributions = append(distributions, item)
+			}
+		}
+
+		truncated = aws.BoolValue(output.DistributionList.IsTruncated)
 		input.Marker = output.DistributionList.Marker
 	}
 

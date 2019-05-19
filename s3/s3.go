@@ -26,7 +26,9 @@ func NewSession(account common.Account) S3 {
 		Region:      aws.String(account.Region),
 	}))
 	s.Service = s3.New(sess)
-	s.LoggingBucket = account.AccessLog.Bucket
-	s.LoggingBucketPrefix = account.AccessLog.Prefix
+	if account.AccessLog != nil {
+		s.LoggingBucket = account.AccessLog.Bucket
+		s.LoggingBucketPrefix = account.AccessLog.Prefix
+	}
 	return s
 }

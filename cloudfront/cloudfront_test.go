@@ -37,8 +37,8 @@ func TestNewSession(t *testing.T) {
 
 func TestWebsiteDomain(t *testing.T) {
 	e := NewSession(common.Account{
-		Domains: map[string]common.Domain{
-			"hyper.converged": common.Domain{
+		Domains: map[string]*common.Domain{
+			"hyper.converged": &common.Domain{
 				CertArn: "arn:aws:acm::12345678910:certificate/111111111-2222-3333-4444-555555555555",
 			},
 		},
@@ -126,8 +126,8 @@ func TestDefaultWebsiteDistributionConfig(t *testing.T) {
 	}
 
 	e := NewSession(common.Account{
-		Domains: map[string]common.Domain{
-			"hyper.converged": common.Domain{
+		Domains: map[string]*common.Domain{
+			"hyper.converged": &common.Domain{
 				CertArn: "arn:aws:acm::12345678910:certificate/111111111-2222-3333-4444-555555555555",
 			},
 		},

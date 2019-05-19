@@ -13,7 +13,7 @@ import (
 // Route53 is a wrapper around the aws route53 service with some default config info
 type Route53 struct {
 	Service route53iface.Route53API
-	Domains map[string]common.Domain
+	Domains map[string]*common.Domain
 }
 
 // NewSession creates a new cloudfront session

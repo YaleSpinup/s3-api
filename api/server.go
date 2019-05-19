@@ -1,6 +1,7 @@
 package api
 
 import (
+	"context"
 	"net/http"
 	"os"
 	"time"
@@ -23,10 +24,26 @@ type server struct {
 	route53Services    map[string]route53.Route53
 	router             *mux.Router
 	version            common.Version
+	context            context.Context
+}
+
+// cleaner will do its action once every interval
+type cleaner struct {
+	account           string
+	interval          time.Duration
+	s3Service         s3.S3
+	iamService        iam.IAM
+	cloudFrontService cloudfront.CloudFront
+	route53Services   route53.Route53
+	context           context.Context
 }
 
 // NewServer creates a new server and starts it
 func NewServer(config common.Config) error {
+	// setup server context with cancellation
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
 	s := server{
 		s3Services:         make(map[string]s3.S3),
 		iamServices:        make(map[string]iam.IAM),
@@ -34,6 +51,7 @@ func NewServer(config common.Config) error {
 		route53Services:    make(map[string]route53.Route53),
 		router:             mux.NewRouter(),
 		version:            config.Version,
+		context:            ctx,
 	}
 
 	// Create a shared S3 session
@@ -43,6 +61,26 @@ func NewServer(config common.Config) error {
 		s.iamServices[name] = iam.NewSession(c)
 		s.cloudFrontServices[name] = cloudfront.NewSession(c)
 		s.route53Services[name] = route53.NewSession(c)
+		if c.Cleaner != nil {
+			log.Infof("starting cleaner for account %s", name)
+			interval, err := cleanerInterval(c.Cleaner.Interval, c.Cleaner.MaxSplay)
+			if err != nil {
+				return err
+			}
+
+			acctCleaner := &cleaner{
+				account:           name,
+				interval:          *interval,
+				s3Service:         s.s3Services[name],
+				iamService:        s.iamServices[name],
+				cloudFrontService: s.cloudFrontServices[name],
+				route53Services:   s.route53Services[name],
+				context:           ctx,
+			}
+			log.Debugf("initialized cleaner %+v", acctCleaner)
+
+			acctCleaner.run()
+		}
 	}
 
 	publicURLs := map[string]string{

@@ -66,6 +66,10 @@
           "certArn": "{{ .yalespace_org_arn }}",
           "hostedZoneID": "{{ .yalespace_zone_id }}"
         }
+      },
+      "cleaner": {
+        "interval": "1200s",
+        "maxSplay": "60s"
       }
     },
     "spinupsec": {
