@@ -29,6 +29,7 @@ POST /v1/s3/{account}/websites
 HEAD /v1/s3/{account}/websites/{website}
 GET /v1/s3/{account}/websites/{website}
 PUT /v1/s3/{account}/websites/{website}
+PATCH /v1/s3/{account}/websites/{website}
 DELETE /v1/s3/{account}/websites/{website}
 
 # Managing website users
