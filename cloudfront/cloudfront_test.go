@@ -83,7 +83,7 @@ func TestDefaultWebsiteDistributionConfig(t *testing.T) {
 				QueryString: aws.Bool(false),
 			},
 			MinTTL:         aws.Int64(0),
-			MaxTTL:         aws.Int64(600),
+			DefaultTTL:     aws.Int64(600),
 			TargetOriginId: aws.String("im.hyper.converged"),
 			TrustedSigners: &cloudfront.TrustedSigners{
 				Enabled:  aws.Bool(false),
