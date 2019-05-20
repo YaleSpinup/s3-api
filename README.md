@@ -780,6 +780,48 @@ Responds with a status code and the deleted objects
 | **409 Conflict**              | website bucket is not empty     |
 | **500 Internal Server Error** | a server error occurred         |
 
+### Partially update a website
+
+PATCH `/v1/s3/{account}/websites/{website}`
+
+#### Request
+
+```json
+{
+    "CacheInvalidation": ["/*"]
+}
+```
+
+#### Response
+
+Responds with a status code and the changes
+
+```json
+{
+    "Invalidation": {
+        "CreateTime": "2019-05-20T19:51:54.715Z",
+        "Id": "GGHHIIJJKKLLOO",
+        "InvalidationBatch": {
+            "CallerReference": "2b0fd0c2-e683-44a0-8d4d-3922e965d4a4",
+            "Paths": {
+                "Items": [
+                    "/*"
+                ],
+                "Quantity": 1
+            }
+        },
+        "Status": "Completed"
+    },
+    "Location": "https://cloudfront.amazonaws.com/2018-11-05/distribution/AABBCCDDEEFF/invalidation/GGHHIIJJKKLLOO"
+```
+
+| Response Code                 | Definition                      |  
+| ----------------------------- | --------------------------------|  
+| **200 OK**                    | deleted website                 |  
+| **400 Bad Request**           | badly formed request            |  
+| **403 Forbidden**             | you don't have access           |  
+| **404 Not Found**             | account or website not found    |  
+| **500 Internal Server Error** | a server error occurred         |
 
 ### Create a website user
 
