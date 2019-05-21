@@ -83,7 +83,7 @@ func (c *CloudFront) DefaultWebsiteDistributionConfig(name string) (*cloudfront.
 				QueryString: aws.Bool(false),
 			},
 			MinTTL:         aws.Int64(0),
-			DefaultTTL:     aws.Int64(600),
+			DefaultTTL:     aws.Int64(3600),
 			TargetOriginId: aws.String(name),
 			TrustedSigners: &cloudfront.TrustedSigners{
 				Enabled:  aws.Bool(false),

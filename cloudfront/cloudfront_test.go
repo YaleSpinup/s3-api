@@ -3,7 +3,6 @@ package cloudfront
 import (
 	"reflect"
 	"testing"
-	"time"
 
 	"github.com/YaleSpinup/s3-api/common"
 	"github.com/aws/aws-sdk-go/aws"
@@ -11,8 +10,6 @@ import (
 	"github.com/aws/aws-sdk-go/service/cloudfront/cloudfrontiface"
 	"github.com/google/uuid"
 )
-
-var testTime = time.Now()
 
 // mockCloudFrontClient is a fake cloudfront client
 type mockCloudFrontClient struct {
@@ -83,7 +80,7 @@ func TestDefaultWebsiteDistributionConfig(t *testing.T) {
 				QueryString: aws.Bool(false),
 			},
 			MinTTL:         aws.Int64(0),
-			DefaultTTL:     aws.Int64(600),
+			DefaultTTL:     aws.Int64(3600),
 			TargetOriginId: aws.String("im.hyper.converged"),
 			TrustedSigners: &cloudfront.TrustedSigners{
 				Enabled:  aws.Bool(false),
