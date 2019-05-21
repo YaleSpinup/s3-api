@@ -10,7 +10,7 @@ import (
 	"github.com/aws/aws-sdk-go/aws/session"
 	"github.com/aws/aws-sdk-go/service/cloudfront"
 	"github.com/aws/aws-sdk-go/service/cloudfront/cloudfrontiface"
-	uuid "github.com/satori/go.uuid"
+	"github.com/google/uuid"
 	log "github.com/sirupsen/logrus"
 )
 
@@ -83,6 +83,7 @@ func (c *CloudFront) DefaultWebsiteDistributionConfig(name string) (*cloudfront.
 				QueryString: aws.Bool(false),
 			},
 			MinTTL:         aws.Int64(0),
+			DefaultTTL:     aws.Int64(3600),
 			TargetOriginId: aws.String(name),
 			TrustedSigners: &cloudfront.TrustedSigners{
 				Enabled:  aws.Bool(false),
@@ -90,7 +91,7 @@ func (c *CloudFront) DefaultWebsiteDistributionConfig(name string) (*cloudfront.
 			},
 			ViewerProtocolPolicy: aws.String("redirect-to-https"),
 		},
-		CallerReference:   aws.String(uuid.NewV4().String()),
+		CallerReference:   aws.String(uuid.New().String()),
 		Comment:           aws.String(name),
 		DefaultRootObject: aws.String("index.html"),
 		Enabled:           aws.Bool(true),

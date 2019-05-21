@@ -3,10 +3,12 @@ package cloudfront
 import (
 	"context"
 	"fmt"
+	"strings"
 
 	"github.com/YaleSpinup/s3-api/apierror"
 	"github.com/aws/aws-sdk-go/aws"
 	"github.com/aws/aws-sdk-go/service/cloudfront"
+	"github.com/google/uuid"
 	log "github.com/sirupsen/logrus"
 )
 
@@ -161,4 +163,31 @@ func (c *CloudFront) GetDistributionByName(ctx context.Context, name string) (*c
 	}
 
 	return distribution, err
+}
+
+// InvalidateCache submits a cache invalidation request to cloudfront
+func (c *CloudFront) InvalidateCache(ctx context.Context, id string, paths []string) (*cloudfront.CreateInvalidationOutput, error) {
+	if id == "" || len(paths) == 0 {
+		return nil, apierror.New(apierror.ErrBadRequest, "invalid input", nil)
+	}
+
+	log.Infof("invalidating paths %+v for cloudfront distribution Id: %s", strings.Join(paths, ","), id)
+
+	out, err := c.Service.CreateInvalidationWithContext(ctx, &cloudfront.CreateInvalidationInput{
+		DistributionId: aws.String(id),
+		InvalidationBatch: &cloudfront.InvalidationBatch{
+			CallerReference: aws.String(uuid.New().String()),
+			Paths: &cloudfront.Paths{
+				Items:    aws.StringSlice(paths),
+				Quantity: aws.Int64(int64(len(paths))),
+			},
+		},
+	})
+	if err != nil {
+		return nil, ErrCode("failed to invalidate cloudfront distributions", err)
+	}
+
+	log.Debugf("got cache invalidation output %+v", out)
+
+	return out, nil
 }

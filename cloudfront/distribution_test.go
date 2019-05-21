@@ -4,6 +4,7 @@ import (
 	"context"
 	"reflect"
 	"testing"
+	"time"
 
 	"github.com/YaleSpinup/s3-api/apierror"
 	"github.com/YaleSpinup/s3-api/common"
@@ -11,6 +12,7 @@ import (
 	"github.com/aws/aws-sdk-go/aws/awserr"
 	"github.com/aws/aws-sdk-go/aws/request"
 	"github.com/aws/aws-sdk-go/service/cloudfront"
+	"github.com/google/uuid"
 	"github.com/pkg/errors"
 )
 
@@ -85,6 +87,21 @@ var testDistribution3 = &cloudfront.DistributionSummary{
 		Quantity: aws.Int64(1),
 	},
 	Status: aws.String("Deployed"),
+}
+
+var testInvalidation = &cloudfront.Invalidation{
+	CreateTime: aws.Time(time.Now()),
+	Id:         aws.String("AABBCCDDEEFF"),
+	InvalidationBatch: &cloudfront.InvalidationBatch{
+		CallerReference: aws.String(uuid.New().String()),
+		Paths: &cloudfront.Paths{
+			Items: []*string{
+				aws.String("/*"),
+			},
+			Quantity: aws.Int64(1),
+		},
+	},
+	Status: aws.String("InProgress"),
 }
 
 func (m *mockCloudFrontClient) CreateDistributionWithTagsWithContext(ctx context.Context, input *cloudfront.CreateDistributionWithTagsInput, opts ...request.Option) (*cloudfront.CreateDistributionWithTagsOutput, error) {
@@ -209,6 +226,21 @@ func (m *mockCloudFrontClient) DeleteDistributionWithContext(ctx context.Context
 	}
 
 	return &cloudfront.DeleteDistributionOutput{}, nil
+}
+
+func (m *mockCloudFrontClient) CreateInvalidationWithContext(ctx context.Context, input *cloudfront.CreateInvalidationInput, opts ...request.Option) (*cloudfront.CreateInvalidationOutput, error) {
+	if m.err != nil {
+		return nil, m.err
+	}
+
+	if aws.StringValue(input.InvalidationBatch.Paths.Items[0]) == "errorme" {
+		return nil, awserr.New(cloudfront.ErrCodeTooManyInvalidationsInProgress, "Too many invalidations!", nil)
+	}
+
+	return &cloudfront.CreateInvalidationOutput{
+		Invalidation: testInvalidation,
+		Location:     aws.String("https://cloudfront.amazonaws.com/2018-11-05/distribution/" + aws.StringValue(testInvalidation.Id) + "/invalidation/" + aws.StringValue(testInvalidation.Id)),
+	}, nil
 }
 
 func TestCreateDistribution(t *testing.T) {
@@ -621,4 +653,46 @@ func TestGetDistributionByName(t *testing.T) {
 		t.Errorf("expected apierror.Error, got: %s", reflect.TypeOf(err).String())
 	}
 
+}
+
+func TestInvalidateCache(t *testing.T) {
+	c := CloudFront{
+		Service: newmockCloudFrontClient(t, nil),
+		Domains: map[string]*common.Domain{
+			"hyper.converged": &common.Domain{
+				CertArn: "arn:aws:acm::12345678910:certificate/111111111-2222-3333-4444-555555555555",
+			},
+		},
+		WebsiteEndpoint: "s3-website-us-east-1.amazonaws.com",
+	}
+
+	for _, dist := range []*cloudfront.DistributionSummary{testDistribution1, testDistribution2, testDistribution3} {
+		expected := &cloudfront.CreateInvalidationOutput{
+			Invalidation: testInvalidation,
+			Location:     aws.String("https://cloudfront.amazonaws.com/2018-11-05/distribution/" + aws.StringValue(testInvalidation.Id) + "/invalidation/" + aws.StringValue(testInvalidation.Id)),
+		}
+		out, err := c.InvalidateCache(context.TODO(), aws.StringValue(dist.Id), aws.StringValueSlice(testInvalidation.InvalidationBatch.Paths.Items))
+		if err != nil {
+			t.Errorf("expected nil error, got: %s", err)
+		}
+
+		if !reflect.DeepEqual(out, expected) {
+			t.Errorf("expected %+v, got %+v", expected, out)
+		}
+	}
+
+	_, err := c.InvalidateCache(context.TODO(), "", aws.StringValueSlice(testInvalidation.InvalidationBatch.Paths.Items))
+	if err == nil {
+		t.Error("expected error for non-existing distribution, got nil")
+	}
+
+	_, err = c.InvalidateCache(context.TODO(), "foobar3.bulldogs.cloud", []string{})
+	if err == nil {
+		t.Error("expected error for empty path list, got nil")
+	}
+
+	_, err = c.InvalidateCache(context.TODO(), "foobar3.bulldogs.cloud", []string{"errorme"})
+	if err == nil {
+		t.Error("expected error for empty path list, got nil")
+	}
 }
