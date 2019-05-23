@@ -24,8 +24,9 @@ type Account struct {
 	Secret                 string
 	DefaultS3BucketActions []string
 	DefaultS3ObjectActions []string
-	AccessLog              AccessLog
-	Domains                map[string]Domain
+	AccessLog              *AccessLog
+	Domains                map[string]*Domain
+	Cleaner                *Cleaner
 }
 
 // AccessLog is the configuration for a bucket's access log
@@ -38,6 +39,12 @@ type AccessLog struct {
 type Domain struct {
 	CertArn      string
 	HostedZoneID string
+}
+
+// Cleaner is the configuration for the periodic cleaner task
+type Cleaner struct {
+	Interval string
+	MaxSplay string
 }
 
 // Version carries around the API version information

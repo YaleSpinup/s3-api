@@ -3,16 +3,13 @@ package cloudfront
 import (
 	"reflect"
 	"testing"
-	"time"
 
 	"github.com/YaleSpinup/s3-api/common"
 	"github.com/aws/aws-sdk-go/aws"
 	"github.com/aws/aws-sdk-go/service/cloudfront"
 	"github.com/aws/aws-sdk-go/service/cloudfront/cloudfrontiface"
-	uuid "github.com/satori/go.uuid"
+	"github.com/google/uuid"
 )
-
-var testTime = time.Now()
 
 // mockCloudFrontClient is a fake cloudfront client
 type mockCloudFrontClient struct {
@@ -37,8 +34,8 @@ func TestNewSession(t *testing.T) {
 
 func TestWebsiteDomain(t *testing.T) {
 	e := NewSession(common.Account{
-		Domains: map[string]common.Domain{
-			"hyper.converged": common.Domain{
+		Domains: map[string]*common.Domain{
+			"hyper.converged": &common.Domain{
 				CertArn: "arn:aws:acm::12345678910:certificate/111111111-2222-3333-4444-555555555555",
 			},
 		},
@@ -67,7 +64,7 @@ func TestWebsiteDomain(t *testing.T) {
 }
 
 func TestDefaultWebsiteDistributionConfig(t *testing.T) {
-	callerRef := uuid.NewV4().String()
+	callerRef := uuid.New().String()
 	expected := &cloudfront.DistributionConfig{
 		Aliases: &cloudfront.Aliases{
 			Items: []*string{
@@ -83,6 +80,7 @@ func TestDefaultWebsiteDistributionConfig(t *testing.T) {
 				QueryString: aws.Bool(false),
 			},
 			MinTTL:         aws.Int64(0),
+			DefaultTTL:     aws.Int64(3600),
 			TargetOriginId: aws.String("im.hyper.converged"),
 			TrustedSigners: &cloudfront.TrustedSigners{
 				Enabled:  aws.Bool(false),
@@ -126,8 +124,8 @@ func TestDefaultWebsiteDistributionConfig(t *testing.T) {
 	}
 
 	e := NewSession(common.Account{
-		Domains: map[string]common.Domain{
-			"hyper.converged": common.Domain{
+		Domains: map[string]*common.Domain{
+			"hyper.converged": &common.Domain{
 				CertArn: "arn:aws:acm::12345678910:certificate/111111111-2222-3333-4444-555555555555",
 			},
 		},

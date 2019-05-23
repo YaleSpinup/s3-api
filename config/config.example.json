@@ -62,6 +62,10 @@
       "accessLog": {
         "bucket": "my-access-logs",
         "prefix": "s3"
+      },
+      "cleaner": {
+        "interval": "1200s",
+        "maxSplay": "60s"
       }
     }
   },

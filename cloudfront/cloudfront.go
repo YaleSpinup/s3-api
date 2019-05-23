@@ -10,14 +10,14 @@ import (
 	"github.com/aws/aws-sdk-go/aws/session"
 	"github.com/aws/aws-sdk-go/service/cloudfront"
 	"github.com/aws/aws-sdk-go/service/cloudfront/cloudfrontiface"
-	uuid "github.com/satori/go.uuid"
+	"github.com/google/uuid"
 	log "github.com/sirupsen/logrus"
 )
 
 // CloudFront is a wrapper around the aws cloudfront service with some default config info
 type CloudFront struct {
 	Service         cloudfrontiface.CloudFrontAPI
-	Domains         map[string]common.Domain
+	Domains         map[string]*common.Domain
 	WebsiteEndpoint string
 }
 
@@ -57,7 +57,7 @@ func (c *CloudFront) WebsiteDomain(name string) (*common.Domain, error) {
 		return nil, errors.New("domain not found for website")
 	}
 
-	return &domain, nil
+	return domain, nil
 }
 
 // DefaultWebsiteDistributionConfig generates the cloudfront distribution configuration for an s3 website
@@ -83,6 +83,7 @@ func (c *CloudFront) DefaultWebsiteDistributionConfig(name string) (*cloudfront.
 				QueryString: aws.Bool(false),
 			},
 			MinTTL:         aws.Int64(0),
+			DefaultTTL:     aws.Int64(3600),
 			TargetOriginId: aws.String(name),
 			TrustedSigners: &cloudfront.TrustedSigners{
 				Enabled:  aws.Bool(false),
@@ -90,7 +91,7 @@ func (c *CloudFront) DefaultWebsiteDistributionConfig(name string) (*cloudfront.
 			},
 			ViewerProtocolPolicy: aws.String("redirect-to-https"),
 		},
-		CallerReference:   aws.String(uuid.NewV4().String()),
+		CallerReference:   aws.String(uuid.New().String()),
 		Comment:           aws.String(name),
 		DefaultRootObject: aws.String("index.html"),
 		Enabled:           aws.Bool(true),

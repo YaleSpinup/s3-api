@@ -575,3 +575,51 @@ func (s *server) WebsiteDeleteHandler(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusOK)
 	w.Write(j)
 }
+
+func (s *server) WebsitePartialUpdateHandler(w http.ResponseWriter, r *http.Request) {
+	w = LogWriter{w}
+	vars := mux.Vars(r)
+	account := vars["account"]
+	website := vars["website"]
+
+	cloudFrontService, ok := s.cloudFrontServices[account]
+	if !ok {
+		msg := fmt.Sprintf("CloudFront service not found for account: %s", account)
+		handleError(w, apierror.New(apierror.ErrNotFound, msg, nil))
+		return
+	}
+
+	var req struct {
+		CacheInvalidation []string
+	}
+	err := json.NewDecoder(r.Body).Decode(&req)
+	if err != nil {
+		msg := fmt.Sprintf("cannot decode body into create website input: %s", err)
+		handleError(w, apierror.New(apierror.ErrBadRequest, msg, err))
+		return
+	}
+
+	// find the cloudfront distribution from the website name
+	distributionSummary, err := cloudFrontService.GetDistributionByName(r.Context(), website)
+	if err != nil {
+		handleError(w, err)
+		return
+	}
+
+	out, err := cloudFrontService.InvalidateCache(r.Context(), aws.StringValue(distributionSummary.Id), req.CacheInvalidation)
+	if err != nil {
+		handleError(w, err)
+		return
+	}
+
+	j, err := json.Marshal(out)
+	if err != nil {
+		log.Errorf("cannot marshal reasponse(%v) into JSON: %s", out, err)
+		w.WriteHeader(http.StatusInternalServerError)
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusOK)
+	w.Write(j)
+}

@@ -4,6 +4,7 @@ import (
 	"context"
 	"reflect"
 	"testing"
+	"time"
 
 	"github.com/YaleSpinup/s3-api/apierror"
 	"github.com/YaleSpinup/s3-api/common"
@@ -11,6 +12,7 @@ import (
 	"github.com/aws/aws-sdk-go/aws/awserr"
 	"github.com/aws/aws-sdk-go/aws/request"
 	"github.com/aws/aws-sdk-go/service/cloudfront"
+	"github.com/google/uuid"
 	"github.com/pkg/errors"
 )
 
@@ -85,6 +87,21 @@ var testDistribution3 = &cloudfront.DistributionSummary{
 		Quantity: aws.Int64(1),
 	},
 	Status: aws.String("Deployed"),
+}
+
+var testInvalidation = &cloudfront.Invalidation{
+	CreateTime: aws.Time(time.Now()),
+	Id:         aws.String("AABBCCDDEEFF"),
+	InvalidationBatch: &cloudfront.InvalidationBatch{
+		CallerReference: aws.String(uuid.New().String()),
+		Paths: &cloudfront.Paths{
+			Items: []*string{
+				aws.String("/*"),
+			},
+			Quantity: aws.Int64(1),
+		},
+	},
+	Status: aws.String("InProgress"),
 }
 
 func (m *mockCloudFrontClient) CreateDistributionWithTagsWithContext(ctx context.Context, input *cloudfront.CreateDistributionWithTagsInput, opts ...request.Option) (*cloudfront.CreateDistributionWithTagsOutput, error) {
@@ -187,11 +204,50 @@ func (m *mockCloudFrontClient) UpdateDistributionWithContext(ctx context.Context
 	}, nil
 }
 
+func (m *mockCloudFrontClient) DeleteDistributionWithContext(ctx context.Context, input *cloudfront.DeleteDistributionInput, opts ...request.Option) (*cloudfront.DeleteDistributionOutput, error) {
+	if m.err != nil {
+		return nil, m.err
+	}
+
+	var dist *cloudfront.DistributionSummary
+	for _, d := range []*cloudfront.DistributionSummary{testDistribution1, testDistribution2, testDistribution3} {
+		if aws.StringValue(d.Id) == aws.StringValue(input.Id) {
+			dist = d
+			break
+		}
+	}
+
+	if dist == nil {
+		return nil, awserr.New(cloudfront.ErrCodeNoSuchDistribution, "Distribution Not Found", nil)
+	}
+
+	if aws.StringValue(input.IfMatch) != "ETAGETAGETAGETAG" {
+		return nil, awserr.New(cloudfront.ErrCodeInvalidIfMatchVersion, "ETag missing or invalid", nil)
+	}
+
+	return &cloudfront.DeleteDistributionOutput{}, nil
+}
+
+func (m *mockCloudFrontClient) CreateInvalidationWithContext(ctx context.Context, input *cloudfront.CreateInvalidationInput, opts ...request.Option) (*cloudfront.CreateInvalidationOutput, error) {
+	if m.err != nil {
+		return nil, m.err
+	}
+
+	if aws.StringValue(input.InvalidationBatch.Paths.Items[0]) == "errorme" {
+		return nil, awserr.New(cloudfront.ErrCodeTooManyInvalidationsInProgress, "Too many invalidations!", nil)
+	}
+
+	return &cloudfront.CreateInvalidationOutput{
+		Invalidation: testInvalidation,
+		Location:     aws.String("https://cloudfront.amazonaws.com/2018-11-05/distribution/" + aws.StringValue(testInvalidation.Id) + "/invalidation/" + aws.StringValue(testInvalidation.Id)),
+	}, nil
+}
+
 func TestCreateDistribution(t *testing.T) {
 	c := CloudFront{
 		Service: newmockCloudFrontClient(t, nil),
-		Domains: map[string]common.Domain{
-			"hyper.converged": common.Domain{
+		Domains: map[string]*common.Domain{
+			"hyper.converged": &common.Domain{
 				CertArn: "arn:aws:acm::12345678910:certificate/111111111-2222-3333-4444-555555555555",
 			},
 		},
@@ -358,8 +414,8 @@ func TestCreateDistribution(t *testing.T) {
 func TestDisableDistribution(t *testing.T) {
 	c := CloudFront{
 		Service: newmockCloudFrontClient(t, nil),
-		Domains: map[string]common.Domain{
-			"hyper.converged": common.Domain{
+		Domains: map[string]*common.Domain{
+			"hyper.converged": &common.Domain{
 				CertArn: "arn:aws:acm::12345678910:certificate/111111111-2222-3333-4444-555555555555",
 			},
 		},
@@ -436,11 +492,52 @@ func TestDisableDistribution(t *testing.T) {
 	}
 }
 
+func TestDeleteDistribution(t *testing.T) {
+	c := CloudFront{
+		Service: newmockCloudFrontClient(t, nil),
+		Domains: map[string]*common.Domain{
+			"hyper.converged": &common.Domain{
+				CertArn: "arn:aws:acm::12345678910:certificate/111111111-2222-3333-4444-555555555555",
+			},
+		},
+		WebsiteEndpoint: "s3-website-us-east-1.amazonaws.com",
+	}
+
+	// test success
+	tests := []*string{testDistribution1.Id, testDistribution2.Id, testDistribution3.Id}
+	for _, testDist := range tests {
+		err := c.DeleteDistribution(context.TODO(), aws.StringValue(testDist))
+		if err != nil {
+			t.Errorf("expected nil error, got: %s", err)
+		}
+	}
+
+	// test empty id input
+	err := c.DeleteDistribution(context.TODO(), "")
+	if aerr, ok := err.(apierror.Error); ok {
+		if aerr.Code != apierror.ErrBadRequest {
+			t.Errorf("expected error code %s, got: %s", apierror.ErrBadRequest, aerr.Code)
+		}
+	} else {
+		t.Errorf("expected apierror.Error, got: %s", reflect.TypeOf(err).String())
+	}
+
+	// test not found id input
+	err = c.DeleteDistribution(context.TODO(), "notfoundid")
+	if aerr, ok := err.(apierror.Error); ok {
+		if aerr.Code != apierror.ErrNotFound {
+			t.Errorf("expected error code %s, got: %s", apierror.ErrNotFound, aerr.Code)
+		}
+	} else {
+		t.Errorf("expected apierror.Error, got: %s", reflect.TypeOf(err).String())
+	}
+}
+
 func TestListDistribution(t *testing.T) {
 	c := CloudFront{
 		Service: newmockCloudFrontClient(t, nil),
-		Domains: map[string]common.Domain{
-			"hyper.converged": common.Domain{
+		Domains: map[string]*common.Domain{
+			"hyper.converged": &common.Domain{
 				CertArn: "arn:aws:acm::12345678910:certificate/111111111-2222-3333-4444-555555555555",
 			},
 		},
@@ -498,8 +595,8 @@ func TestListDistribution(t *testing.T) {
 func TestGetDistributionByName(t *testing.T) {
 	c := CloudFront{
 		Service: newmockCloudFrontClient(t, nil),
-		Domains: map[string]common.Domain{
-			"hyper.converged": common.Domain{
+		Domains: map[string]*common.Domain{
+			"hyper.converged": &common.Domain{
 				CertArn: "arn:aws:acm::12345678910:certificate/111111111-2222-3333-4444-555555555555",
 			},
 		},
@@ -556,4 +653,46 @@ func TestGetDistributionByName(t *testing.T) {
 		t.Errorf("expected apierror.Error, got: %s", reflect.TypeOf(err).String())
 	}
 
+}
+
+func TestInvalidateCache(t *testing.T) {
+	c := CloudFront{
+		Service: newmockCloudFrontClient(t, nil),
+		Domains: map[string]*common.Domain{
+			"hyper.converged": &common.Domain{
+				CertArn: "arn:aws:acm::12345678910:certificate/111111111-2222-3333-4444-555555555555",
+			},
+		},
+		WebsiteEndpoint: "s3-website-us-east-1.amazonaws.com",
+	}
+
+	for _, dist := range []*cloudfront.DistributionSummary{testDistribution1, testDistribution2, testDistribution3} {
+		expected := &cloudfront.CreateInvalidationOutput{
+			Invalidation: testInvalidation,
+			Location:     aws.String("https://cloudfront.amazonaws.com/2018-11-05/distribution/" + aws.StringValue(testInvalidation.Id) + "/invalidation/" + aws.StringValue(testInvalidation.Id)),
+		}
+		out, err := c.InvalidateCache(context.TODO(), aws.StringValue(dist.Id), aws.StringValueSlice(testInvalidation.InvalidationBatch.Paths.Items))
+		if err != nil {
+			t.Errorf("expected nil error, got: %s", err)
+		}
+
+		if !reflect.DeepEqual(out, expected) {
+			t.Errorf("expected %+v, got %+v", expected, out)
+		}
+	}
+
+	_, err := c.InvalidateCache(context.TODO(), "", aws.StringValueSlice(testInvalidation.InvalidationBatch.Paths.Items))
+	if err == nil {
+		t.Error("expected error for non-existing distribution, got nil")
+	}
+
+	_, err = c.InvalidateCache(context.TODO(), "foobar3.bulldogs.cloud", []string{})
+	if err == nil {
+		t.Error("expected error for empty path list, got nil")
+	}
+
+	_, err = c.InvalidateCache(context.TODO(), "foobar3.bulldogs.cloud", []string{"errorme"})
+	if err == nil {
+		t.Error("expected error for empty path list, got nil")
+	}
 }

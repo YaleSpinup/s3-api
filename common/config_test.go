@@ -27,8 +27,13 @@ var testConfig = []byte(
 			},
 			"domains": {
 				"example.com": {
-					"certArn": "arn:123456789:thingy"
+					"certArn": "arn:123456789:thingy",
+					"hostedZoneId": "AABBCCDDEEFF"
 				}
+			},
+			"cleaner": {
+				"interval": "300s",
+				"maxSplay": "60s"
 			}
 		  },
 		  "provider2": {
@@ -58,14 +63,19 @@ func TestReadConfig(t *testing.T) {
 				DefaultS3ObjectActions: []string{
 					"s3:*",
 				},
-				AccessLog: AccessLog{
+				AccessLog: &AccessLog{
 					Bucket: "foobucket",
 					Prefix: "spinup",
 				},
-				Domains: map[string]Domain{
-					"example.com": Domain{
-						CertArn: "arn:123456789:thingy",
+				Domains: map[string]*Domain{
+					"example.com": &Domain{
+						CertArn:      "arn:123456789:thingy",
+						HostedZoneID: "AABBCCDDEEFF",
 					},
+				},
+				Cleaner: &Cleaner{
+					Interval: "300s",
+					MaxSplay: "60s",
 				},
 			},
 			"provider2": Account{

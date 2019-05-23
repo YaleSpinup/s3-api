@@ -170,8 +170,8 @@ func (m *mockRoute53Client) ListResourceRecordSetsPagesWithContext(ctx aws.Conte
 func TestCreateRecord(t *testing.T) {
 	r := Route53{
 		Service: newmockRoute53Client(t, nil),
-		Domains: map[string]common.Domain{
-			"hyper.converged": common.Domain{
+		Domains: map[string]*common.Domain{
+			"hyper.converged": &common.Domain{
 				CertArn: "arn:aws:acm::12345678910:certificate/111111111-2222-3333-4444-555555555555",
 			},
 		},
@@ -289,8 +289,8 @@ func TestCreateRecord(t *testing.T) {
 func TestDeleteRecord(t *testing.T) {
 	r := Route53{
 		Service: newmockRoute53Client(t, nil),
-		Domains: map[string]common.Domain{
-			"hyper.converged": common.Domain{
+		Domains: map[string]*common.Domain{
+			"hyper.converged": &common.Domain{
 				CertArn: "arn:aws:acm::12345678910:certificate/111111111-2222-3333-4444-555555555555",
 			},
 		},
@@ -408,8 +408,8 @@ func TestDeleteRecord(t *testing.T) {
 func TestListRecords(t *testing.T) {
 	r := Route53{
 		Service: newmockRoute53Client(t, nil),
-		Domains: map[string]common.Domain{
-			"hyper.converged": common.Domain{
+		Domains: map[string]*common.Domain{
+			"hyper.converged": &common.Domain{
 				CertArn: "arn:aws:acm::12345678910:certificate/111111111-2222-3333-4444-555555555555",
 			},
 		},
@@ -476,8 +476,8 @@ func TestListRecords(t *testing.T) {
 func TestGetRecordByName(t *testing.T) {
 	r := Route53{
 		Service: newmockRoute53Client(t, nil),
-		Domains: map[string]common.Domain{
-			"hyper.converged": common.Domain{
+		Domains: map[string]*common.Domain{
+			"hyper.converged": &common.Domain{
 				CertArn: "arn:aws:acm::12345678910:certificate/111111111-2222-3333-4444-555555555555",
 			},
 		},
