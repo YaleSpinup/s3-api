@@ -105,7 +105,7 @@ func (c *CloudFront) ListDistributions(ctx context.Context) ([]*cloudfront.Distr
 	return distributions, nil
 }
 
-// ListDistributions lists all cloudfront distributions and passes each DistributionSummary into the filter func to decide if it should be added or discarded
+// ListDistributionsWithFilter lists all cloudfront distributions and passes each DistributionSummary into the filter func to decide if it should be added or discarded
 func (c *CloudFront) ListDistributionsWithFilter(ctx context.Context, filter func(*cloudfront.DistributionSummary) bool) ([]*cloudfront.DistributionSummary, error) {
 	distributions := []*cloudfront.DistributionSummary{}
 

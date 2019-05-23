@@ -814,6 +814,7 @@ Responds with a status code and the changes
         "Status": "Completed"
     },
     "Location": "https://cloudfront.amazonaws.com/2018-11-05/distribution/AABBCCDDEEFF/invalidation/GGHHIIJJKKLLOO"
+}
 ```
 
 | Response Code                 | Definition                      |  
