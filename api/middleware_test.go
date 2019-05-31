@@ -40,13 +40,13 @@ func TestTokenMiddleware(t *testing.T) {
 	}
 
 	// Test a bad URI
-	resp, err := http.Get(fmt.Sprintf("%s/\n", server.URL))
+	_, err := http.Get(fmt.Sprintf("%s/\n", server.URL))
 	if err == nil {
 		t.Fatal("expected error for bad URL")
 	}
 
 	// Test a private URL without an auth token
-	resp, err = http.Get(fmt.Sprintf("%s/private", server.URL))
+	resp, err := http.Get(fmt.Sprintf("%s/private", server.URL))
 	if err != nil {
 		t.Fatal(err)
 	}

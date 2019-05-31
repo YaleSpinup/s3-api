@@ -1,6 +1,7 @@
 package api
 
 import (
+	"bytes"
 	"encoding/json"
 	"fmt"
 	"net/http"
@@ -278,6 +279,21 @@ func (s *server) CreateWebsiteHandler(w http.ResponseWriter, r *http.Request) {
 
 	if err != nil {
 		msg := fmt.Sprintf("failed to create route53 alias record for website %s: %s", bucketName, err.Error())
+		handleError(w, errors.Wrap(err, msg))
+		return
+	}
+
+	// write index file
+	indexMessage := "Hello, " + bucketName + "!"
+	_, err = s3Service.CreateObject(r.Context(), &s3.PutObjectInput{
+		Bucket:      aws.String(bucketName),
+		Body:        bytes.NewReader([]byte(indexMessage)),
+		ContentType: aws.String("text/html"),
+		Key:         aws.String("index.html"),
+		Tagging:     aws.String("yale:spinup=true"),
+	})
+	if err != nil {
+		msg := fmt.Sprintf("failed to create default index file for website %s: %s", bucketName, err.Error())
 		handleError(w, errors.Wrap(err, msg))
 		return
 	}

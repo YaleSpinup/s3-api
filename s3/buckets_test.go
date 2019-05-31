@@ -855,7 +855,7 @@ func TestBucketEmpty(t *testing.T) {
 	}
 
 	// test empty bucket name
-	empty, err = s.BucketEmpty(context.TODO(), "")
+	_, err = s.BucketEmpty(context.TODO(), "")
 	if aerr, ok := err.(apierror.Error); ok {
 		if aerr.Code != apierror.ErrBadRequest {
 			t.Errorf("expected error code %s, got: %s", apierror.ErrBadRequest, aerr.Code)
@@ -866,7 +866,7 @@ func TestBucketEmpty(t *testing.T) {
 
 	// test some other, unexpected AWS error
 	s.Service.(*mockS3Client).err = awserr.New(s3.ErrCodeNoSuchKey, "no such key", nil)
-	empty, err = s.BucketEmpty(context.TODO(), "testBucket")
+	_, err = s.BucketEmpty(context.TODO(), "testBucket")
 	if aerr, ok := err.(apierror.Error); ok {
 		if aerr.Code != apierror.ErrBadRequest {
 			t.Errorf("expected error code %s, got: %s", apierror.ErrBadRequest, aerr.Code)
@@ -877,7 +877,7 @@ func TestBucketEmpty(t *testing.T) {
 
 	// test non-aws error
 	s.Service.(*mockS3Client).err = errors.New("things blowing up!")
-	empty, err = s.BucketEmpty(context.TODO(), "testBucket")
+	_, err = s.BucketEmpty(context.TODO(), "testBucket")
 	if aerr, ok := err.(apierror.Error); ok {
 		if aerr.Code != apierror.ErrInternalError {
 			t.Errorf("expected error code %s, got: %s", apierror.ErrInternalError, aerr.Code)

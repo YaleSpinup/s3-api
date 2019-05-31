@@ -31,4 +31,19 @@ func TestNewSession(t *testing.T) {
 	if to != "s3.S3" {
 		t.Errorf("expected type to be 's3.S3', got %s", to)
 	}
+
+	e = NewSession(common.Account{
+		AccessLog: &common.AccessLog{
+			Bucket: "foologbucket",
+			Prefix: "s3",
+		},
+	})
+
+	if e.LoggingBucket != "foologbucket" {
+		t.Errorf("expected logging bucket to be 'foologbucket', got %s", e.LoggingBucket)
+	}
+
+	if e.LoggingBucketPrefix != "s3" {
+		t.Errorf("expected logging bucket prefix to be 's3', got %s", e.LoggingBucketPrefix)
+	}
 }
