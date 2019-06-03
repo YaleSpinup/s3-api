@@ -192,6 +192,44 @@ func (m *mockS3Client) ListObjectsV2WithContext(ctx context.Context, input *s3.L
 	return &s3.ListObjectsV2Output{KeyCount: aws.Int64(int64(0))}, nil
 }
 
+func (m *mockS3Client) ListObjectsV2PagesWithContext(ctx context.Context, input *s3.ListObjectsV2Input, fn func(*s3.ListObjectsV2Output, bool) bool, opts ...request.Option) error {
+	if m.err != nil {
+		return m.err
+	}
+
+	max := int64(100)
+	if aws.Int64Value(input.MaxKeys) != 0 {
+		max = aws.Int64Value(input.MaxKeys)
+	}
+
+	var output *s3.ListObjectsV2Output
+	if aws.StringValue(input.Bucket) == "testBucketNotEmpty" {
+		output = &s3.ListObjectsV2Output{
+			Contents: []*s3.Object{
+				&s3.Object{Key: aws.String("brand.svg")},
+				&s3.Object{Key: aws.String("index.html")},
+				&s3.Object{Key: aws.String("errors.html")},
+				&s3.Object{Key: aws.String("favicon.ico")},
+			},
+			IsTruncated: aws.Bool(false),
+			KeyCount:    aws.Int64(4),
+			MaxKeys:     aws.Int64(max),
+			Name:        input.Bucket,
+		}
+	} else {
+		output = &s3.ListObjectsV2Output{
+			Contents:    []*s3.Object{},
+			IsTruncated: aws.Bool(false),
+			KeyCount:    aws.Int64(0),
+			MaxKeys:     aws.Int64(max),
+			Name:        input.Bucket,
+		}
+	}
+
+	_ = fn(output, true)
+	return nil
+}
+
 func (m *mockS3Client) GetBucketLoggingWithContext(ctx context.Context, input *s3.GetBucketLoggingInput, opts ...request.Option) (*s3.GetBucketLoggingOutput, error) {
 	if m.err != nil {
 		return nil, m.err
@@ -878,6 +916,102 @@ func TestBucketEmpty(t *testing.T) {
 	// test non-aws error
 	s.Service.(*mockS3Client).err = errors.New("things blowing up!")
 	_, err = s.BucketEmpty(context.TODO(), "testBucket")
+	if aerr, ok := err.(apierror.Error); ok {
+		if aerr.Code != apierror.ErrInternalError {
+			t.Errorf("expected error code %s, got: %s", apierror.ErrInternalError, aerr.Code)
+		}
+	} else {
+		t.Errorf("expected apierror.Error, got: %s", reflect.TypeOf(err).String())
+	}
+}
+
+func TestBucketEmptyWithFilter(t *testing.T) {
+	s := S3{Service: newMockS3Client(t, nil)}
+
+	// test successful empty bucket
+	empty, err := s.BucketEmptyWithFilter(context.TODO(), "testBucket", 100, func(key *string) bool {
+		t.Logf("testing key %s", aws.StringValue(key))
+		return true
+	})
+	if err != nil {
+		t.Errorf("expected nil error, got: %s", err)
+	}
+
+	if !empty {
+		t.Error("expected testBucket bucket to be empty")
+	}
+
+	// test successful not empty bucket
+	empty, err = s.BucketEmptyWithFilter(context.TODO(), "testBucketNotEmpty", 100, func(key *string) bool {
+		t.Logf("testing key %s", aws.StringValue(key))
+		return true
+	})
+	if err != nil {
+		t.Errorf("expected nil error, got: %s", err)
+	}
+
+	if empty {
+		t.Error("expected testBucketNotEmpty bucket to not be empty")
+	}
+
+	// test successful not empty bucket and filter
+	empty, err = s.BucketEmptyWithFilter(context.TODO(), "testBucketNotEmpty", 100, func(key *string) bool {
+		t.Logf("testing key %s with filter", aws.StringValue(key))
+		return aws.StringValue(key) == "index.html"
+	})
+	if err != nil {
+		t.Errorf("expected nil error, got: %s", err)
+	}
+
+	if empty {
+		t.Error("expected testBucketNotEmpty bucket to not be empty with matching filter")
+	}
+
+	// test successful not empty bucket and meg filter
+	empty, err = s.BucketEmptyWithFilter(context.TODO(), "testBucketNotEmpty", 100, func(key *string) bool {
+		t.Logf("return false for %s", aws.StringValue(key))
+		return false
+	})
+	if err != nil {
+		t.Errorf("expected nil error, got: %s", err)
+	}
+
+	if !empty {
+		t.Error("expected testBucketNotEmpty bucket to be empty with falsey filter")
+	}
+
+	// test empty bucket name
+	_, err = s.BucketEmptyWithFilter(context.TODO(), "", 100, func(key *string) bool {
+		t.Logf("testing key %s", *key)
+		return true
+	})
+	if aerr, ok := err.(apierror.Error); ok {
+		if aerr.Code != apierror.ErrBadRequest {
+			t.Errorf("expected error code %s, got: %s", apierror.ErrBadRequest, aerr.Code)
+		}
+	} else {
+		t.Errorf("expected apierror.Error, got: %s", reflect.TypeOf(err).String())
+	}
+
+	// test max of 0
+	_, err = s.BucketEmptyWithFilter(context.TODO(), "testBucket", 0, func(key *string) bool {
+		t.Logf("testing key %s", *key)
+		return true
+	})
+	if aerr, ok := err.(apierror.Error); ok {
+		if aerr.Code != apierror.ErrBadRequest {
+			t.Errorf("expected error code %s, got: %s", apierror.ErrBadRequest, aerr.Code)
+		}
+	} else {
+		t.Errorf("expected apierror.Error, got: %s", reflect.TypeOf(err).String())
+	}
+
+	// test non-aws error
+	s.Service.(*mockS3Client).err = errors.New("things blowing up!")
+	_, err = s.BucketEmptyWithFilter(context.TODO(), "testBucket", 100, func(key *string) bool {
+		t.Logf("testing key %s", *key)
+		return true
+	})
 	if aerr, ok := err.(apierror.Error); ok {
 		if aerr.Code != apierror.ErrInternalError {
 			t.Errorf("expected error code %s, got: %s", apierror.ErrInternalError, aerr.Code)

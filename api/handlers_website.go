@@ -360,8 +360,30 @@ func (s *server) WebsiteShowHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// check if the bucket backing the website is empty
-	empty, err := s3Service.BucketEmpty(r.Context(), website)
+	// check if the bucket backing the website is empty, ignore the default index page (we'll clean it up)
+	empty, err := s3Service.BucketEmptyWithFilter(r.Context(), website, int64(2), func(key *string) bool {
+		log.Debugf("checking if object %s is 'index.html' and has 'yale:spinup=true' tag", aws.StringValue(key))
+
+		if aws.StringValue(key) != "index.html" {
+			return true
+		}
+
+		tagging, err := s3Service.Service.GetObjectTaggingWithContext(r.Context(), &s3.GetObjectTaggingInput{
+			Bucket: aws.String(website),
+			Key:    key,
+		})
+		if err != nil {
+			return true
+		}
+
+		for _, tag := range tagging.TagSet {
+			if aws.StringValue(tag.Key) == "yale:spinup" && aws.StringValue(tag.Value) == "true" {
+				return false
+			}
+		}
+
+		return true
+	})
 	if err != nil {
 		handleError(w, err)
 		return
@@ -467,6 +489,48 @@ func (s *server) WebsiteDeleteHandler(w http.ResponseWriter, r *http.Request) {
 		msg := fmt.Sprintf("failed to validate website domain %s", website)
 		handleError(w, apierror.New(apierror.ErrBadRequest, msg, err))
 		return
+	}
+
+	// check if the bucket backing the website is empty, ignore the default index page (we'll clean it up)
+	empty, err := s3Service.BucketEmptyWithFilter(r.Context(), website, int64(2), func(key *string) bool {
+		log.Debugf("checking if object %s is 'index.html' and has 'yale:spinup=true' tag", aws.StringValue(key))
+
+		if aws.StringValue(key) != "index.html" {
+			return true
+		}
+
+		tagging, err := s3Service.Service.GetObjectTaggingWithContext(r.Context(), &s3.GetObjectTaggingInput{
+			Bucket: aws.String(website),
+			Key:    key,
+		})
+		if err != nil {
+			return true
+		}
+
+		for _, tag := range tagging.TagSet {
+			if aws.StringValue(tag.Key) == "yale:spinup" && aws.StringValue(tag.Value) == "true" {
+				return false
+			}
+		}
+
+		return true
+	})
+	if err != nil {
+		handleError(w, err)
+		return
+	}
+
+	if !empty {
+		msg := fmt.Sprintf("cannot delete bucket %s, not empty", website)
+		handleError(w, apierror.New(apierror.ErrBadRequest, msg, nil))
+		return
+	}
+
+	if _, err := s3Service.DeleteObject(r.Context(), &s3.DeleteObjectInput{
+		Bucket: aws.String(website),
+		Key:    aws.String("index.html"),
+	}); err != nil {
+		log.Warnf("error trying to delete default index.html: %s", err)
 	}
 
 	err = s3Service.DeleteEmptyBucket(r.Context(), &s3.DeleteBucketInput{Bucket: aws.String(website)})

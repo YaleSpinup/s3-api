@@ -354,3 +354,35 @@ func (s *S3) BucketEmpty(ctx context.Context, bucket string) (bool, error) {
 
 	return true, nil
 }
+
+// BucketEmptyWithFilter lists the objects in a bucket with a max of `max`.  If the returned object(s) match(es) the filter, we return false
+func (s *S3) BucketEmptyWithFilter(ctx context.Context, bucket string, max int64, filter func(key *string) bool) (bool, error) {
+	if bucket == "" || max == 0 {
+		return false, apierror.New(apierror.ErrBadRequest, "invalid input", nil)
+	}
+
+	log.Infof("checking if bucket %s is empty with filter", bucket)
+
+	var keys int64
+	input := &s3.ListObjectsV2Input{Bucket: aws.String(bucket), MaxKeys: aws.Int64(max)}
+	err := s.Service.ListObjectsV2PagesWithContext(ctx, input,
+		func(out *s3.ListObjectsV2Output, lastPage bool) bool {
+			for _, obj := range out.Contents {
+				log.Debugf("filtering object %s", aws.StringValue(obj.Key))
+				if filter(obj.Key) {
+					keys++
+				}
+			}
+			return true
+		})
+	if err != nil {
+		return false, ErrCode("failed to determine if bucket is empty with filter", err)
+	}
+
+	log.Debugf("found %d keys in bucket %s when checking for empty with filter", keys, bucket)
+	if keys > 0 {
+		return false, nil
+	}
+
+	return true, nil
+}
