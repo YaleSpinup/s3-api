@@ -83,6 +83,25 @@ func (c *CloudFront) DeleteDistribution(ctx context.Context, id string) error {
 	return nil
 }
 
+// TagDistribution updates the tags for a cloudfront distribution
+func (c *CloudFront) TagDistribution(ctx context.Context, arn string, tags *cloudfront.Tags) error {
+	if arn == "" {
+		return apierror.New(apierror.ErrBadRequest, "invalid input", nil)
+	}
+
+	log.Infof("tagging cloudfront distributions ARN: %s", arn)
+
+	_, err := c.Service.TagResourceWithContext(ctx, &cloudfront.TagResourceInput{
+		Resource: aws.String(arn),
+		Tags:     tags,
+	})
+	if err != nil {
+		return ErrCode("failed to tag cloudfront distribution ARN:"+arn, err)
+	}
+
+	return nil
+}
+
 // ListDistributions lists all cloudfront distributions.
 func (c *CloudFront) ListDistributions(ctx context.Context) ([]*cloudfront.DistributionSummary, error) {
 	distributions := []*cloudfront.DistributionSummary{}

@@ -324,7 +324,12 @@ func (s *server) CreateWebsiteHandler(w http.ResponseWriter, r *http.Request) {
 	w.Write(j)
 }
 
-// WebsiteShowHandler returns information about a static website
+// WebsiteShowHandler returns information about a static website.  Currently,
+// this includes:
+// - the tags
+// - if the bucket is empty
+// - the route53 record set
+// - the cloudfront distribution summary
 func (s *server) WebsiteShowHandler(w http.ResponseWriter, r *http.Request) {
 	w = LogWriter{w}
 	vars := mux.Vars(r)
@@ -702,4 +707,74 @@ func (s *server) WebsitePartialUpdateHandler(w http.ResponseWriter, r *http.Requ
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusOK)
 	w.Write(j)
+}
+
+// WebsiteUpdateHandler handles updating making changes to a website.  Currently supports:
+// - Updating the bucket's tags
+// - Update the cloudfront distribution's tags
+func (s *server) WebsiteUpdateHandler(w http.ResponseWriter, r *http.Request) {
+	w = LogWriter{w}
+	vars := mux.Vars(r)
+	account := vars["account"]
+	website := vars["website"]
+	s3Service, ok := s.s3Services[account]
+	if !ok {
+		msg := fmt.Sprintf("s3 service not found for account: %s", account)
+		handleError(w, apierror.New(apierror.ErrNotFound, msg, nil))
+		return
+	}
+
+	cloudFrontService, ok := s.cloudFrontServices[account]
+	if !ok {
+		msg := fmt.Sprintf("CloudFront service not found for account: %s", account)
+		handleError(w, apierror.New(apierror.ErrNotFound, msg, nil))
+		return
+	}
+
+	var req struct {
+		Tags []*s3.Tag
+	}
+	err := json.NewDecoder(r.Body).Decode(&req)
+	if err != nil {
+		msg := fmt.Sprintf("cannot decode body into update website input: %s", err)
+		handleError(w, apierror.New(apierror.ErrBadRequest, msg, err))
+		return
+	}
+
+	// find the cloudfront distribution from the website name
+	distributionSummary, err := cloudFrontService.GetDistributionByName(r.Context(), website)
+	if err != nil {
+		handleError(w, err)
+		return
+	}
+
+	if len(req.Tags) > 0 {
+		err = s3Service.TagBucket(r.Context(), website, req.Tags)
+		if err != nil {
+			msg := fmt.Sprintf("failed to tag website bucket %s: %s", website, err.Error())
+			handleError(w, apierror.New(apierror.ErrInternalError, msg, err))
+			return
+		}
+
+		// normalize tags
+		cfTags := []*cloudfront.Tag{}
+		for _, tag := range req.Tags {
+			t := &cloudfront.Tag{
+				Key:   tag.Key,
+				Value: tag.Value,
+			}
+			cfTags = append(cfTags, t)
+		}
+
+		err = cloudFrontService.TagDistribution(r.Context(), aws.StringValue(distributionSummary.ARN), &cloudfront.Tags{Items: cfTags})
+		if err != nil {
+			msg := fmt.Sprintf("failed to tag website cloudfront distribution %s: %s", website, err.Error())
+			handleError(w, apierror.New(apierror.ErrInternalError, msg, err))
+			return
+		}
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusOK)
+	w.Write([]byte{})
 }
