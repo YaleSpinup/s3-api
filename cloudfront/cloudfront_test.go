@@ -107,15 +107,6 @@ func TestDefaultWebsiteDistributionConfig(t *testing.T) {
 			Quantity: aws.Int64(1),
 		},
 		PriceClass: aws.String("PriceClass_100"),
-		Restrictions: &cloudfront.Restrictions{
-			GeoRestriction: &cloudfront.GeoRestriction{
-				Items: []*string{
-					aws.String("US"),
-				},
-				Quantity:        aws.Int64(1),
-				RestrictionType: aws.String("whitelist"),
-			},
-		},
 		ViewerCertificate: &cloudfront.ViewerCertificate{
 			ACMCertificateArn:      aws.String("arn:aws:acm::12345678910:certificate/111111111-2222-3333-4444-555555555555"),
 			MinimumProtocolVersion: aws.String("TLSv1.1_2016"),
