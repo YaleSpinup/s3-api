@@ -324,7 +324,12 @@ func (s *server) CreateWebsiteHandler(w http.ResponseWriter, r *http.Request) {
 	w.Write(j)
 }
 
-// WebsiteShowHandler returns information about a static website
+// WebsiteShowHandler returns information about a static website.  Currently,
+// this includes:
+// - the tags
+// - if the bucket is empty
+// - the route53 record set
+// - the cloudfront distribution summary
 func (s *server) WebsiteShowHandler(w http.ResponseWriter, r *http.Request) {
 	w = LogWriter{w}
 	vars := mux.Vars(r)
@@ -360,8 +365,30 @@ func (s *server) WebsiteShowHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// check if the bucket backing the website is empty
-	empty, err := s3Service.BucketEmpty(r.Context(), website)
+	// check if the bucket backing the website is empty, ignore the default index page (we'll clean it up)
+	empty, err := s3Service.BucketEmptyWithFilter(r.Context(), website, int64(2), func(key *string) bool {
+		log.Debugf("checking if object %s is 'index.html' and has 'yale:spinup=true' tag", aws.StringValue(key))
+
+		if aws.StringValue(key) != "index.html" {
+			return true
+		}
+
+		tagging, err := s3Service.Service.GetObjectTaggingWithContext(r.Context(), &s3.GetObjectTaggingInput{
+			Bucket: aws.String(website),
+			Key:    key,
+		})
+		if err != nil {
+			return true
+		}
+
+		for _, tag := range tagging.TagSet {
+			if aws.StringValue(tag.Key) == "yale:spinup" && aws.StringValue(tag.Value) == "true" {
+				return false
+			}
+		}
+
+		return true
+	})
 	if err != nil {
 		handleError(w, err)
 		return
@@ -467,6 +494,48 @@ func (s *server) WebsiteDeleteHandler(w http.ResponseWriter, r *http.Request) {
 		msg := fmt.Sprintf("failed to validate website domain %s", website)
 		handleError(w, apierror.New(apierror.ErrBadRequest, msg, err))
 		return
+	}
+
+	// check if the bucket backing the website is empty, ignore the default index page (we'll clean it up)
+	empty, err := s3Service.BucketEmptyWithFilter(r.Context(), website, int64(2), func(key *string) bool {
+		log.Debugf("checking if object %s is 'index.html' and has 'yale:spinup=true' tag", aws.StringValue(key))
+
+		if aws.StringValue(key) != "index.html" {
+			return true
+		}
+
+		tagging, err := s3Service.Service.GetObjectTaggingWithContext(r.Context(), &s3.GetObjectTaggingInput{
+			Bucket: aws.String(website),
+			Key:    key,
+		})
+		if err != nil {
+			return true
+		}
+
+		for _, tag := range tagging.TagSet {
+			if aws.StringValue(tag.Key) == "yale:spinup" && aws.StringValue(tag.Value) == "true" {
+				return false
+			}
+		}
+
+		return true
+	})
+	if err != nil {
+		handleError(w, err)
+		return
+	}
+
+	if !empty {
+		msg := fmt.Sprintf("cannot delete bucket %s, not empty", website)
+		handleError(w, apierror.New(apierror.ErrBadRequest, msg, nil))
+		return
+	}
+
+	if _, err := s3Service.DeleteObject(r.Context(), &s3.DeleteObjectInput{
+		Bucket: aws.String(website),
+		Key:    aws.String("index.html"),
+	}); err != nil {
+		log.Warnf("error trying to delete default index.html: %s", err)
 	}
 
 	err = s3Service.DeleteEmptyBucket(r.Context(), &s3.DeleteBucketInput{Bucket: aws.String(website)})
@@ -638,4 +707,74 @@ func (s *server) WebsitePartialUpdateHandler(w http.ResponseWriter, r *http.Requ
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusOK)
 	w.Write(j)
+}
+
+// WebsiteUpdateHandler handles updating making changes to a website.  Currently supports:
+// - Updating the bucket's tags
+// - Update the cloudfront distribution's tags
+func (s *server) WebsiteUpdateHandler(w http.ResponseWriter, r *http.Request) {
+	w = LogWriter{w}
+	vars := mux.Vars(r)
+	account := vars["account"]
+	website := vars["website"]
+	s3Service, ok := s.s3Services[account]
+	if !ok {
+		msg := fmt.Sprintf("s3 service not found for account: %s", account)
+		handleError(w, apierror.New(apierror.ErrNotFound, msg, nil))
+		return
+	}
+
+	cloudFrontService, ok := s.cloudFrontServices[account]
+	if !ok {
+		msg := fmt.Sprintf("CloudFront service not found for account: %s", account)
+		handleError(w, apierror.New(apierror.ErrNotFound, msg, nil))
+		return
+	}
+
+	var req struct {
+		Tags []*s3.Tag
+	}
+	err := json.NewDecoder(r.Body).Decode(&req)
+	if err != nil {
+		msg := fmt.Sprintf("cannot decode body into update website input: %s", err)
+		handleError(w, apierror.New(apierror.ErrBadRequest, msg, err))
+		return
+	}
+
+	// find the cloudfront distribution from the website name
+	distributionSummary, err := cloudFrontService.GetDistributionByName(r.Context(), website)
+	if err != nil {
+		handleError(w, err)
+		return
+	}
+
+	if len(req.Tags) > 0 {
+		err = s3Service.TagBucket(r.Context(), website, req.Tags)
+		if err != nil {
+			msg := fmt.Sprintf("failed to tag website bucket %s: %s", website, err.Error())
+			handleError(w, apierror.New(apierror.ErrInternalError, msg, err))
+			return
+		}
+
+		// normalize tags
+		cfTags := []*cloudfront.Tag{}
+		for _, tag := range req.Tags {
+			t := &cloudfront.Tag{
+				Key:   tag.Key,
+				Value: tag.Value,
+			}
+			cfTags = append(cfTags, t)
+		}
+
+		err = cloudFrontService.TagDistribution(r.Context(), aws.StringValue(distributionSummary.ARN), &cloudfront.Tags{Items: cfTags})
+		if err != nil {
+			msg := fmt.Sprintf("failed to tag website cloudfront distribution %s: %s", website, err.Error())
+			handleError(w, apierror.New(apierror.ErrInternalError, msg, err))
+			return
+		}
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusOK)
+	w.Write([]byte{})
 }
