@@ -228,6 +228,20 @@ func (m *mockCloudFrontClient) DeleteDistributionWithContext(ctx context.Context
 	return &cloudfront.DeleteDistributionOutput{}, nil
 }
 
+func (m *mockCloudFrontClient) TagResourceWithContext(ctx context.Context, input *cloudfront.TagResourceInput, opts ...request.Option) (*cloudfront.TagResourceOutput, error) {
+	if m.err != nil {
+		return nil, m.err
+	}
+
+	for _, d := range []*cloudfront.DistributionSummary{testDistribution1, testDistribution2, testDistribution3} {
+		if aws.StringValue(d.ARN) == aws.StringValue(input.Resource) {
+			return &cloudfront.TagResourceOutput{}, nil
+		}
+	}
+
+	return nil, awserr.New(cloudfront.ErrCodeNoSuchDistribution, "Distribution Not Found", nil)
+}
+
 func (m *mockCloudFrontClient) CreateInvalidationWithContext(ctx context.Context, input *cloudfront.CreateInvalidationInput, opts ...request.Option) (*cloudfront.CreateInvalidationOutput, error) {
 	if m.err != nil {
 		return nil, m.err
@@ -524,6 +538,56 @@ func TestDeleteDistribution(t *testing.T) {
 
 	// test not found id input
 	err = c.DeleteDistribution(context.TODO(), "notfoundid")
+	if aerr, ok := err.(apierror.Error); ok {
+		if aerr.Code != apierror.ErrNotFound {
+			t.Errorf("expected error code %s, got: %s", apierror.ErrNotFound, aerr.Code)
+		}
+	} else {
+		t.Errorf("expected apierror.Error, got: %s", reflect.TypeOf(err).String())
+	}
+}
+
+func TestTagDistribution(t *testing.T) {
+	c := CloudFront{
+		Service: newmockCloudFrontClient(t, nil),
+		Domains: map[string]*common.Domain{
+			"hyper.converged": &common.Domain{
+				CertArn: "arn:aws:acm::12345678910:certificate/111111111-2222-3333-4444-555555555555",
+			},
+		},
+		WebsiteEndpoint: "s3-website-us-east-1.amazonaws.com",
+	}
+
+	testTags := &cloudfront.Tags{
+		Items: []*cloudfront.Tag{
+			&cloudfront.Tag{
+				Key:   aws.String("foo"),
+				Value: aws.String("bar"),
+			},
+		},
+	}
+
+	// test success
+	tests := []*string{testDistribution1.ARN, testDistribution2.ARN, testDistribution3.ARN}
+	for _, testDist := range tests {
+		err := c.TagDistribution(context.TODO(), aws.StringValue(testDist), testTags)
+		if err != nil {
+			t.Errorf("expected nil error, got: %s", err)
+		}
+	}
+
+	// test empty arn input
+	err := c.TagDistribution(context.TODO(), "", testTags)
+	if aerr, ok := err.(apierror.Error); ok {
+		if aerr.Code != apierror.ErrBadRequest {
+			t.Errorf("expected error code %s, got: %s", apierror.ErrBadRequest, aerr.Code)
+		}
+	} else {
+		t.Errorf("expected apierror.Error, got: %s", reflect.TypeOf(err).String())
+	}
+
+	// test not found arn input
+	err = c.TagDistribution(context.TODO(), "notfoundid", testTags)
 	if aerr, ok := err.(apierror.Error); ok {
 		if aerr.Code != apierror.ErrNotFound {
 			t.Errorf("expected error code %s, got: %s", apierror.ErrNotFound, aerr.Code)
