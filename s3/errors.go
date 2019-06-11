@@ -18,7 +18,10 @@ func ErrCode(msg string, err error) error {
 			"AccountProblem",
 
 			// All access to this Amazon S3 resource has been disabled.
-			"AllAccessDisabled":
+			"AllAccessDisabled",
+
+			// Access forbidden.
+			"Forbidden":
 
 			return apierror.New(apierror.ErrForbidden, msg, aerr)
 		case
@@ -63,6 +66,9 @@ func ErrCode(msg string, err error) error {
 			//
 			// The specified multipart upload does not exist.
 			s3.ErrCodeNoSuchUpload,
+
+			// The specified bucket does not exist.
+			"NotFound",
 
 			// The specified bucket does not have a bucket policy.
 			"NoSuchBucketPolicy",
