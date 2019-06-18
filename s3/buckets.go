@@ -54,17 +54,7 @@ func (s *S3) CreateBucket(ctx context.Context, input *s3.CreateBucketInput) (*s3
 
 	output, err := s.Service.CreateBucketWithContext(ctx, input)
 	if err != nil {
-		if aerr, ok := err.(awserr.Error); ok {
-			switch aerr.Code() {
-			case s3.ErrCodeBucketAlreadyExists, s3.ErrCodeBucketAlreadyOwnedByYou:
-				msg := fmt.Sprintf("%s: %s", aerr.Code(), aerr.Error())
-				return nil, apierror.New(apierror.ErrConflict, msg, err)
-			default:
-				return nil, apierror.New(apierror.ErrBadRequest, aerr.Message(), err)
-			}
-		}
-
-		return nil, apierror.New(apierror.ErrInternalError, "unknown error occurred", err)
+		return nil, ErrCode("failed to create bucket", err)
 	}
 
 	return output, nil
@@ -80,23 +70,7 @@ func (s *S3) DeleteEmptyBucket(ctx context.Context, input *s3.DeleteBucketInput)
 
 	_, err := s.Service.DeleteBucketWithContext(ctx, input)
 	if err != nil {
-		if aerr, ok := err.(awserr.Error); ok {
-			switch aerr.Code() {
-			case s3.ErrCodeNoSuchBucket, "NotFound":
-				msg := fmt.Sprintf("bucket %s not found: %s", aws.StringValue(input.Bucket), aerr.Error())
-				return apierror.New(apierror.ErrNotFound, msg, err)
-			case "BucketNotEmpty":
-				msg := fmt.Sprintf("trying to delete bucket %s that is not empty: %s", aws.StringValue(input.Bucket), aerr.Error())
-				return apierror.New(apierror.ErrConflict, msg, err)
-			case "Forbidden":
-				msg := fmt.Sprintf("forbidden to access requested bucket %s: %s", aws.StringValue(input.Bucket), aerr.Error())
-				return apierror.New(apierror.ErrForbidden, msg, err)
-			default:
-				return apierror.New(apierror.ErrBadRequest, aerr.Message(), err)
-			}
-		}
-
-		return apierror.New(apierror.ErrInternalError, "unknown error occurred", err)
+		return ErrCode("failed to delete bucket"+aws.StringValue(input.Bucket), err)
 	}
 
 	return err
@@ -107,14 +81,7 @@ func (s *S3) ListBuckets(ctx context.Context, input *s3.ListBucketsInput) ([]*s3
 	log.Info("listing buckets")
 	output, err := s.Service.ListBucketsWithContext(ctx, input)
 	if err != nil {
-		if aerr, ok := err.(awserr.Error); ok {
-			switch aerr.Code() {
-			default:
-				return nil, apierror.New(apierror.ErrBadRequest, aerr.Message(), err)
-			}
-		}
-
-		return nil, apierror.New(apierror.ErrInternalError, "unknown error occurred", err)
+		return nil, ErrCode("failed to list buckets", err)
 	}
 	return output.Buckets, err
 }
@@ -157,17 +124,7 @@ func (s *S3) TagBucket(ctx context.Context, bucket string, tags []*s3.Tag) error
 		Bucket:  aws.String(bucket),
 		Tagging: &s3.Tagging{TagSet: tags},
 	}); err != nil {
-		if aerr, ok := err.(awserr.Error); ok {
-			switch aerr.Code() {
-			case s3.ErrCodeNoSuchBucket, "NotFound":
-				msg := fmt.Sprintf("bucket %s not found: %s", bucket, aerr.Error())
-				return apierror.New(apierror.ErrNotFound, msg, err)
-			default:
-				return apierror.New(apierror.ErrBadRequest, aerr.Message(), err)
-			}
-		}
-
-		return apierror.New(apierror.ErrInternalError, "unknown error occurred", err)
+		return ErrCode("failed to tag bucket "+bucket, err)
 	}
 
 	return nil
@@ -187,19 +144,8 @@ func (s *S3) UpdateWebsiteConfig(ctx context.Context, input *s3.PutBucketWebsite
 		input.WebsiteConfiguration.IndexDocument = &s3.IndexDocument{Suffix: aws.String("index.html")}
 	}
 
-	_, err := s.Service.PutBucketWebsiteWithContext(ctx, input)
-	if err != nil {
-		if aerr, ok := err.(awserr.Error); ok {
-			switch aerr.Code() {
-			case s3.ErrCodeNoSuchBucket, "NotFound":
-				msg := fmt.Sprintf("bucket %s not found: %s", aws.StringValue(input.Bucket), aerr.Error())
-				return apierror.New(apierror.ErrNotFound, msg, err)
-			default:
-				return apierror.New(apierror.ErrBadRequest, aerr.Message(), err)
-			}
-		}
-
-		return apierror.New(apierror.ErrInternalError, "unknown error occurred", err)
+	if _, err := s.Service.PutBucketWebsiteWithContext(ctx, input); err != nil {
+		return ErrCode("failed to update website config for bucket "+aws.StringValue(input.Bucket), err)
 	}
 	return nil
 }
@@ -212,19 +158,8 @@ func (s *S3) UpdateBucketPolicy(ctx context.Context, input *s3.PutBucketPolicyIn
 
 	log.Infof("applying bucket policy to %s", aws.StringValue(input.Bucket))
 
-	_, err := s.Service.PutBucketPolicyWithContext(ctx, input)
-	if err != nil {
-		if aerr, ok := err.(awserr.Error); ok {
-			switch aerr.Code() {
-			case s3.ErrCodeNoSuchBucket, "NotFound":
-				msg := fmt.Sprintf("bucket %s not found: %s", aws.StringValue(input.Bucket), aerr.Error())
-				return apierror.New(apierror.ErrNotFound, msg, err)
-			default:
-				return apierror.New(apierror.ErrBadRequest, aerr.Message(), err)
-			}
-		}
-
-		return apierror.New(apierror.ErrInternalError, "unknown error occurred", err)
+	if _, err := s.Service.PutBucketPolicyWithContext(ctx, input); err != nil {
+		return ErrCode("failed to update policy for bucket "+aws.StringValue(input.Bucket), err)
 	}
 	return nil
 }
@@ -237,20 +172,10 @@ func (s *S3) UpdateBucketEncryption(ctx context.Context, input *s3.PutBucketEncr
 
 	log.Infof("applying bucket encryption to %s", aws.StringValue(input.Bucket))
 
-	_, err := s.Service.PutBucketEncryptionWithContext(ctx, input)
-	if err != nil {
-		if aerr, ok := err.(awserr.Error); ok {
-			switch aerr.Code() {
-			case s3.ErrCodeNoSuchBucket, "NotFound":
-				msg := fmt.Sprintf("bucket %s not found: %s", aws.StringValue(input.Bucket), aerr.Error())
-				return apierror.New(apierror.ErrNotFound, msg, err)
-			default:
-				return apierror.New(apierror.ErrBadRequest, aerr.Message(), err)
-			}
-		}
-
-		return apierror.New(apierror.ErrInternalError, "unknown error occurred", err)
+	if _, err := s.Service.PutBucketEncryptionWithContext(ctx, input); err != nil {
+		return ErrCode("failed to update encryption for bucket "+aws.StringValue(input.Bucket), err)
 	}
+
 	return nil
 }
 
@@ -281,17 +206,7 @@ func (s *S3) UpdateBucketLogging(ctx context.Context, bucket, logBucket, logPref
 			},
 		},
 	}); err != nil {
-		if aerr, ok := err.(awserr.Error); ok {
-			switch aerr.Code() {
-			case s3.ErrCodeNoSuchBucket, "NotFound":
-				msg := fmt.Sprintf("bucket %s not found: %s", bucket, aerr.Error())
-				return apierror.New(apierror.ErrNotFound, msg, err)
-			default:
-				return apierror.New(apierror.ErrBadRequest, aerr.Message(), err)
-			}
-		}
-
-		return apierror.New(apierror.ErrInternalError, "unknown error occurred", err)
+		return ErrCode("failed to update logging for bucket "+bucket, err)
 	}
 	return nil
 }
@@ -306,17 +221,7 @@ func (s *S3) GetBucketLogging(ctx context.Context, bucket string) (*s3.LoggingEn
 
 	out, err := s.Service.GetBucketLoggingWithContext(ctx, &s3.GetBucketLoggingInput{Bucket: aws.String(bucket)})
 	if err != nil {
-		if aerr, ok := err.(awserr.Error); ok {
-			switch aerr.Code() {
-			case s3.ErrCodeNoSuchBucket, "NotFound":
-				msg := fmt.Sprintf("bucket %s not found: %s", bucket, aerr.Error())
-				return nil, apierror.New(apierror.ErrNotFound, msg, err)
-			default:
-				return nil, apierror.New(apierror.ErrBadRequest, aerr.Message(), err)
-			}
-		}
-
-		return nil, apierror.New(apierror.ErrInternalError, "unknown error occurred", err)
+		return nil, ErrCode("failed to get bucket logging for bucket "+bucket, err)
 	}
 
 	return out.LoggingEnabled, nil
@@ -335,17 +240,7 @@ func (s *S3) BucketEmpty(ctx context.Context, bucket string) (bool, error) {
 		MaxKeys: aws.Int64(1),
 	})
 	if err != nil {
-		if aerr, ok := err.(awserr.Error); ok {
-			switch aerr.Code() {
-			case s3.ErrCodeNoSuchBucket, "NotFound":
-				msg := fmt.Sprintf("bucket %s not found: %s", bucket, aerr.Error())
-				return false, apierror.New(apierror.ErrNotFound, msg, err)
-			default:
-				return false, apierror.New(apierror.ErrBadRequest, aerr.Message(), err)
-			}
-		}
-
-		return false, apierror.New(apierror.ErrInternalError, "unknown error occurred", err)
+		return false, ErrCode("failed to determine if bucket is empty for bucket "+bucket, err)
 	}
 
 	if aws.Int64Value(out.KeyCount) > 0 {
@@ -376,7 +271,7 @@ func (s *S3) BucketEmptyWithFilter(ctx context.Context, bucket string, max int64
 			return true
 		})
 	if err != nil {
-		return false, ErrCode("failed to determine if bucket is empty with filter", err)
+		return false, ErrCode("failed to determine if bucket is empty with filter for bucket "+bucket, err)
 	}
 
 	log.Debugf("found %d keys in bucket %s when checking for empty with filter", keys, bucket)

@@ -330,8 +330,8 @@ func TestCreateBucket(t *testing.T) {
 	s.Service.(*mockS3Client).err = awserr.New(s3.ErrCodeNoSuchKey, "no such key", nil)
 	_, err = s.CreateBucket(context.TODO(), &s3.CreateBucketInput{Bucket: aws.String("testbucket")})
 	if aerr, ok := err.(apierror.Error); ok {
-		if aerr.Code != apierror.ErrBadRequest {
-			t.Errorf("expected error code %s, got: %s", apierror.ErrBadRequest, aerr.Code)
+		if aerr.Code != apierror.ErrNotFound {
+			t.Errorf("expected error code %s, got: %s", apierror.ErrNotFound, aerr.Code)
 		}
 	} else {
 		t.Errorf("expected apierror.Error, got: %s", reflect.TypeOf(err).String())
@@ -422,17 +422,6 @@ func TestDeleteBucket(t *testing.T) {
 		t.Errorf("expected apierror.Error, got: %s", reflect.TypeOf(err).String())
 	}
 
-	// test some other, unexpected AWS error
-	s.Service.(*mockS3Client).err = awserr.New(s3.ErrCodeNoSuchKey, "no such key", nil)
-	err = s.DeleteEmptyBucket(context.TODO(), &s3.DeleteBucketInput{Bucket: aws.String("testbucket")})
-	if aerr, ok := err.(apierror.Error); ok {
-		if aerr.Code != apierror.ErrBadRequest {
-			t.Errorf("expected error code %s, got: %s", apierror.ErrBadRequest, aerr.Code)
-		}
-	} else {
-		t.Errorf("expected apierror.Error, got: %s", reflect.TypeOf(err).String())
-	}
-
 	// test non-aws error
 	s.Service.(*mockS3Client).err = errors.New("things blowing up!")
 	err = s.DeleteEmptyBucket(context.TODO(), &s3.DeleteBucketInput{Bucket: aws.String("testbucket")})
@@ -463,8 +452,8 @@ func TestListBuckets(t *testing.T) {
 	s.Service.(*mockS3Client).err = awserr.New(s3.ErrCodeNoSuchUpload, "no such upload", nil)
 	_, err = s.ListBuckets(context.TODO(), &s3.ListBucketsInput{})
 	if aerr, ok := err.(apierror.Error); ok {
-		if aerr.Code != apierror.ErrBadRequest {
-			t.Errorf("expected error code %s, got: %s", apierror.ErrBadRequest, aerr.Code)
+		if aerr.Code != apierror.ErrNotFound {
+			t.Errorf("expected error code %s, got: %s", apierror.ErrNotFound, aerr.Code)
 		}
 	} else {
 		t.Errorf("expected apierror.Error, got: %s", reflect.TypeOf(err).String())
@@ -556,17 +545,6 @@ func TestTagBucket(t *testing.T) {
 		t.Errorf("expected nil error, got: %s", err)
 	}
 
-	// test some unexpected AWS error
-	s.Service.(*mockS3Client).err = awserr.New(s3.ErrCodeNoSuchUpload, "no such upload", nil)
-	err = s.TagBucket(context.TODO(), "testBucket1", testTags1)
-	if aerr, ok := err.(apierror.Error); ok {
-		if aerr.Code != apierror.ErrBadRequest {
-			t.Errorf("expected error code %s, got: %s", apierror.ErrBadRequest, aerr.Code)
-		}
-	} else {
-		t.Errorf("expected apierror.Error, got: %s", reflect.TypeOf(err).String())
-	}
-
 	// test non-aws error
 	s.Service.(*mockS3Client).err = errors.New("things blowing up!")
 	err = s.TagBucket(context.TODO(), "testBucket1", testTags1)
@@ -603,20 +581,6 @@ func TestUpdateWebsiteConfig(t *testing.T) {
 
 	// test empty bucket name and website configuration
 	err = s.UpdateWebsiteConfig(context.TODO(), &s3.PutBucketWebsiteInput{})
-	if aerr, ok := err.(apierror.Error); ok {
-		if aerr.Code != apierror.ErrBadRequest {
-			t.Errorf("expected error code %s, got: %s", apierror.ErrBadRequest, aerr.Code)
-		}
-	} else {
-		t.Errorf("expected apierror.Error, got: %s", reflect.TypeOf(err).String())
-	}
-
-	// test some other, unexpected AWS error
-	s.Service.(*mockS3Client).err = awserr.New(s3.ErrCodeNoSuchKey, "no such key", nil)
-	err = s.UpdateWebsiteConfig(context.TODO(), &s3.PutBucketWebsiteInput{
-		Bucket:               aws.String("testbucket"),
-		WebsiteConfiguration: &s3.WebsiteConfiguration{},
-	})
 	if aerr, ok := err.(apierror.Error); ok {
 		if aerr.Code != apierror.ErrBadRequest {
 			t.Errorf("expected error code %s, got: %s", apierror.ErrBadRequest, aerr.Code)
@@ -672,20 +636,6 @@ func TestUpdateBucketPolicy(t *testing.T) {
 		t.Errorf("expected apierror.Error, got: %s", reflect.TypeOf(err).String())
 	}
 
-	// test some other, unexpected AWS error
-	s.Service.(*mockS3Client).err = awserr.New(s3.ErrCodeNoSuchKey, "no such key", nil)
-	err = s.UpdateBucketPolicy(context.TODO(), &s3.PutBucketPolicyInput{
-		Bucket: aws.String("testbucket"),
-		Policy: aws.String("somepolicy"),
-	})
-	if aerr, ok := err.(apierror.Error); ok {
-		if aerr.Code != apierror.ErrBadRequest {
-			t.Errorf("expected error code %s, got: %s", apierror.ErrBadRequest, aerr.Code)
-		}
-	} else {
-		t.Errorf("expected apierror.Error, got: %s", reflect.TypeOf(err).String())
-	}
-
 	// test non-aws error
 	s.Service.(*mockS3Client).err = errors.New("things blowing up!")
 	err = s.UpdateBucketPolicy(context.TODO(), &s3.PutBucketPolicyInput{
@@ -726,17 +676,6 @@ func TestUpdateBucketEncryption(t *testing.T) {
 
 	// test empty bucket name and encryption configuration
 	err = s.UpdateBucketEncryption(context.TODO(), &s3.PutBucketEncryptionInput{})
-	if aerr, ok := err.(apierror.Error); ok {
-		if aerr.Code != apierror.ErrBadRequest {
-			t.Errorf("expected error code %s, got: %s", apierror.ErrBadRequest, aerr.Code)
-		}
-	} else {
-		t.Errorf("expected apierror.Error, got: %s", reflect.TypeOf(err).String())
-	}
-
-	// test some other, unexpected AWS error
-	s.Service.(*mockS3Client).err = awserr.New(s3.ErrCodeNoSuchKey, "no such key", nil)
-	err = s.UpdateBucketEncryption(context.TODO(), &input)
 	if aerr, ok := err.(apierror.Error); ok {
 		if aerr.Code != apierror.ErrBadRequest {
 			t.Errorf("expected error code %s, got: %s", apierror.ErrBadRequest, aerr.Code)
@@ -794,17 +733,6 @@ func TestUpdateBucketLogging(t *testing.T) {
 		t.Errorf("expected nil error, got: %s", err)
 	}
 
-	// test some other, unexpected AWS error
-	s.Service.(*mockS3Client).err = awserr.New(s3.ErrCodeNoSuchKey, "no such key", nil)
-	err = s.UpdateBucketLogging(context.TODO(), "foobucket", "target", "")
-	if aerr, ok := err.(apierror.Error); ok {
-		if aerr.Code != apierror.ErrBadRequest {
-			t.Errorf("expected error code %s, got: %s", apierror.ErrBadRequest, aerr.Code)
-		}
-	} else {
-		t.Errorf("expected apierror.Error, got: %s", reflect.TypeOf(err).String())
-	}
-
 	// test non-aws error
 	s.Service.(*mockS3Client).err = errors.New("things blowing up!")
 	err = s.UpdateBucketLogging(context.TODO(), "foobucket", "target", "")
@@ -838,17 +766,6 @@ func TestGetBucketLogging(t *testing.T) {
 
 	// test empty bucket
 	_, err := s.GetBucketLogging(context.TODO(), "")
-	if aerr, ok := err.(apierror.Error); ok {
-		if aerr.Code != apierror.ErrBadRequest {
-			t.Errorf("expected error code %s, got: %s", apierror.ErrBadRequest, aerr.Code)
-		}
-	} else {
-		t.Errorf("expected apierror.Error, got: %s", reflect.TypeOf(err).String())
-	}
-
-	// test some other, unexpected AWS error
-	s.Service.(*mockS3Client).err = awserr.New(s3.ErrCodeNoSuchKey, "no such key", nil)
-	_, err = s.GetBucketLogging(context.TODO(), "foobucket")
 	if aerr, ok := err.(apierror.Error); ok {
 		if aerr.Code != apierror.ErrBadRequest {
 			t.Errorf("expected error code %s, got: %s", apierror.ErrBadRequest, aerr.Code)
@@ -894,17 +811,6 @@ func TestBucketEmpty(t *testing.T) {
 
 	// test empty bucket name
 	_, err = s.BucketEmpty(context.TODO(), "")
-	if aerr, ok := err.(apierror.Error); ok {
-		if aerr.Code != apierror.ErrBadRequest {
-			t.Errorf("expected error code %s, got: %s", apierror.ErrBadRequest, aerr.Code)
-		}
-	} else {
-		t.Errorf("expected apierror.Error, got: %s", reflect.TypeOf(err).String())
-	}
-
-	// test some other, unexpected AWS error
-	s.Service.(*mockS3Client).err = awserr.New(s3.ErrCodeNoSuchKey, "no such key", nil)
-	_, err = s.BucketEmpty(context.TODO(), "testBucket")
 	if aerr, ok := err.(apierror.Error); ok {
 		if aerr.Code != apierror.ErrBadRequest {
 			t.Errorf("expected error code %s, got: %s", apierror.ErrBadRequest, aerr.Code)
