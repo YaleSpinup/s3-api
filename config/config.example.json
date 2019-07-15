@@ -70,5 +70,6 @@
     }
   },
   "token": "xxxxxx",
-  "logLevel": "info"
+  "logLevel": "info",
+  "org": "localdev"
 }

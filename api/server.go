@@ -2,6 +2,7 @@ package api
 
 import (
 	"context"
+	"errors"
 	"net/http"
 	"os"
 	"time"
@@ -38,6 +39,9 @@ type cleaner struct {
 	context           context.Context
 }
 
+// Org will carry throughout the api and get tagged on resources
+var Org string
+
 // NewServer creates a new server and starts it
 func NewServer(config common.Config) error {
 	// setup server context with cancellation
@@ -54,15 +58,20 @@ func NewServer(config common.Config) error {
 		context:            ctx,
 	}
 
+	if config.Org == "" {
+		return errors.New("'org' cannot be empty in the configuration")
+	}
+	Org = config.Org
+
 	// Create a shared S3 session
 	for name, c := range config.Accounts {
-		log.Debugf("Creating new S3 service for account '%s' with key '%s' in region '%s'", name, c.Akid, c.Region)
+		log.Debugf("Creating new S3 service for account '%s' with key '%s' in region '%s' (org: %s)", name, c.Akid, c.Region, Org)
 		s.s3Services[name] = s3.NewSession(c)
 		s.iamServices[name] = iam.NewSession(c)
 		s.cloudFrontServices[name] = cloudfront.NewSession(c)
 		s.route53Services[name] = route53.NewSession(c)
 		if c.Cleaner != nil {
-			log.Infof("starting cleaner for account %s", name)
+			log.Infof("starting cleaner for account %s (org: %s)", name, Org)
 			interval, err := cleanerInterval(c.Cleaner.Interval, c.Cleaner.MaxSplay)
 			if err != nil {
 				return err
