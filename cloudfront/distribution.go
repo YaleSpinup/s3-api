@@ -223,7 +223,7 @@ func (c *CloudFront) ListTags(ctx context.Context, arn string) ([]*cloudfront.Ta
 
 	out, err := c.Service.ListTagsForResourceWithContext(ctx, &cloudfront.ListTagsForResourceInput{Resource: aws.String(arn)})
 	if err != nil {
-		return nil, ErrCode("failed to invalidate cloudfront distributions", err)
+		return nil, ErrCode("failed to list tags cloudfront distributions", err)
 	}
 
 	log.Debugf("got tags list output for resource %s: %+v", arn, out)
