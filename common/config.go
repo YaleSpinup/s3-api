@@ -15,6 +15,7 @@ type Config struct {
 	Token         string
 	LogLevel      string
 	Version       Version
+	Org           string
 }
 
 // Account is the configuration for an individual account

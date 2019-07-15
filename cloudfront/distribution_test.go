@@ -104,6 +104,13 @@ var testInvalidation = &cloudfront.Invalidation{
 	Status: aws.String("InProgress"),
 }
 
+var testTags = []*cloudfront.Tag{
+	&cloudfront.Tag{
+		Key:   aws.String("foo"),
+		Value: aws.String("bar"),
+	},
+}
+
 func (m *mockCloudFrontClient) CreateDistributionWithTagsWithContext(ctx context.Context, input *cloudfront.CreateDistributionWithTagsInput, opts ...request.Option) (*cloudfront.CreateDistributionWithTagsOutput, error) {
 	if m.err != nil {
 		return nil, m.err
@@ -254,6 +261,18 @@ func (m *mockCloudFrontClient) CreateInvalidationWithContext(ctx context.Context
 	return &cloudfront.CreateInvalidationOutput{
 		Invalidation: testInvalidation,
 		Location:     aws.String("https://cloudfront.amazonaws.com/2018-11-05/distribution/" + aws.StringValue(testInvalidation.Id) + "/invalidation/" + aws.StringValue(testInvalidation.Id)),
+	}, nil
+}
+
+func (m *mockCloudFrontClient) ListTagsForResourceWithContext(ctx context.Context, input *cloudfront.ListTagsForResourceInput, opts ...request.Option) (*cloudfront.ListTagsForResourceOutput, error) {
+	if m.err != nil {
+		return nil, m.err
+	}
+
+	return &cloudfront.ListTagsForResourceOutput{
+		Tags: &cloudfront.Tags{
+			Items: testTags,
+		},
 	}, nil
 }
 
@@ -758,5 +777,33 @@ func TestInvalidateCache(t *testing.T) {
 	_, err = c.InvalidateCache(context.TODO(), "foobar3.bulldogs.cloud", []string{"errorme"})
 	if err == nil {
 		t.Error("expected error for empty path list, got nil")
+	}
+}
+
+func TestListTags(t *testing.T) {
+	c := CloudFront{
+		Service: newmockCloudFrontClient(t, nil),
+		Domains: map[string]*common.Domain{
+			"hyper.converged": &common.Domain{
+				CertArn: "arn:aws:acm::12345678910:certificate/111111111-2222-3333-4444-555555555555",
+			},
+		},
+		WebsiteEndpoint: "s3-website-us-east-1.amazonaws.com",
+	}
+
+	// test success
+	expected := testTags
+	out, err := c.ListTags(context.TODO(), "arn:aws:cloudfront::12345678910:distribution/AAABBBCCCDDDEEE")
+	if err != nil {
+		t.Errorf("expected nil error, got: %s", err)
+	}
+
+	if !reflect.DeepEqual(out, expected) {
+		t.Errorf("expected %+v, got %+v", expected, out)
+	}
+
+	_, err = c.ListTags(context.TODO(), "")
+	if err == nil {
+		t.Error("expected error for empty distribution id, got nil")
 	}
 }

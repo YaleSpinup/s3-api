@@ -855,7 +855,6 @@ DELETE `/v1/s3/{account}/websites/{website}/users/{user}`
 
 *See [Delete a bucket user](#delete-a-bucket-user)*
 
-
 ## Author
 
 E Camden Fisher <camden.fisher@yale.edu>

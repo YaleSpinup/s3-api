@@ -43,7 +43,8 @@ var testConfig = []byte(
 		  }
 		},
 		"token": "SEKRET",
-		"logLevel": "info"
+		"logLevel": "info",
+		"org": "test"
 	}`)
 
 var brokenConfig = []byte(`{ "foobar": { "baz": "biz" }`)
@@ -86,6 +87,7 @@ func TestReadConfig(t *testing.T) {
 		},
 		Token:    "SEKRET",
 		LogLevel: "info",
+		Org:      "test",
 	}
 
 	actualConfig, err := ReadConfig(bytes.NewReader(testConfig))

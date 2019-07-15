@@ -148,6 +148,8 @@ func (c *CloudFront) ListDistributionsWithFilter(ctx context.Context, filter fun
 		input.Marker = output.DistributionList.Marker
 	}
 
+	log.Debugf("returing cloudfront distributions list: %+v", distributions)
+
 	return distributions, nil
 }
 
@@ -209,4 +211,27 @@ func (c *CloudFront) InvalidateCache(ctx context.Context, id string, paths []str
 	log.Debugf("got cache invalidation output %+v", out)
 
 	return out, nil
+}
+
+// ListTags lists the tags for an ARN
+func (c *CloudFront) ListTags(ctx context.Context, arn string) ([]*cloudfront.Tag, error) {
+	if arn == "" {
+		return nil, apierror.New(apierror.ErrBadRequest, "invalid input", nil)
+	}
+
+	log.Infof("listing tags for cloudfront resource %s", arn)
+
+	out, err := c.Service.ListTagsForResourceWithContext(ctx, &cloudfront.ListTagsForResourceInput{Resource: aws.String(arn)})
+	if err != nil {
+		return nil, ErrCode("failed to invalidate cloudfront distributions", err)
+	}
+
+	log.Debugf("got tags list output for resource %s: %+v", arn, out)
+
+	tags := []*cloudfront.Tag{}
+	if out.Tags != nil && len(out.Tags.Items) > 0 {
+		tags = out.Tags.Items
+	}
+
+	return tags, nil
 }

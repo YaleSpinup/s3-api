@@ -74,6 +74,12 @@ func (s *server) CreateWebsiteHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// append org tag that will get applied to all resources that tag
+	req.Tags = append(req.Tags, &s3.Tag{
+		Key:   aws.String("spinup:org"),
+		Value: aws.String(Org),
+	})
+
 	// setup err var, rollback function list and defer execution, note that we depend on the err variable defined above this
 	var rollBackTasks []func() error
 	defer func() {
@@ -740,6 +746,12 @@ func (s *server) WebsiteUpdateHandler(w http.ResponseWriter, r *http.Request) {
 		handleError(w, apierror.New(apierror.ErrBadRequest, msg, err))
 		return
 	}
+
+	// append org tag that will get applied to all resources that tag
+	req.Tags = append(req.Tags, &s3.Tag{
+		Key:   aws.String("spinup:org"),
+		Value: aws.String(Org),
+	})
 
 	// find the cloudfront distribution from the website name
 	distributionSummary, err := cloudFrontService.GetDistributionByName(r.Context(), website)
