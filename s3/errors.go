@@ -5,6 +5,7 @@ import (
 	"github.com/aws/aws-sdk-go/aws/awserr"
 	"github.com/aws/aws-sdk-go/service/s3"
 	"github.com/pkg/errors"
+	log "github.com/sirupsen/logrus"
 )
 
 func ErrCode(msg string, err error) error {
@@ -21,7 +22,10 @@ func ErrCode(msg string, err error) error {
 			"AllAccessDisabled",
 
 			// Access forbidden.
-			"Forbidden":
+			"Forbidden",
+
+			// The AWS access key ID you provided does not exist in our records.
+			"InvalidAccessKeyId":
 
 			return apierror.New(apierror.ErrForbidden, msg, aerr)
 		case
@@ -271,9 +275,6 @@ func ErrCode(msg string, err error) error {
 
 			return apierror.New(apierror.ErrLimitExceeded, msg, aerr)
 		case
-			// The AWS access key ID you provided does not exist in our records.
-			"InvalidAccessKeyId",
-
 			// All access to this object has been disabled. Please contact AWS Support for further assistance.
 			"InvalidPayer",
 
@@ -311,5 +312,6 @@ func ErrCode(msg string, err error) error {
 		}
 	}
 
+	log.Warnf("uncaught error: %s, returning Internal Server Error", err)
 	return apierror.New(apierror.ErrInternalError, msg, err)
 }

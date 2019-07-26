@@ -20,6 +20,7 @@ type Config struct {
 
 // Account is the configuration for an individual account
 type Account struct {
+	Endpoint               string
 	Region                 string
 	Akid                   string
 	Secret                 string
