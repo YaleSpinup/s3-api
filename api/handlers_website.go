@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"net/http"
 	"strings"
+	"time"
 
 	"github.com/YaleSpinup/s3-api/apierror"
 	"github.com/aws/aws-sdk-go/aws"
@@ -112,6 +113,23 @@ func (s *server) CreateWebsiteHandler(w http.ResponseWriter, r *http.Request) {
 		}()
 	}
 	rollBackTasks = append(rollBackTasks, rbfunc)
+
+	// wait for the bucket to exist
+	err = retry(3, 2*time.Second, func() error {
+		log.Infof("checking if bucket exists before continuing: %s", bucketName)
+		exists, err := s3Service.BucketExists(r.Context(), bucketName)
+		if err != nil {
+			return err
+		}
+
+		if exists {
+			log.Infof("bucket %s exists", bucketName)
+			return nil
+		}
+
+		msg := fmt.Sprintf("s3 bucket (%s) doesn't exist", bucketName)
+		return errors.New(msg)
+	})
 
 	err = s3Service.TagBucket(r.Context(), bucketName, req.Tags)
 	if err != nil {

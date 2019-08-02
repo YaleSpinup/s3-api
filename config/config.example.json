@@ -67,6 +67,18 @@
         "interval": "1200s",
         "maxSplay": "60s"
       }
+    },
+    "someotherservice": {
+      "region": "us-middle-earth",
+      "endpoint": "https://foo.s3svc.example.com",
+      "akid": "xxxxxxxxxxxxxxxxxxxxxxxx",
+      "secret": "yyyyyyyyyyyyyyyyyyyyyyyyyyyyyy",
+      "defaultS3BucketActions": [
+        "s3:*"
+      ],
+      "defaultS3ObjectActions": [
+        "s3:*"
+      ]
     }
   },
   "token": "xxxxxx",
