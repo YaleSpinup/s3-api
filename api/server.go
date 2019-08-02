@@ -3,9 +3,9 @@ package api
 import (
 	"context"
 	"errors"
+	"math/rand"
 	"net/http"
 	"os"
-	"math/rand"
 	"time"
 
 	"github.com/YaleSpinup/s3-api/cloudfront"
@@ -159,7 +159,7 @@ type stop struct {
 	error
 }
 
-// https://upgear.io/blog/simple-golang-retry-function/
+// retry is stolen from https://upgear.io/blog/simple-golang-retry-function/
 func retry(attempts int, sleep time.Duration, f func() error) error {
 	if err := f(); err != nil {
 		if s, ok := err.(stop); ok {
