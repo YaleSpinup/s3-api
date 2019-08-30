@@ -258,14 +258,16 @@ func (s *S3) BucketEmptyWithFilter(ctx context.Context, bucket string, max int64
 
 	log.Infof("checking if bucket %s is empty with filter", bucket)
 
-	var keys int64
+	var empty = true
 	input := &s3.ListObjectsV2Input{Bucket: aws.String(bucket), MaxKeys: aws.Int64(max)}
 	err := s.Service.ListObjectsV2PagesWithContext(ctx, input,
 		func(out *s3.ListObjectsV2Output, lastPage bool) bool {
 			for _, obj := range out.Contents {
-				log.Debugf("filtering object %s", aws.StringValue(obj.Key))
 				if filter(obj.Key) {
-					keys++
+					log.Debugf("found object %s in bucket %s when checking for empty with filter", aws.StringValue(obj.Key), bucket)
+					empty = false
+					// stop iterating if we find a key
+					return false
 				}
 			}
 			return true
@@ -274,10 +276,7 @@ func (s *S3) BucketEmptyWithFilter(ctx context.Context, bucket string, max int64
 		return false, ErrCode("failed to determine if bucket is empty with filter for bucket "+bucket, err)
 	}
 
-	log.Debugf("found %d keys in bucket %s when checking for empty with filter", keys, bucket)
-	if keys > 0 {
-		return false, nil
-	}
+	log.Debugf("returning %t when checking if %s is empty with filter", empty, bucket)
 
-	return true, nil
+	return empty, nil
 }
