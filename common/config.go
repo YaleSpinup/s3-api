@@ -20,15 +20,16 @@ type Config struct {
 
 // Account is the configuration for an individual account
 type Account struct {
-	Endpoint               string
-	Region                 string
-	Akid                   string
-	Secret                 string
-	DefaultS3BucketActions []string
-	DefaultS3ObjectActions []string
-	AccessLog              *AccessLog
-	Domains                map[string]*Domain
-	Cleaner                *Cleaner
+	Endpoint                             string
+	Region                               string
+	Akid                                 string
+	Secret                               string
+	DefaultS3BucketActions               []string
+	DefaultS3ObjectActions               []string
+	DefaultCloudfrontDistributionActions []string
+	AccessLog                            *AccessLog
+	Domains                              map[string]*Domain
+	Cleaner                              *Cleaner
 }
 
 // AccessLog is the configuration for a bucket's access log

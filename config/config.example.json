@@ -53,6 +53,10 @@
       "defaultS3ObjectActions": [
         "s3:*"
       ],
+      "defaultCloudfrontDistributionActions": [
+				"cloudfront:ListInvalidations",
+        "cloudfront:CreateInvalidation"
+			],
       "domains": {
         "superdomain.org": {
           "certArn": "arn:aws:acm:us-east-1:123456789:certificate/111111111-2222-3333-4444-55555555555",

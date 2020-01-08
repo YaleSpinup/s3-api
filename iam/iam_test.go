@@ -39,8 +39,9 @@ func TestNewSession(t *testing.T) {
 var bucket = "vehicles"
 
 var i = &IAM{
-	DefaultS3BucketActions: []string{"f150", "focus", "edge", "ranger", "fusion", "mustang", "gt"},
-	DefaultS3ObjectActions: []string{"silverado", "cruze", "traverse", "colorodo", "malibu", "camaro", "corvette"},
+	DefaultS3BucketActions:               []string{"f150", "focus", "edge", "ranger", "fusion", "mustang", "gt"},
+	DefaultS3ObjectActions:               []string{"silverado", "cruze", "traverse", "colorodo", "malibu", "camaro", "corvette"},
+	DefaultCloudfrontDistributionActions: []string{"sl1", "sl2"},
 }
 
 var defaultPolicyDoc = PolicyDoc{
@@ -55,6 +56,18 @@ var defaultPolicyDoc = PolicyDoc{
 			Effect:   "Allow",
 			Action:   i.DefaultS3ObjectActions,
 			Resource: []string{fmt.Sprintf("arn:aws:s3:::%s/*", bucket)},
+		},
+	},
+}
+
+var distributionARN = "arn:aws:cloudfront::012345678910:distribution/ET123456ABCDE"
+var defaultWebPolicyDoc = PolicyDoc{
+	Version: "2012-10-17",
+	Statement: []PolicyStatement{
+		PolicyStatement{
+			Effect:   "Allow",
+			Action:   i.DefaultCloudfrontDistributionActions,
+			Resource: []string{distributionARN},
 		},
 	},
 }
@@ -87,6 +100,22 @@ func TestDefaultBucketAdminPolicy(t *testing.T) {
 	}
 }
 
+func TestDefaultWebAdminPolicy(t *testing.T) {
+	p, err := json.Marshal(defaultWebPolicyDoc)
+	if err != nil {
+		t.Errorf("expected to marshall defaultWebPolicyDoc with nil error, got %s", err)
+	}
+
+	policyBytes, err := i.DefaultWebAdminPolicy(&distributionARN)
+	if err != nil {
+		t.Errorf("expected DefaultWebAdminPolicy to return nil error, got %s", err)
+	}
+
+	if !bytes.Equal(policyBytes, p) {
+		t.Errorf("expected: %+v\ngot: %s", defaultWebPolicyDoc, policyBytes)
+	}
+}
+
 func TestDefaultWebsiteAccessPolicy(t *testing.T) {
 	p, err := json.Marshal(defaultWebsitePolicyDoc)
 	if err != nil {
@@ -99,6 +128,6 @@ func TestDefaultWebsiteAccessPolicy(t *testing.T) {
 	}
 
 	if !bytes.Equal(policyBytes, p) {
-		t.Errorf("expected: %s\ngot: %s", defaultWebsitePolicyDoc, policyBytes)
+		t.Errorf("expected: %+v\ngot: %s", defaultWebsitePolicyDoc, policyBytes)
 	}
 }

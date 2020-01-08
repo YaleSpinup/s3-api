@@ -741,8 +741,14 @@ Responds with a status code and the deleted objects
 {
     "Website": "foobar.bulldogs.cloud",
     "Users": [],
-    "Policy": "foobar.bulldogs.cloud-BktAdmPlc",
-    "Group": "foobar.bulldogs.cloud-BktAdmGrp",
+    "Policies": [
+        "foobar2.yalepages.org-BktAdmPlc",
+        "foobar2.yalepages.org-WebAdmPlc"
+    ],
+    "Groups": [
+        "foobar2.yalepages.org-BktAdmGrp",
+        "foobar2.yalepages.org-WebAdmGrp"
+    ],
     "DNSRecord": {
         "AliasTarget": {
             "DNSName": "abcdefgh12345.cloudfront.net.",
