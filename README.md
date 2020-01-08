@@ -742,12 +742,12 @@ Responds with a status code and the deleted objects
     "Website": "foobar.bulldogs.cloud",
     "Users": [],
     "Policies": [
-        "foobar2.yalepages.org-BktAdmPlc",
-        "foobar2.yalepages.org-WebAdmPlc"
+        "foobar.bulldogs.cloud-BktAdmPlc",
+        "foobar.bulldogs.cloud-WebAdmPlc"
     ],
     "Groups": [
-        "foobar2.yalepages.org-BktAdmGrp",
-        "foobar2.yalepages.org-WebAdmGrp"
+        "foobar.bulldogs.cloud-BktAdmGrp",
+        "foobar.bulldogs.cloud-WebAdmGrp"
     ],
     "DNSRecord": {
         "AliasTarget": {
