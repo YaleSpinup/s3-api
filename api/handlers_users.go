@@ -28,7 +28,12 @@ func (s *server) UserCreateHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	var req iam.CreateUserInput
+	// var req iam.CreateUserInput
+
+	var req struct {
+		User   *iam.CreateUserInput
+		Groups []string
+	}
 	err := json.NewDecoder(r.Body).Decode(&req)
 	if err != nil {
 		msg := fmt.Sprintf("cannot decode body into create user input: %s", err)
@@ -45,7 +50,7 @@ func (s *server) UserCreateHandler(w http.ResponseWriter, r *http.Request) {
 		}
 	}()
 
-	userOutput, err := iamService.CreateUser(r.Context(), &req)
+	userOutput, err := iamService.CreateUser(r.Context(), req.User)
 	if err != nil {
 		msg := fmt.Sprintf("failed to create user for bucket %s: %s", bucket, err)
 		handleError(w, errors.Wrap(err, msg))
@@ -55,7 +60,7 @@ func (s *server) UserCreateHandler(w http.ResponseWriter, r *http.Request) {
 	// append user delete to rollback tasks
 	rbfunc := func() error {
 		return func() error {
-			if _, err := iamService.DeleteUser(r.Context(), &iam.DeleteUserInput{UserName: req.UserName}); err != nil {
+			if _, err := iamService.DeleteUser(r.Context(), &iam.DeleteUserInput{UserName: req.User.UserName}); err != nil {
 				return err
 			}
 			return nil
@@ -84,14 +89,35 @@ func (s *server) UserCreateHandler(w http.ResponseWriter, r *http.Request) {
 	}
 	rollBackTasks = append(rollBackTasks, rbfunc)
 
-	groupName := fmt.Sprintf("%s-BktAdmGrp", bucket)
-	if _, err := iamService.AddUserToGroup(r.Context(), &iam.AddUserToGroupInput{
-		UserName:  userOutput.User.UserName,
-		GroupName: aws.String(groupName),
-	}); err != nil {
-		msg := fmt.Sprintf("failed to add user: %s to group %s for bucket %s", aws.StringValue(userOutput.User.UserName), groupName, bucket)
-		handleError(w, errors.Wrap(err, msg))
-		return
+	groupNames := req.Groups
+	if groupNames == nil {
+		groupNames = []string{fmt.Sprintf("%s-BktAdmGrp", bucket)}
+	}
+
+	for _, group := range groupNames {
+		groupName := fmt.Sprintf("%s-%s", bucket, group)
+		if _, err = iamService.AddUserToGroup(r.Context(), &iam.AddUserToGroupInput{
+			UserName:  userOutput.User.UserName,
+			GroupName: aws.String(groupName),
+		}); err != nil {
+			msg := fmt.Sprintf("failed to add user: %s to group %s for bucket %s", aws.StringValue(userOutput.User.UserName), group, bucket)
+			handleError(w, errors.Wrap(err, msg))
+			return
+		}
+
+		// append detatch group to rollback funciton
+		rbfunc = func() error {
+			return func() error {
+				if err := iamService.RemoveUserFromGroup(r.Context(), &iam.RemoveUserFromGroupInput{
+					UserName:  keyOutput.AccessKey.UserName,
+					GroupName: aws.String(groupName),
+				}); err != nil {
+					return err
+				}
+				return nil
+			}()
+		}
+		rollBackTasks = append(rollBackTasks, rbfunc)
 	}
 
 	output := struct {
