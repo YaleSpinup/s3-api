@@ -89,7 +89,7 @@ func (s *server) UserCreateHandler(w http.ResponseWriter, r *http.Request) {
 
 	groupNames := req.Groups
 	if groupNames == nil {
-		groupNames = []string{fmt.Sprintf("%s-BktAdmGrp", bucket)}
+		groupNames = []string{"BktAdmGrp"}
 	}
 
 	for _, group := range groupNames {
