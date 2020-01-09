@@ -10,7 +10,7 @@ spec:
       - path: /v1/s3
         backend:
           serviceName: s3api
-          servicePort: http-s3api
+          servicePort: 8080
 ---
 apiVersion: v1
 kind: Service
@@ -19,15 +19,19 @@ metadata:
   labels:
     app: s3api
     tier: api
+  annotations:
+    prometheus.io/scrape: 'true'
+    prometheus.io/port:   '8080'
+    prometheus.io/path:   '/v1/s3/metrics'
 spec:
   selector:
     app: s3api
     tier: api
   ports:
-    - name: http-s3api
-      protocol: TCP
-      port: 80
+    - protocol: TCP
+      port: 8080
       targetPort: 8080
+      name: http
 ---
 apiVersion: apps/v1
 kind: Deployment

@@ -23,7 +23,7 @@ var testConfig = []byte(
 			],
 			"defaultCloudfrontDistributionActions": [
 				"cloudfront:ListInvalidations",
-                "cloudfront:CreateInvalidation"
+				"cloudfront:CreateInvalidation"
 			],
 			"accessLog": {
 				"bucket": "foobucket",

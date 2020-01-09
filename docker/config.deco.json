@@ -53,6 +53,10 @@
       "defaultS3ObjectActions": [
         "s3:*"
       ],
+      "defaultCloudfrontDistributionActions": [
+        "cloudfront:ListInvalidations",
+        "cloudfront:CreateInvalidation"
+      ],
       "accessLog": {
         "bucket": "{{ .spinup_logging_bucket }}",
         "prefix": "s3"
@@ -123,6 +127,10 @@
       ],
       "defaultS3ObjectActions": [
         "s3:*"
+      ],
+      "defaultCloudfrontDistributionActions": [
+        "cloudfront:ListInvalidations",
+        "cloudfront:CreateInvalidation"
       ],
       "accessLog": {
         "bucket": "{{ .spinupsec_logging_bucket }}",

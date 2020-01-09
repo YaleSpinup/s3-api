@@ -28,8 +28,6 @@ func (s *server) UserCreateHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// var req iam.CreateUserInput
-
 	var req struct {
 		User   *iam.CreateUserInput
 		Groups []string
@@ -105,7 +103,7 @@ func (s *server) UserCreateHandler(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 
-		// append detatch group to rollback funciton
+		// append detach group to rollback funciton
 		rbfunc = func() error {
 			return func() error {
 				if err := iamService.RemoveUserFromGroup(r.Context(), &iam.RemoveUserFromGroupInput{

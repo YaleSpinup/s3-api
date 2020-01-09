@@ -54,7 +54,7 @@
         "s3:*"
       ],
       "defaultCloudfrontDistributionActions": [
-				"cloudfront:ListInvalidations",
+        "cloudfront:ListInvalidations",
         "cloudfront:CreateInvalidation"
 			],
       "domains": {
