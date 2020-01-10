@@ -29,9 +29,10 @@ type PolicyDoc struct {
 
 // IAM is a wrapper around the aws IAM service with some default config info
 type IAM struct {
-	Service                iamiface.IAMAPI
-	DefaultS3BucketActions []string
-	DefaultS3ObjectActions []string
+	Service                              iamiface.IAMAPI
+	DefaultS3BucketActions               []string
+	DefaultS3ObjectActions               []string
+	DefaultCloudfrontDistributionActions []string
 }
 
 // NewSession creates a new IAM session
@@ -46,6 +47,7 @@ func NewSession(account common.Account) IAM {
 	i.Service = iam.New(sess)
 	i.DefaultS3BucketActions = account.DefaultS3BucketActions
 	i.DefaultS3ObjectActions = account.DefaultS3ObjectActions
+	i.DefaultCloudfrontDistributionActions = account.DefaultCloudfrontDistributionActions
 
 	return i
 }
@@ -72,6 +74,30 @@ func (i *IAM) DefaultBucketAdminPolicy(bucket *string) ([]byte, error) {
 
 	if err != nil {
 		log.Errorf("failed to generate default bucket admin policy for %s: %s", b, err)
+		return []byte{}, err
+	}
+	log.Debugf("creating policy with document %s", string(policyDoc))
+
+	return policyDoc, nil
+}
+
+// DefaultWebAdminPolicy generates the default policy statement for website admin
+func (i *IAM) DefaultWebAdminPolicy(distributionArn *string) ([]byte, error) {
+	d := aws.StringValue(distributionArn)
+	log.Debugf("generating default web admin policy for %s", d)
+	policyDoc, err := json.Marshal(PolicyDoc{
+		Version: "2012-10-17",
+		Statement: []PolicyStatement{
+			PolicyStatement{
+				Effect:   "Allow",
+				Action:   i.DefaultCloudfrontDistributionActions,
+				Resource: []string{aws.StringValue(distributionArn)},
+			},
+		},
+	})
+
+	if err != nil {
+		log.Errorf("failed to generate default web admin policy for %s: %s", d, err)
 		return []byte{}, err
 	}
 	log.Debugf("creating policy with document %s", string(policyDoc))

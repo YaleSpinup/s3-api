@@ -21,6 +21,10 @@ var testConfig = []byte(
 			"defaultS3ObjectActions": [
 				"s3:*"
 			],
+			"defaultCloudfrontDistributionActions": [
+				"cloudfront:ListInvalidations",
+				"cloudfront:CreateInvalidation"
+			],
 			"accessLog": {
 				"bucket": "foobucket",
 				"prefix": "spinup"
@@ -63,6 +67,10 @@ func TestReadConfig(t *testing.T) {
 				},
 				DefaultS3ObjectActions: []string{
 					"s3:*",
+				},
+				DefaultCloudfrontDistributionActions: []string{
+					"cloudfront:ListInvalidations",
+					"cloudfront:CreateInvalidation",
 				},
 				AccessLog: &AccessLog{
 					Bucket: "foobucket",

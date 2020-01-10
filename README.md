@@ -274,7 +274,7 @@ POST `/v1/s3/{account}/buckets/{bucket}/users
 
 ```json
 {
-    "UserName": "somebucketuser"
+    "User": { "UserName": "somebucketuser" },
 }
 ```
 
@@ -741,8 +741,14 @@ Responds with a status code and the deleted objects
 {
     "Website": "foobar.bulldogs.cloud",
     "Users": [],
-    "Policy": "foobar.bulldogs.cloud-BktAdmPlc",
-    "Group": "foobar.bulldogs.cloud-BktAdmGrp",
+    "Policies": [
+        "foobar.bulldogs.cloud-BktAdmPlc",
+        "foobar.bulldogs.cloud-WebAdmPlc"
+    ],
+    "Groups": [
+        "foobar.bulldogs.cloud-BktAdmGrp",
+        "foobar.bulldogs.cloud-WebAdmGrp"
+    ],
     "DNSRecord": {
         "AliasTarget": {
             "DNSName": "abcdefgh12345.cloudfront.net.",
@@ -827,9 +833,53 @@ Responds with a status code and the changes
 
 ### Create a website user
 
+Optionally you can pass a list of groups to the user creation.  
+
 POST `/v1/s3/{account}/websites/{website}/users`
 
-*See [Create a bucket user](#create-a-bucket-user)*
+#### Request
+
+```json
+{
+    "User": { "UserName": "somebucketuser" },
+    "Groups": [ "BkrAdmGrp", "WebAdmGrp"]
+}
+```
+
+#### Response
+
+```json
+{
+    "User": {
+        "Arn": "arn:aws:iam::12345678910:user/somebucketuser",
+        "CreateDate": "2019-03-01T16:11:00Z",
+        "PasswordLastUsed": null,
+        "Path": "/",
+        "PermissionsBoundary": null,
+        "Tags": null,
+        "UserId": "AIDAJJSBBEAVOQLFAAUCG",
+        "UserName": "somebucketuser"
+    },
+    "AccessKey": {
+        "AccessKeyId": "ABCDEFGHIJ12345678",
+        "CreateDate": "2019-03-01T16:11:00Z",
+        "SecretAccessKey": "sssshimsupersekretdonttellanyoneyousawme",
+        "Status": "Active",
+        "UserName": "somebucketuser"
+    }
+}
+```
+
+| Response Code                 | Definition                                  |  
+| ----------------------------- | --------------------------------------------|  
+| **200 OK**                    | user created                                |  
+| **400 Bad Request**           | badly formed request                        |  
+| **403 Forbidden**             | you don't have access to bucket             |  
+| **404 Not Found**             | account or user not found when creating key |  
+| **409 Conflict**              | user already exists                         |  
+| **429 Too Many Requests**     | service or rate limit exceeded              |  
+| **500 Internal Server Error** | a server error occurred                     |
+
 
 ### Get a website user's details
 
