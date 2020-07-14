@@ -59,12 +59,12 @@ func (i *IAM) DefaultBucketAdminPolicy(bucket *string) ([]byte, error) {
 	policyDoc, err := json.Marshal(PolicyDoc{
 		Version: "2012-10-17",
 		Statement: []PolicyStatement{
-			PolicyStatement{
+			{
 				Effect:   "Allow",
 				Action:   i.DefaultS3BucketActions,
 				Resource: []string{fmt.Sprintf("arn:aws:s3:::%s", b)},
 			},
-			PolicyStatement{
+			{
 				Effect:   "Allow",
 				Action:   i.DefaultS3ObjectActions,
 				Resource: []string{fmt.Sprintf("arn:aws:s3:::%s/*", b)},
@@ -88,7 +88,7 @@ func (i *IAM) DefaultWebAdminPolicy(distributionArn *string) ([]byte, error) {
 	policyDoc, err := json.Marshal(PolicyDoc{
 		Version: "2012-10-17",
 		Statement: []PolicyStatement{
-			PolicyStatement{
+			{
 				Effect:   "Allow",
 				Action:   i.DefaultCloudfrontDistributionActions,
 				Resource: []string{aws.StringValue(distributionArn)},
@@ -122,7 +122,7 @@ func (i *IAM) DefaultWebsiteAccessPolicy(bucket *string) ([]byte, error) {
 	policyDoc, err := json.Marshal(PolicyDoc{
 		Version: "2012-10-17",
 		Statement: []PolicyStatement{
-			PolicyStatement{
+			{
 				Effect:    "Allow",
 				Principal: "*",
 				Action:    []string{"s3:GetObject"},

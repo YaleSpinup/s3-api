@@ -97,7 +97,7 @@ func (c *CloudFront) DefaultWebsiteDistributionConfig(name string) (*cloudfront.
 		Enabled:           aws.Bool(true),
 		Origins: &cloudfront.Origins{
 			Items: []*cloudfront.Origin{
-				&cloudfront.Origin{
+				{
 					DomainName: aws.String(name + "." + c.WebsiteEndpoint),
 					Id:         aws.String(name),
 					CustomOriginConfig: &cloudfront.CustomOriginConfig{

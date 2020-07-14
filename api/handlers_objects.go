@@ -1,7 +1,6 @@
 package api
 
 import (
-	"encoding/json"
 	"net/http"
 
 	"github.com/aws/aws-sdk-go/aws"
@@ -25,7 +24,7 @@ func (s *server) ObjectCountHandler(w http.ResponseWriter, r *http.Request) {
 	}
 
 	log.Infof("checking if bucket exists: %s", bucket)
-	output, err := s3Service.Service.HeadBucketWithContext(r.Context(), &s3.HeadBucketInput{
+	_, err := s3Service.Service.HeadBucketWithContext(r.Context(), &s3.HeadBucketInput{
 		Bucket: aws.String(bucket),
 	})
 	if err != nil {
@@ -50,14 +49,6 @@ func (s *server) ObjectCountHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	j, err := json.Marshal(output)
-	if err != nil {
-		log.Errorf("cannot marshal response (%v) into JSON: %s", output, err)
-		w.WriteHeader(http.StatusInternalServerError)
-		return
-	}
-
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusOK)
-	w.Write(j)
 }

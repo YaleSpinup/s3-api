@@ -33,9 +33,9 @@ var testBucket3 = s3.Bucket{
 var testBuckets1 = []*s3.Bucket{&testBucket1, &testBucket2, &testBucket3}
 
 var testTags1 = []*s3.Tag{
-	&s3.Tag{Key: aws.String("foo"), Value: aws.String("bar")},
-	&s3.Tag{Key: aws.String("fuz"), Value: aws.String("buz")},
-	&s3.Tag{Key: aws.String("fiz"), Value: aws.String("biz")},
+	{Key: aws.String("foo"), Value: aws.String("bar")},
+	{Key: aws.String("fuz"), Value: aws.String("buz")},
+	{Key: aws.String("fiz"), Value: aws.String("biz")},
 }
 
 func (m *mockS3Client) HeadBucketWithContext(ctx context.Context, input *s3.HeadBucketInput, opts ...request.Option) (*s3.HeadBucketOutput, error) {
@@ -126,17 +126,17 @@ type testLogBucket struct {
 
 // map of bucket names to logging prefixes to test
 var testBucketLoggingPrefixes = map[string]testLogBucket{
-	"bucket1": testLogBucket{
+	"bucket1": {
 		TargetBucket:   "logBucket",
 		PassedPrefix:   "",
 		CompletePrefix: "bucket1/",
 	},
-	"bucket2": testLogBucket{
+	"bucket2": {
 		TargetBucket:   "logBucket",
 		PassedPrefix:   "foo",
 		CompletePrefix: "foo/bucket2/",
 	},
-	"bucket3": testLogBucket{
+	"bucket3": {
 		TargetBucket:   "logBucket",
 		PassedPrefix:   "bar/",
 		CompletePrefix: "bar/bucket3/",
@@ -206,10 +206,10 @@ func (m *mockS3Client) ListObjectsV2PagesWithContext(ctx context.Context, input 
 	if aws.StringValue(input.Bucket) == "testBucketNotEmpty" {
 		output = &s3.ListObjectsV2Output{
 			Contents: []*s3.Object{
-				&s3.Object{Key: aws.String("brand.svg")},
-				&s3.Object{Key: aws.String("index.html")},
-				&s3.Object{Key: aws.String("errors.html")},
-				&s3.Object{Key: aws.String("favicon.ico")},
+				{Key: aws.String("brand.svg")},
+				{Key: aws.String("index.html")},
+				{Key: aws.String("errors.html")},
+				{Key: aws.String("favicon.ico")},
 			},
 			IsTruncated: aws.Bool(false),
 			KeyCount:    aws.Int64(4),

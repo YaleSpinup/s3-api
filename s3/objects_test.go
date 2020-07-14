@@ -15,11 +15,11 @@ import (
 )
 
 var testObjectTags = []*s3.Tag{
-	&s3.Tag{
+	{
 		Key:   aws.String("FirstName"),
 		Value: aws.String("Handsome"),
 	},
-	&s3.Tag{
+	{
 		Key:   aws.String("LastName"),
 		Value: aws.String("Dan"),
 	},
