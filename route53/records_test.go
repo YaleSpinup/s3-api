@@ -9,7 +9,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/YaleSpinup/s3-api/apierror"
+	"github.com/YaleSpinup/apierror"
 	"github.com/YaleSpinup/s3-api/common"
 	"github.com/aws/aws-sdk-go/aws"
 	"github.com/aws/aws-sdk-go/aws/awserr"

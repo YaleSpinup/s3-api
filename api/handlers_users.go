@@ -6,7 +6,7 @@ import (
 	"net/http"
 	"strings"
 
-	"github.com/YaleSpinup/s3-api/apierror"
+	"github.com/YaleSpinup/apierror"
 	"github.com/aws/aws-sdk-go/aws"
 	"github.com/aws/aws-sdk-go/service/iam"
 	"github.com/gorilla/mux"
