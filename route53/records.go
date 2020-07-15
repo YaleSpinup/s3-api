@@ -21,7 +21,7 @@ func (r *Route53) CreateRecord(ctx context.Context, zoneID string, record *route
 	out, err := r.Service.ChangeResourceRecordSetsWithContext(ctx, &route53.ChangeResourceRecordSetsInput{
 		ChangeBatch: &route53.ChangeBatch{
 			Changes: []*route53.Change{
-				&route53.Change{
+				{
 					Action:            aws.String("CREATE"),
 					ResourceRecordSet: record,
 				},
@@ -47,7 +47,7 @@ func (r *Route53) DeleteRecord(ctx context.Context, zoneID string, record *route
 	out, err := r.Service.ChangeResourceRecordSetsWithContext(ctx, &route53.ChangeResourceRecordSetsInput{
 		ChangeBatch: &route53.ChangeBatch{
 			Changes: []*route53.Change{
-				&route53.Change{
+				{
 					Action:            aws.String("DELETE"),
 					ResourceRecordSet: record,
 				},

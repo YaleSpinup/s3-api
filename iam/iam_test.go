@@ -47,12 +47,12 @@ var i = &IAM{
 var defaultPolicyDoc = PolicyDoc{
 	Version: "2012-10-17",
 	Statement: []PolicyStatement{
-		PolicyStatement{
+		{
 			Effect:   "Allow",
 			Action:   i.DefaultS3BucketActions,
 			Resource: []string{fmt.Sprintf("arn:aws:s3:::%s", bucket)},
 		},
-		PolicyStatement{
+		{
 			Effect:   "Allow",
 			Action:   i.DefaultS3ObjectActions,
 			Resource: []string{fmt.Sprintf("arn:aws:s3:::%s/*", bucket)},
@@ -64,7 +64,7 @@ var distributionARN = "arn:aws:cloudfront::012345678910:distribution/ET123456ABC
 var defaultWebPolicyDoc = PolicyDoc{
 	Version: "2012-10-17",
 	Statement: []PolicyStatement{
-		PolicyStatement{
+		{
 			Effect:   "Allow",
 			Action:   i.DefaultCloudfrontDistributionActions,
 			Resource: []string{distributionARN},
@@ -75,7 +75,7 @@ var defaultWebPolicyDoc = PolicyDoc{
 var defaultWebsitePolicyDoc = PolicyDoc{
 	Version: "2012-10-17",
 	Statement: []PolicyStatement{
-		PolicyStatement{
+		{
 			Effect:    "Allow",
 			Principal: "*",
 			Action:    []string{"s3:GetObject"},

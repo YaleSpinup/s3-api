@@ -123,7 +123,7 @@ func (s *server) BucketCreateHandler(w http.ResponseWriter, r *http.Request) {
 		Bucket: aws.String(bucketName),
 		ServerSideEncryptionConfiguration: &s3.ServerSideEncryptionConfiguration{
 			Rules: []*s3.ServerSideEncryptionRule{
-				&s3.ServerSideEncryptionRule{
+				{
 					ApplyServerSideEncryptionByDefault: &s3.ServerSideEncryptionByDefault{
 						SSEAlgorithm: aws.String("AES256"),
 					},

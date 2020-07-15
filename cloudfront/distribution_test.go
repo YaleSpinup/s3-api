@@ -31,7 +31,7 @@ var testDistribution1 = &cloudfront.DistributionSummary{
 	Id:         aws.String("AAAABBBBCCCCDDDD"),
 	Origins: &cloudfront.Origins{
 		Items: []*cloudfront.Origin{
-			&cloudfront.Origin{
+			{
 				DomainName: aws.String("foobar1.bulldogs.cloud.s3-website-us-east-1.amazonaws.com"),
 				Id:         aws.String("foobar1.bulldogs.cloud"),
 			},
@@ -55,7 +55,7 @@ var testDistribution2 = &cloudfront.DistributionSummary{
 	Id:         aws.String("EEEEFFFFGGGGHHHH"),
 	Origins: &cloudfront.Origins{
 		Items: []*cloudfront.Origin{
-			&cloudfront.Origin{
+			{
 				DomainName: aws.String("foobar2.bulldogs.cloud.s3-website-us-east-1.amazonaws.com"),
 				Id:         aws.String("foobar2.bulldogs.cloud"),
 			},
@@ -79,7 +79,7 @@ var testDistribution3 = &cloudfront.DistributionSummary{
 	Id:         aws.String("IIIIJJJJKKKKLLLL"),
 	Origins: &cloudfront.Origins{
 		Items: []*cloudfront.Origin{
-			&cloudfront.Origin{
+			{
 				DomainName: aws.String("foobar3.bulldogs.cloud.s3-website-us-east-1.amazonaws.com"),
 				Id:         aws.String("foobar3.bulldogs.cloud"),
 			},
@@ -105,7 +105,7 @@ var testInvalidation = &cloudfront.Invalidation{
 }
 
 var testTags = []*cloudfront.Tag{
-	&cloudfront.Tag{
+	{
 		Key:   aws.String("foo"),
 		Value: aws.String("bar"),
 	},
@@ -124,7 +124,7 @@ func (m *mockCloudFrontClient) ListDistributionsWithContext(ctx context.Context,
 	}
 	return &cloudfront.ListDistributionsOutput{DistributionList: &cloudfront.DistributionList{
 		Items: []*cloudfront.DistributionSummary{
-			&cloudfront.DistributionSummary{},
+			{},
 		},
 	}}, nil
 }
@@ -280,7 +280,7 @@ func TestCreateDistribution(t *testing.T) {
 	c := CloudFront{
 		Service: newmockCloudFrontClient(t, nil),
 		Domains: map[string]*common.Domain{
-			"hyper.converged": &common.Domain{
+			"hyper.converged": {
 				CertArn: "arn:aws:acm::12345678910:certificate/111111111-2222-3333-4444-555555555555",
 			},
 		},
@@ -294,7 +294,7 @@ func TestCreateDistribution(t *testing.T) {
 
 	tags := &cloudfront.Tags{
 		Items: []*cloudfront.Tag{
-			&cloudfront.Tag{
+			{
 				Key:   aws.String("key1"),
 				Value: aws.String("value1"),
 			},
@@ -448,7 +448,7 @@ func TestDisableDistribution(t *testing.T) {
 	c := CloudFront{
 		Service: newmockCloudFrontClient(t, nil),
 		Domains: map[string]*common.Domain{
-			"hyper.converged": &common.Domain{
+			"hyper.converged": {
 				CertArn: "arn:aws:acm::12345678910:certificate/111111111-2222-3333-4444-555555555555",
 			},
 		},
@@ -456,7 +456,7 @@ func TestDisableDistribution(t *testing.T) {
 	}
 
 	tests := map[*cloudfront.DistributionSummary]*cloudfront.Distribution{
-		testDistribution1: &cloudfront.Distribution{
+		testDistribution1: {
 			ARN: testDistribution1.ARN,
 			DistributionConfig: &cloudfront.DistributionConfig{
 				Aliases:              testDistribution1.Aliases,
@@ -467,7 +467,7 @@ func TestDisableDistribution(t *testing.T) {
 			},
 			Status: aws.String("InProgress"),
 		},
-		testDistribution2: &cloudfront.Distribution{
+		testDistribution2: {
 			ARN: testDistribution2.ARN,
 			DistributionConfig: &cloudfront.DistributionConfig{
 				Aliases:              testDistribution2.Aliases,
@@ -478,7 +478,7 @@ func TestDisableDistribution(t *testing.T) {
 			},
 			Status: aws.String("InProgress"),
 		},
-		testDistribution3: &cloudfront.Distribution{
+		testDistribution3: {
 			ARN: testDistribution3.ARN,
 			DistributionConfig: &cloudfront.DistributionConfig{
 				Aliases:              testDistribution3.Aliases,
@@ -529,7 +529,7 @@ func TestDeleteDistribution(t *testing.T) {
 	c := CloudFront{
 		Service: newmockCloudFrontClient(t, nil),
 		Domains: map[string]*common.Domain{
-			"hyper.converged": &common.Domain{
+			"hyper.converged": {
 				CertArn: "arn:aws:acm::12345678910:certificate/111111111-2222-3333-4444-555555555555",
 			},
 		},
@@ -570,7 +570,7 @@ func TestTagDistribution(t *testing.T) {
 	c := CloudFront{
 		Service: newmockCloudFrontClient(t, nil),
 		Domains: map[string]*common.Domain{
-			"hyper.converged": &common.Domain{
+			"hyper.converged": {
 				CertArn: "arn:aws:acm::12345678910:certificate/111111111-2222-3333-4444-555555555555",
 			},
 		},
@@ -579,7 +579,7 @@ func TestTagDistribution(t *testing.T) {
 
 	testTags := &cloudfront.Tags{
 		Items: []*cloudfront.Tag{
-			&cloudfront.Tag{
+			{
 				Key:   aws.String("foo"),
 				Value: aws.String("bar"),
 			},
@@ -620,7 +620,7 @@ func TestListDistribution(t *testing.T) {
 	c := CloudFront{
 		Service: newmockCloudFrontClient(t, nil),
 		Domains: map[string]*common.Domain{
-			"hyper.converged": &common.Domain{
+			"hyper.converged": {
 				CertArn: "arn:aws:acm::12345678910:certificate/111111111-2222-3333-4444-555555555555",
 			},
 		},
@@ -629,7 +629,7 @@ func TestListDistribution(t *testing.T) {
 
 	// test success
 	expected := []*cloudfront.DistributionSummary{
-		&cloudfront.DistributionSummary{},
+		{},
 	}
 	out, err := c.ListDistributions(context.TODO())
 	if err != nil {
@@ -679,7 +679,7 @@ func TestGetDistributionByName(t *testing.T) {
 	c := CloudFront{
 		Service: newmockCloudFrontClient(t, nil),
 		Domains: map[string]*common.Domain{
-			"hyper.converged": &common.Domain{
+			"hyper.converged": {
 				CertArn: "arn:aws:acm::12345678910:certificate/111111111-2222-3333-4444-555555555555",
 			},
 		},
@@ -742,7 +742,7 @@ func TestInvalidateCache(t *testing.T) {
 	c := CloudFront{
 		Service: newmockCloudFrontClient(t, nil),
 		Domains: map[string]*common.Domain{
-			"hyper.converged": &common.Domain{
+			"hyper.converged": {
 				CertArn: "arn:aws:acm::12345678910:certificate/111111111-2222-3333-4444-555555555555",
 			},
 		},
@@ -784,7 +784,7 @@ func TestListTags(t *testing.T) {
 	c := CloudFront{
 		Service: newmockCloudFrontClient(t, nil),
 		Domains: map[string]*common.Domain{
-			"hyper.converged": &common.Domain{
+			"hyper.converged": {
 				CertArn: "arn:aws:acm::12345678910:certificate/111111111-2222-3333-4444-555555555555",
 			},
 		},

@@ -31,16 +31,16 @@ var testResourceRecordSet = route53.ResourceRecordSet{
 var testResourceRecordSet1 = route53.ResourceRecordSet{
 	Name: aws.String("hyper.converged."),
 	ResourceRecords: []*route53.ResourceRecord{
-		&route53.ResourceRecord{
+		{
 			Value: aws.String("ns-1111.awsdns-01.com."),
 		},
-		&route53.ResourceRecord{
+		{
 			Value: aws.String("ns-2222.awsdns-02.org."),
 		},
-		&route53.ResourceRecord{
+		{
 			Value: aws.String("ns-3333.awsdns-03.net."),
 		},
-		&route53.ResourceRecord{
+		{
 			Value: aws.String("ns-4444.awsdns-04.co.uk."),
 		},
 	},
@@ -50,7 +50,7 @@ var testResourceRecordSet1 = route53.ResourceRecordSet{
 var testResourceRecordSet2 = route53.ResourceRecordSet{
 	Name: aws.String("_3344556677889900aabbccddeeffgghhiijjkk.hyper.converged."),
 	ResourceRecords: []*route53.ResourceRecord{
-		&route53.ResourceRecord{
+		{
 			Value: aws.String("_012345678910abcdefghijkl.mnopqrstuvwxyz0.acm-validations.aws."),
 		},
 	},
@@ -171,7 +171,7 @@ func TestCreateRecord(t *testing.T) {
 	r := Route53{
 		Service: newmockRoute53Client(t, nil),
 		Domains: map[string]*common.Domain{
-			"hyper.converged": &common.Domain{
+			"hyper.converged": {
 				CertArn: "arn:aws:acm::12345678910:certificate/111111111-2222-3333-4444-555555555555",
 			},
 		},
@@ -290,7 +290,7 @@ func TestDeleteRecord(t *testing.T) {
 	r := Route53{
 		Service: newmockRoute53Client(t, nil),
 		Domains: map[string]*common.Domain{
-			"hyper.converged": &common.Domain{
+			"hyper.converged": {
 				CertArn: "arn:aws:acm::12345678910:certificate/111111111-2222-3333-4444-555555555555",
 			},
 		},
@@ -409,7 +409,7 @@ func TestListRecords(t *testing.T) {
 	r := Route53{
 		Service: newmockRoute53Client(t, nil),
 		Domains: map[string]*common.Domain{
-			"hyper.converged": &common.Domain{
+			"hyper.converged": {
 				CertArn: "arn:aws:acm::12345678910:certificate/111111111-2222-3333-4444-555555555555",
 			},
 		},
@@ -477,7 +477,7 @@ func TestGetRecordByName(t *testing.T) {
 	r := Route53{
 		Service: newmockRoute53Client(t, nil),
 		Domains: map[string]*common.Domain{
-			"hyper.converged": &common.Domain{
+			"hyper.converged": {
 				CertArn: "arn:aws:acm::12345678910:certificate/111111111-2222-3333-4444-555555555555",
 			},
 		},

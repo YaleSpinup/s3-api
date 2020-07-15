@@ -57,7 +57,7 @@ func TestReadConfig(t *testing.T) {
 	expectedConfig := Config{
 		ListenAddress: ":8000",
 		Accounts: map[string]Account{
-			"provider1": Account{
+			"provider1": {
 				Region: "us-east-1",
 				Akid:   "key1",
 				Secret: "secret1",
@@ -77,7 +77,7 @@ func TestReadConfig(t *testing.T) {
 					Prefix: "spinup",
 				},
 				Domains: map[string]*Domain{
-					"example.com": &Domain{
+					"example.com": {
 						CertArn:      "arn:123456789:thingy",
 						HostedZoneID: "AABBCCDDEEFF",
 					},
@@ -87,7 +87,7 @@ func TestReadConfig(t *testing.T) {
 					MaxSplay: "60s",
 				},
 			},
-			"provider2": Account{
+			"provider2": {
 				Region: "us-west-1",
 				Akid:   "key2",
 				Secret: "secret2",

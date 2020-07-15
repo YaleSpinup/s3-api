@@ -35,7 +35,7 @@ func TestNewSession(t *testing.T) {
 func TestWebsiteDomain(t *testing.T) {
 	e := NewSession(common.Account{
 		Domains: map[string]*common.Domain{
-			"hyper.converged": &common.Domain{
+			"hyper.converged": {
 				CertArn: "arn:aws:acm::12345678910:certificate/111111111-2222-3333-4444-555555555555",
 			},
 		},
@@ -94,7 +94,7 @@ func TestDefaultWebsiteDistributionConfig(t *testing.T) {
 		Enabled:           aws.Bool(true),
 		Origins: &cloudfront.Origins{
 			Items: []*cloudfront.Origin{
-				&cloudfront.Origin{
+				{
 					DomainName: aws.String("im.hyper.converged.s3-website-us-east-1.amazonaws.com"),
 					Id:         aws.String("im.hyper.converged"),
 					CustomOriginConfig: &cloudfront.CustomOriginConfig{
@@ -116,7 +116,7 @@ func TestDefaultWebsiteDistributionConfig(t *testing.T) {
 
 	e := NewSession(common.Account{
 		Domains: map[string]*common.Domain{
-			"hyper.converged": &common.Domain{
+			"hyper.converged": {
 				CertArn: "arn:aws:acm::12345678910:certificate/111111111-2222-3333-4444-555555555555",
 			},
 		},
