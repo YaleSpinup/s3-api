@@ -1,7 +1,7 @@
 package cloudfront
 
 import (
-	"github.com/YaleSpinup/s3-api/apierror"
+	"github.com/YaleSpinup/apierror"
 	"github.com/aws/aws-sdk-go/aws/awserr"
 	"github.com/aws/aws-sdk-go/service/cloudfront"
 	"github.com/pkg/errors"
