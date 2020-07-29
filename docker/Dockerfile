@@ -14,30 +14,26 @@ COPY go.mod .
 COPY go.sum .
 RUN go mod download
 COPY . .
+RUN go version
 RUN go test ./... -cover
 RUN go build -o /app/api.out -ldflags="-X main.Version=$version -X main.VersionPrerelease=$prerelease -X main.githash=$githash -X main.buildstamp=$buildstamp" *.go
 RUN /app/api.out -version
 
 # final stage
 FROM alpine
-MAINTAINER Camden Fisher <camden.fisher@yale.edu>
 
 WORKDIR /app
 COPY --from=build-env /app/api.out /app/api
 RUN chmod 555 /app/api
 
-RUN apk add --no-cache bash ca-certificates wget python gettext && \
-    wget -nv "https://s3.amazonaws.com/aws-cli/awscli-bundle.zip" && \
-    unzip awscli-bundle.zip && \
-    ./awscli-bundle/install -i /usr/local/aws -b /usr/local/bin/aws && \
-    /usr/local/bin/aws --version
+RUN apk add --no-cache bash ca-certificates
 
 # Install Deco
-ARG DECO_VERSION=0.3.1
+ARG DECO_VERSION=1.0.2
 ARG DECO_OS=linux
 ARG DECO_ARCH=amd64
-ADD https://github.com/YaleUniversity/deco/releases/download/v${DECO_VERSION}/deco-v${DECO_VERSION}-${DECO_OS}-${DECO_ARCH} /usr/local/bin/deco
-RUN chmod 555 /usr/local/bin/deco && deco version
+ADD https://github.com/YaleUniversity/deco/releases/download/v${DECO_VERSION}/deco-v${DECO_VERSION}-${DECO_OS}-${DECO_ARCH}.tar.gz /usr/local/bin/deco.tar.gz
+RUN cd /usr/local/bin && tar -zxvf deco.tar.gz && rm -f deco.tar.gz && chmod 555 deco && /usr/local/bin/deco version
 
 COPY docker/*_config.sh /app
 COPY docker/config.deco.json /app/config/config.json
