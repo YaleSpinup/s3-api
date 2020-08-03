@@ -117,7 +117,7 @@ func (s *server) CreateWebsiteHandler(w http.ResponseWriter, r *http.Request) {
 	rollBackTasks = append(rollBackTasks, rbfunc)
 
 	// wait for the bucket to exist
-	err = retry(5, 2*time.Second, func() error {
+	err = retry(3, 2*time.Second, func() error {
 		log.Infof("checking if bucket exists before continuing: %s", bucketName)
 		exists, err := s3Service.BucketExists(r.Context(), bucketName)
 		if err != nil {
@@ -134,7 +134,7 @@ func (s *server) CreateWebsiteHandler(w http.ResponseWriter, r *http.Request) {
 	})
 
 	// retry tagging
-	err = retry(5, 2*time.Second, func() error {
+	err = retry(3, 2*time.Second, func() error {
 		if err := s3Service.TagBucket(r.Context(), bucketName, req.Tags); err != nil {
 			log.Warnf("error tagging website bucket %s: %s", bucketName, err)
 			return err
