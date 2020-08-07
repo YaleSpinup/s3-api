@@ -111,7 +111,15 @@ func (s *server) BucketCreateHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	err = s3Service.TagBucket(r.Context(), bucketName, req.Tags)
+	// retry tagging
+	err = retry(3, 2*time.Second, func() error {
+		if err := s3Service.TagBucket(r.Context(), bucketName, req.Tags); err != nil {
+			log.Warnf("error tagging website bucket %s: %s", bucketName, err)
+			return err
+		}
+		return nil
+	})
+
 	if err != nil {
 		msg := fmt.Sprintf("failed to tag bucket %s: %s", bucketName, err.Error())
 		handleError(w, errors.Wrap(err, msg))
