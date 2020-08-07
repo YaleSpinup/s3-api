@@ -32,7 +32,6 @@ func cleanerInterval(baseInterval, maxSplay string) (*time.Duration, error) {
 
 // run starts the cleaner and listens for a shutdown call.
 func (c *cleaner) run() {
-	log.SetLevel(log.DebugLevel)
 	ticker := time.NewTicker(c.interval)
 	go func() {
 		// Loop that runs forever
