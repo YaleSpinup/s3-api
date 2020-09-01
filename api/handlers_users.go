@@ -5,9 +5,11 @@ import (
 	"fmt"
 	"net/http"
 	"strings"
+	"time"
 
 	"github.com/YaleSpinup/apierror"
 	"github.com/aws/aws-sdk-go/aws"
+	"github.com/aws/aws-sdk-go/aws/awsutil"
 	"github.com/aws/aws-sdk-go/service/iam"
 	"github.com/gorilla/mux"
 	"github.com/pkg/errors"
@@ -51,6 +53,26 @@ func (s *server) UserCreateHandler(w http.ResponseWriter, r *http.Request) {
 	userOutput, err := iamService.CreateUser(r.Context(), req.User)
 	if err != nil {
 		msg := fmt.Sprintf("failed to create user for bucket %s: %s", bucket, err)
+		handleError(w, errors.Wrap(err, msg))
+		return
+	}
+
+	// wait for the user to exist
+	err = retry(3, 2*time.Second, func() error {
+		log.Infof("checking if user exists before continuing: %s", aws.StringValue(userOutput.User.UserName))
+		out, err := iamService.GetUser(r.Context(), &iam.GetUserInput{
+			UserName: userOutput.User.UserName,
+		})
+		if err != nil {
+			return err
+		}
+
+		log.Debugf("got user output: %s", awsutil.Prettify(out))
+		return nil
+	})
+
+	if err != nil {
+		msg := fmt.Sprintf("failed to create user %s for bucket %s: timeout waiting for create %s", aws.StringValue(req.User.UserName), bucket, err)
 		handleError(w, errors.Wrap(err, msg))
 		return
 	}
