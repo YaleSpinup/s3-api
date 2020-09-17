@@ -100,7 +100,7 @@ func TestCreatePolicy(t *testing.T) {
 	}
 
 	// test success
-	expected := &iam.CreatePolicyOutput{Policy: &testPolicy}
+	expected := &testPolicy
 
 	// build the default IAM bucket admin policy (from the config and known inputs)
 	defaultPolicy, err := i.DefaultBucketAdminPolicy(aws.String("testBucket"))
@@ -215,8 +215,8 @@ func TestCreatePolicy(t *testing.T) {
 		PolicyName:     aws.String("testpolicy"),
 	})
 	if aerr, ok := err.(apierror.Error); ok {
-		if aerr.Code != apierror.ErrBadRequest {
-			t.Errorf("expected error code %s, got: %s", apierror.ErrBadRequest, aerr.Code)
+		if aerr.Code != apierror.ErrConflict {
+			t.Errorf("expected error code %s, got: %s", apierror.ErrConflict, aerr.Code)
 		}
 	} else {
 		t.Errorf("expected apierror.Error, got: %s", reflect.TypeOf(err).String())
@@ -246,18 +246,13 @@ func TestDeletePolicy(t *testing.T) {
 	}
 
 	// test success
-	expected := &iam.DeletePolicyOutput{}
-	out, err := i.DeletePolicy(context.TODO(), &iam.DeletePolicyInput{PolicyArn: aws.String("arn:aws:iam::12345678910:group/testpolicy")})
+	err := i.DeletePolicy(context.TODO(), &iam.DeletePolicyInput{PolicyArn: aws.String("arn:aws:iam::12345678910:group/testpolicy")})
 	if err != nil {
 		t.Errorf("expected nil error, got: %s", err)
 	}
 
-	if !reflect.DeepEqual(out, expected) {
-		t.Errorf("expected %+v, got %+v", expected, out)
-	}
-
 	// test nil input
-	_, err = i.DeletePolicy(context.TODO(), nil)
+	err = i.DeletePolicy(context.TODO(), nil)
 	if aerr, ok := err.(apierror.Error); ok {
 		if aerr.Code != apierror.ErrBadRequest {
 			t.Errorf("expected error code %s, got: %s", apierror.ErrBadRequest, aerr.Code)
@@ -267,7 +262,7 @@ func TestDeletePolicy(t *testing.T) {
 	}
 
 	// test empty policy arn
-	_, err = i.DeletePolicy(context.TODO(), &iam.DeletePolicyInput{})
+	err = i.DeletePolicy(context.TODO(), &iam.DeletePolicyInput{})
 	if aerr, ok := err.(apierror.Error); ok {
 		if aerr.Code != apierror.ErrBadRequest {
 			t.Errorf("expected error code %s, got: %s", apierror.ErrBadRequest, aerr.Code)
@@ -278,7 +273,7 @@ func TestDeletePolicy(t *testing.T) {
 
 	// test ErrCodeNoSuchEntityException
 	i.Service.(*mockIAMClient).err = awserr.New(iam.ErrCodeNoSuchEntityException, "not found", nil)
-	_, err = i.DeletePolicy(context.TODO(), &iam.DeletePolicyInput{PolicyArn: aws.String("arn:aws:iam::12345678910:group/testpolicy")})
+	err = i.DeletePolicy(context.TODO(), &iam.DeletePolicyInput{PolicyArn: aws.String("arn:aws:iam::12345678910:group/testpolicy")})
 	if aerr, ok := err.(apierror.Error); ok {
 		if aerr.Code != apierror.ErrNotFound {
 			t.Errorf("expected error code %s, got: %s", apierror.ErrNotFound, aerr.Code)
@@ -289,7 +284,7 @@ func TestDeletePolicy(t *testing.T) {
 
 	// test ErrCodeLimitExceededException
 	i.Service.(*mockIAMClient).err = awserr.New(iam.ErrCodeLimitExceededException, "not found", nil)
-	_, err = i.DeletePolicy(context.TODO(), &iam.DeletePolicyInput{PolicyArn: aws.String("arn:aws:iam::12345678910:group/testpolicy")})
+	err = i.DeletePolicy(context.TODO(), &iam.DeletePolicyInput{PolicyArn: aws.String("arn:aws:iam::12345678910:group/testpolicy")})
 	if aerr, ok := err.(apierror.Error); ok {
 		if aerr.Code != apierror.ErrLimitExceeded {
 			t.Errorf("expected error code %s, got: %s", apierror.ErrLimitExceeded, aerr.Code)
@@ -300,7 +295,7 @@ func TestDeletePolicy(t *testing.T) {
 
 	// test ErrCodeInvalidInputException
 	i.Service.(*mockIAMClient).err = awserr.New(iam.ErrCodeInvalidInputException, "not found", nil)
-	_, err = i.DeletePolicy(context.TODO(), &iam.DeletePolicyInput{PolicyArn: aws.String("arn:aws:iam::12345678910:group/testpolicy")})
+	err = i.DeletePolicy(context.TODO(), &iam.DeletePolicyInput{PolicyArn: aws.String("arn:aws:iam::12345678910:group/testpolicy")})
 	if aerr, ok := err.(apierror.Error); ok {
 		if aerr.Code != apierror.ErrBadRequest {
 			t.Errorf("expected error code %s, got: %s", apierror.ErrBadRequest, aerr.Code)
@@ -311,7 +306,7 @@ func TestDeletePolicy(t *testing.T) {
 
 	// test ErrCodeDeleteConflictException
 	i.Service.(*mockIAMClient).err = awserr.New(iam.ErrCodeDeleteConflictException, "not found", nil)
-	_, err = i.DeletePolicy(context.TODO(), &iam.DeletePolicyInput{PolicyArn: aws.String("arn:aws:iam::12345678910:group/testpolicy")})
+	err = i.DeletePolicy(context.TODO(), &iam.DeletePolicyInput{PolicyArn: aws.String("arn:aws:iam::12345678910:group/testpolicy")})
 	if aerr, ok := err.(apierror.Error); ok {
 		if aerr.Code != apierror.ErrConflict {
 			t.Errorf("expected error code %s, got: %s", apierror.ErrConflict, aerr.Code)
@@ -322,7 +317,7 @@ func TestDeletePolicy(t *testing.T) {
 
 	// test ErrCodeServiceFailureException
 	i.Service.(*mockIAMClient).err = awserr.New(iam.ErrCodeServiceFailureException, "not found", nil)
-	_, err = i.DeletePolicy(context.TODO(), &iam.DeletePolicyInput{PolicyArn: aws.String("arn:aws:iam::12345678910:group/testpolicy")})
+	err = i.DeletePolicy(context.TODO(), &iam.DeletePolicyInput{PolicyArn: aws.String("arn:aws:iam::12345678910:group/testpolicy")})
 	if aerr, ok := err.(apierror.Error); ok {
 		if aerr.Code != apierror.ErrServiceUnavailable {
 			t.Errorf("expected error code %s, got: %s", apierror.ErrServiceUnavailable, aerr.Code)
@@ -333,10 +328,10 @@ func TestDeletePolicy(t *testing.T) {
 
 	// test some other, unexpected AWS error
 	i.Service.(*mockIAMClient).err = awserr.New(iam.ErrCodeEntityAlreadyExistsException, "policy exists", nil)
-	_, err = i.DeletePolicy(context.TODO(), &iam.DeletePolicyInput{PolicyArn: aws.String("arn:aws:iam::12345678910:group/testpolicy")})
+	err = i.DeletePolicy(context.TODO(), &iam.DeletePolicyInput{PolicyArn: aws.String("arn:aws:iam::12345678910:group/testpolicy")})
 	if aerr, ok := err.(apierror.Error); ok {
-		if aerr.Code != apierror.ErrBadRequest {
-			t.Errorf("expected error code %s, got: %s", apierror.ErrBadRequest, aerr.Code)
+		if aerr.Code != apierror.ErrConflict {
+			t.Errorf("expected error code %s, got: %s", apierror.ErrConflict, aerr.Code)
 		}
 	} else {
 		t.Errorf("expected apierror.Error, got: %s", reflect.TypeOf(err).String())
@@ -344,7 +339,7 @@ func TestDeletePolicy(t *testing.T) {
 
 	// test non-aws error
 	i.Service.(*mockIAMClient).err = errors.New("things blowing up!")
-	_, err = i.DeletePolicy(context.TODO(), &iam.DeletePolicyInput{PolicyArn: aws.String("arn:aws:iam::12345678910:group/testpolicy")})
+	err = i.DeletePolicy(context.TODO(), &iam.DeletePolicyInput{PolicyArn: aws.String("arn:aws:iam::12345678910:group/testpolicy")})
 	if aerr, ok := err.(apierror.Error); ok {
 		if aerr.Code != apierror.ErrInternalError {
 			t.Errorf("expected error code %s, got: %s", apierror.ErrInternalError, aerr.Code)
@@ -397,8 +392,8 @@ func TestListPolicies(t *testing.T) {
 	i.Service.(*mockIAMClient).err = awserr.New(iam.ErrCodeEntityAlreadyExistsException, "policy exists", nil)
 	_, err = i.ListPolicies(context.TODO(), &iam.ListPoliciesInput{})
 	if aerr, ok := err.(apierror.Error); ok {
-		if aerr.Code != apierror.ErrBadRequest {
-			t.Errorf("expected error code %s, got: %s", apierror.ErrBadRequest, aerr.Code)
+		if aerr.Code != apierror.ErrConflict {
+			t.Errorf("expected error code %s, got: %s", apierror.ErrConflict, aerr.Code)
 		}
 	} else {
 		t.Errorf("expected apierror.Error, got: %s", reflect.TypeOf(err).String())

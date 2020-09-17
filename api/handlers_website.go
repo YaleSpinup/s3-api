@@ -2,6 +2,7 @@ package api
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"fmt"
 	"net/http"
@@ -9,6 +10,7 @@ import (
 	"time"
 
 	"github.com/YaleSpinup/apierror"
+	"github.com/YaleSpinup/s3-api/common"
 	"github.com/aws/aws-sdk-go/aws"
 	"github.com/aws/aws-sdk-go/service/cloudfront"
 	"github.com/aws/aws-sdk-go/service/iam"
@@ -70,8 +72,7 @@ func (s *server) CreateWebsiteHandler(w http.ResponseWriter, r *http.Request) {
 		BucketInput          s3.CreateBucketInput
 		WebsiteConfiguration s3.WebsiteConfiguration
 	}
-	err := json.NewDecoder(r.Body).Decode(&req)
-	if err != nil {
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		msg := fmt.Sprintf("cannot decode body into create website input: %s", err)
 		handleError(w, apierror.New(apierror.ErrBadRequest, msg, err))
 		return
@@ -83,8 +84,9 @@ func (s *server) CreateWebsiteHandler(w http.ResponseWriter, r *http.Request) {
 		Value: aws.String(Org),
 	})
 
-	// setup err var, rollback function list and defer execution, note that we depend on the err variable defined above this
-	var rollBackTasks []func() error
+	// setup err var, rollback function list and defer execution
+	var err error
+	var rollBackTasks []rollbackFunc
 	defer func() {
 		if err != nil {
 			log.Errorf("recovering from error: %s, executing %d rollback tasks", err, len(rollBackTasks))
@@ -93,31 +95,30 @@ func (s *server) CreateWebsiteHandler(w http.ResponseWriter, r *http.Request) {
 	}()
 
 	bucketName := aws.StringValue(req.BucketInput.Bucket)
-	domain, err := cloudFrontService.WebsiteDomain(bucketName)
-	if err != nil {
+
+	var domain *common.Domain
+	if domain, err = cloudFrontService.WebsiteDomain(bucketName); err != nil {
 		msg := fmt.Sprintf("failed to validate website domain %s", bucketName)
 		handleError(w, apierror.New(apierror.ErrBadRequest, msg, err))
 		return
 	}
 
-	bucketOutput, err := s3Service.CreateBucket(r.Context(), &req.BucketInput)
-	if err != nil {
+	var bucketOutput *s3.CreateBucketOutput
+	if bucketOutput, err = s3Service.CreateBucket(r.Context(), &req.BucketInput); err != nil {
 		msg := fmt.Sprintf("failed to create bucket %s", bucketName)
 		handleError(w, errors.Wrap(err, msg))
 		return
 	}
 
 	// append bucket delete to rollback tasks
-	rbfunc := func() error {
-		return func() error {
-			err := s3Service.DeleteEmptyBucket(r.Context(), &s3.DeleteBucketInput{Bucket: aws.String(bucketName)})
-			return err
-		}()
+	rbfunc := func(ctx context.Context) error {
+		err := s3Service.DeleteEmptyBucket(r.Context(), &s3.DeleteBucketInput{Bucket: aws.String(bucketName)})
+		return err
 	}
 	rollBackTasks = append(rollBackTasks, rbfunc)
 
 	// wait for the bucket to exist
-	err = retry(3, 2*time.Second, func() error {
+	if err = retry(3, 2*time.Second, func() error {
 		log.Infof("checking if bucket exists before continuing: %s", bucketName)
 		exists, err := s3Service.BucketExists(r.Context(), bucketName)
 		if err != nil {
@@ -131,25 +132,26 @@ func (s *server) CreateWebsiteHandler(w http.ResponseWriter, r *http.Request) {
 
 		msg := fmt.Sprintf("s3 bucket (%s) doesn't exist", bucketName)
 		return errors.New(msg)
-	})
+	}); err != nil {
+		handleError(w, err)
+		return
+	}
 
 	// retry tagging
-	err = retry(3, 2*time.Second, func() error {
+	if err = retry(3, 2*time.Second, func() error {
 		if err := s3Service.TagBucket(r.Context(), bucketName, req.Tags); err != nil {
 			log.Warnf("error tagging website bucket %s: %s", bucketName, err)
 			return err
 		}
 		return nil
-	})
-
-	if err != nil {
+	}); err != nil {
 		msg := fmt.Sprintf("failed to tag website bucket %s: %s", bucketName, err.Error())
 		handleError(w, errors.Wrap(err, msg))
 		return
 	}
 
 	// enable AWS managed serverside encryption for the website/bucket
-	err = s3Service.UpdateBucketEncryption(r.Context(), &s3.PutBucketEncryptionInput{
+	if err = s3Service.UpdateBucketEncryption(r.Context(), &s3.PutBucketEncryptionInput{
 		Bucket: aws.String(bucketName),
 		ServerSideEncryptionConfiguration: &s3.ServerSideEncryptionConfiguration{
 			Rules: []*s3.ServerSideEncryptionRule{
@@ -160,8 +162,7 @@ func (s *server) CreateWebsiteHandler(w http.ResponseWriter, r *http.Request) {
 				},
 			},
 		},
-	})
-	if err != nil {
+	}); err != nil {
 		msg := fmt.Sprintf("failed to enable encryption for bucket %s: %s", bucketName, err.Error())
 		handleError(w, errors.Wrap(err, msg))
 		return
@@ -169,102 +170,95 @@ func (s *server) CreateWebsiteHandler(w http.ResponseWriter, r *http.Request) {
 
 	// enable logging access for the website/bucket to a central repo
 	if s3Service.LoggingBucket != "" {
-		err = s3Service.UpdateBucketLogging(r.Context(), bucketName, s3Service.LoggingBucket, s3Service.LoggingBucketPrefix)
-		if err != nil {
+		if err = s3Service.UpdateBucketLogging(r.Context(), bucketName, s3Service.LoggingBucket, s3Service.LoggingBucketPrefix); err != nil {
 			msg := fmt.Sprintf("failed to enable logging for bucket %s: %s", bucketName, err.Error())
 			handleError(w, errors.Wrap(err, msg))
 			return
 		}
 	}
 
-	err = s3Service.UpdateWebsiteConfig(r.Context(), &s3.PutBucketWebsiteInput{
+	if err = s3Service.UpdateWebsiteConfig(r.Context(), &s3.PutBucketWebsiteInput{
 		Bucket:               aws.String(bucketName),
 		WebsiteConfiguration: &req.WebsiteConfiguration,
-	})
-	if err != nil {
+	}); err != nil {
 		msg := fmt.Sprintf("failed to configure bucket %s as website: %s", bucketName, err.Error())
 		handleError(w, errors.Wrap(err, msg))
 		return
 	}
 
-	defaultWebsitePolicy, err := iamService.DefaultWebsiteAccessPolicy(aws.String(bucketName))
-	if err != nil {
+	var defaultWebsitePolicy []byte
+	if defaultWebsitePolicy, err = iamService.DefaultWebsiteAccessPolicy(aws.String(bucketName)); err != nil {
 		msg := fmt.Sprintf("failed building default website bucket access policy for %s: %s", bucketName, err.Error())
 		handleError(w, apierror.New(apierror.ErrInternalError, msg, err))
 		return
 	}
 
-	err = s3Service.UpdateBucketPolicy(r.Context(), &s3.PutBucketPolicyInput{
+	if err = s3Service.UpdateBucketPolicy(r.Context(), &s3.PutBucketPolicyInput{
 		Bucket: aws.String(bucketName),
 		Policy: aws.String(string(defaultWebsitePolicy)),
-	})
+	}); err != nil {
+		handleError(w, err)
+		return
+	}
 
 	// build the default IAM bucket admin policy (from the config and known inputs)
-	defaultBktPolicy, err := iamService.DefaultBucketAdminPolicy(aws.String(bucketName))
-	if err != nil {
+	var defaultBktPolicy []byte
+	if defaultBktPolicy, err = iamService.DefaultBucketAdminPolicy(aws.String(bucketName)); err != nil {
 		msg := fmt.Sprintf("failed building default IAM policy for bucket %s: %s", bucketName, err.Error())
 		handleError(w, apierror.New(apierror.ErrInternalError, msg, err))
 		return
 	}
 
-	bktPolicyOutput, err := iamService.CreatePolicy(r.Context(), &iam.CreatePolicyInput{
+	var bktPolicy *iam.Policy
+	if bktPolicy, err = iamService.CreatePolicy(r.Context(), &iam.CreatePolicyInput{
 		Description:    aws.String(fmt.Sprintf("Admin policy for %s bucket", bucketName)),
 		PolicyDocument: aws.String(string(defaultBktPolicy)),
 		PolicyName:     aws.String(fmt.Sprintf("%s-BktAdmPlc", bucketName)),
-	})
-
-	if err != nil {
+	}); err != nil {
 		msg := fmt.Sprintf("failed to create bucket admin policy: %s", err.Error())
 		handleError(w, errors.Wrap(err, msg))
 		return
 	}
 
 	// append policy delete to rollback tasks
-	rbfunc = func() error {
-		return func() error {
-			_, err := iamService.DeletePolicy(r.Context(), &iam.DeletePolicyInput{PolicyArn: bktPolicyOutput.Policy.Arn})
-			return err
-		}()
+	rbfunc = func(ctx context.Context) error {
+		err := iamService.DeletePolicy(r.Context(), &iam.DeletePolicyInput{PolicyArn: bktPolicy.Arn})
+		return err
 	}
 	rollBackTasks = append(rollBackTasks, rbfunc)
 
 	bktGroupName := fmt.Sprintf("%s-BktAdmGrp", bucketName)
-	bktGroup, err := iamService.CreateGroup(r.Context(), &iam.CreateGroupInput{
-		GroupName: aws.String(bktGroupName),
-	})
 
-	if err != nil {
+	var bktGroup *iam.Group
+	if bktGroup, err = iamService.CreateGroup(r.Context(), &iam.CreateGroupInput{
+		GroupName: aws.String(bktGroupName),
+	}); err != nil {
 		msg := fmt.Sprintf("failed to create bucket admin group: %s", err.Error())
 		handleError(w, errors.Wrap(err, msg))
 		return
 	}
 
 	// append group delete to rollback tasks
-	rbfunc = func() error {
-		return func() error {
-			_, err := iamService.DeleteGroup(r.Context(), &iam.DeleteGroupInput{GroupName: aws.String(bktGroupName)})
-			return err
-		}()
+	rbfunc = func(ctx context.Context) error {
+		return iamService.DeleteGroup(r.Context(), &iam.DeleteGroupInput{GroupName: aws.String(bktGroupName)})
 	}
 	rollBackTasks = append(rollBackTasks, rbfunc)
 
-	if _, err = iamService.AttachGroupPolicy(r.Context(), &iam.AttachGroupPolicyInput{
+	if err = iamService.AttachGroupPolicy(r.Context(), &iam.AttachGroupPolicyInput{
 		GroupName: aws.String(bktGroupName),
-		PolicyArn: bktPolicyOutput.Policy.Arn,
+		PolicyArn: bktPolicy.Arn,
 	}); err != nil {
-		msg := fmt.Sprintf("failed to attach policy %s to group %s: %s", aws.StringValue(bktPolicyOutput.Policy.Arn), bktGroupName, err.Error())
+		msg := fmt.Sprintf("failed to attach policy %s to group %s: %s", aws.StringValue(bktPolicy.Arn), bktGroupName, err.Error())
 		handleError(w, errors.Wrap(err, msg))
 		return
 	}
 
 	// append detach group policy to rollback tasks
-	rbfunc = func() error {
-		return func() error {
-			return iamService.DetachGroupPolicy(r.Context(), &iam.DetachGroupPolicyInput{
-				GroupName: aws.String(bktGroupName),
-				PolicyArn: bktPolicyOutput.Policy.Arn,
-			})
-		}()
+	rbfunc = func(ctx context.Context) error {
+		return iamService.DetachGroupPolicy(r.Context(), &iam.DetachGroupPolicyInput{
+			GroupName: aws.String(bktGroupName),
+			PolicyArn: bktPolicy.Arn,
+		})
 	}
 	rollBackTasks = append(rollBackTasks, rbfunc)
 
@@ -278,99 +272,89 @@ func (s *server) CreateWebsiteHandler(w http.ResponseWriter, r *http.Request) {
 		cfTags = append(cfTags, t)
 	}
 
-	defaultWebsiteDistribution, err := cloudFrontService.DefaultWebsiteDistributionConfig(bucketName)
-	if err != nil {
+	var defaultWebsiteDistribution *cloudfront.DistributionConfig
+	if defaultWebsiteDistribution, err = cloudFrontService.DefaultWebsiteDistributionConfig(bucketName); err != nil {
 		msg := fmt.Sprintf("failed to generate default website distribution config for %s: %s", bucketName, err.Error())
 		handleError(w, errors.Wrap(err, msg))
 		return
 	}
 
-	distribution, err := cloudFrontService.CreateDistribution(r.Context(), defaultWebsiteDistribution, &cloudfront.Tags{Items: cfTags})
-	if err != nil {
+	var distribution *cloudfront.Distribution
+	if distribution, err = cloudFrontService.CreateDistribution(r.Context(), defaultWebsiteDistribution, &cloudfront.Tags{Items: cfTags}); err != nil {
 		msg := fmt.Sprintf("failed to create cloudfront distribution for website %s: %s", bucketName, err.Error())
 		handleError(w, errors.Wrap(err, msg))
 		return
 	}
 
 	// append disable cloudfront distribution to rollback tasks
-	rbfunc = func() error {
-		return func() error {
-			_, err := cloudFrontService.DisableDistribution(r.Context(), aws.StringValue(distribution.Id))
-			return err
-		}()
+	rbfunc = func(ctx context.Context) error {
+		_, err := cloudFrontService.DisableDistribution(r.Context(), aws.StringValue(distribution.Id))
+		return err
 	}
 	rollBackTasks = append(rollBackTasks, rbfunc)
 
 	// build the default IAM web admin policy (from the config and known inputs)
-	defaultWebPolicy, err := iamService.DefaultWebAdminPolicy(distribution.ARN)
-	if err != nil {
+	var defaultWebPolicy []byte
+	if defaultWebPolicy, err = iamService.DefaultWebAdminPolicy(distribution.ARN); err != nil {
 		msg := fmt.Sprintf("failed building default IAM policy for cloudfront distribution %s: %s", aws.StringValue(distribution.ARN), err.Error())
 		handleError(w, apierror.New(apierror.ErrInternalError, msg, err))
 		return
 	}
 
-	webPolicyOutput, err := iamService.CreatePolicy(r.Context(), &iam.CreatePolicyInput{
+	var webPolicy *iam.Policy
+	if webPolicy, err = iamService.CreatePolicy(r.Context(), &iam.CreatePolicyInput{
 		Description:    aws.String(fmt.Sprintf("Admin policy for %s web distribution", bucketName)),
 		PolicyDocument: aws.String(string(defaultWebPolicy)),
 		PolicyName:     aws.String(fmt.Sprintf("%s-WebAdmPlc", bucketName)),
-	})
-
-	if err != nil {
+	}); err != nil {
 		msg := fmt.Sprintf("failed to create web admin policy: %s", err.Error())
 		handleError(w, errors.Wrap(err, msg))
 		return
 	}
 
 	// append policy delete to rollback tasks
-	rbfunc = func() error {
-		return func() error {
-			_, err := iamService.DeletePolicy(r.Context(), &iam.DeletePolicyInput{PolicyArn: webPolicyOutput.Policy.Arn})
-			return err
-		}()
+	rbfunc = func(ctx context.Context) error {
+		return iamService.DeletePolicy(r.Context(), &iam.DeletePolicyInput{PolicyArn: webPolicy.Arn})
 	}
 	rollBackTasks = append(rollBackTasks, rbfunc)
 
 	webGroupName := fmt.Sprintf("%s-WebAdmGrp", bucketName)
-	webGroup, err := iamService.CreateGroup(r.Context(), &iam.CreateGroupInput{
-		GroupName: aws.String(webGroupName),
-	})
 
-	if err != nil {
+	var webGroup *iam.Group
+	if webGroup, err = iamService.CreateGroup(r.Context(), &iam.CreateGroupInput{
+		GroupName: aws.String(webGroupName),
+	}); err != nil {
 		msg := fmt.Sprintf("failed to create web admin group: %s", err.Error())
 		handleError(w, errors.Wrap(err, msg))
 		return
 	}
 
 	// append group delete to rollback tasks
-	rbfunc = func() error {
-		return func() error {
-			_, err := iamService.DeleteGroup(r.Context(), &iam.DeleteGroupInput{GroupName: aws.String(webGroupName)})
-			return err
-		}()
+	rbfunc = func(ctx context.Context) error {
+		return iamService.DeleteGroup(r.Context(), &iam.DeleteGroupInput{GroupName: aws.String(webGroupName)})
 	}
 	rollBackTasks = append(rollBackTasks, rbfunc)
 
-	if _, err = iamService.AttachGroupPolicy(r.Context(), &iam.AttachGroupPolicyInput{
+	if err = iamService.AttachGroupPolicy(r.Context(), &iam.AttachGroupPolicyInput{
 		GroupName: aws.String(webGroupName),
-		PolicyArn: webPolicyOutput.Policy.Arn,
+		PolicyArn: webPolicy.Arn,
 	}); err != nil {
-		msg := fmt.Sprintf("failed to attach policy %s to group %s: %s", aws.StringValue(bktPolicyOutput.Policy.Arn), webGroupName, err.Error())
+		msg := fmt.Sprintf("failed to attach policy %s to group %s: %s", aws.StringValue(bktPolicy.Arn), webGroupName, err.Error())
 		handleError(w, errors.Wrap(err, msg))
 		return
 	}
 
 	// append detach group policy to rollback tasks
-	rbfunc = func() error {
-		return func() error {
-			return iamService.DetachGroupPolicy(r.Context(), &iam.DetachGroupPolicyInput{
-				GroupName: aws.String(webGroupName),
-				PolicyArn: webPolicyOutput.Policy.Arn,
-			})
-		}()
+	rbfunc = func(ctx context.Context) error {
+		return iamService.DetachGroupPolicy(r.Context(), &iam.DetachGroupPolicyInput{
+			GroupName: aws.String(webGroupName),
+			PolicyArn: webPolicy.Arn,
+		})
 	}
 	rollBackTasks = append(rollBackTasks, rbfunc)
 
-	dnsChange, err := route53Service.CreateRecord(r.Context(), domain.HostedZoneID, &route53.ResourceRecordSet{
+	var dnsChange *route53.ChangeInfo
+	if dnsChange, err = route53Service.CreateRecord(r.Context(), domain.HostedZoneID, &route53.ResourceRecordSet{
 		AliasTarget: &route53.AliasTarget{
 			DNSName:              distribution.DomainName,
 			HostedZoneId:         aws.String("Z2FDTNDATAQYW2"),
@@ -378,9 +362,7 @@ func (s *server) CreateWebsiteHandler(w http.ResponseWriter, r *http.Request) {
 		},
 		Name: aws.String(bucketName),
 		Type: aws.String("A"),
-	})
-
-	if err != nil {
+	}); err != nil {
 		msg := fmt.Sprintf("failed to create route53 alias record for website %s: %s", bucketName, err.Error())
 		handleError(w, errors.Wrap(err, msg))
 		return
@@ -388,14 +370,13 @@ func (s *server) CreateWebsiteHandler(w http.ResponseWriter, r *http.Request) {
 
 	// write index file
 	indexMessage := "Hello, " + bucketName + "!"
-	_, err = s3Service.CreateObject(r.Context(), &s3.PutObjectInput{
+	if _, err = s3Service.CreateObject(r.Context(), &s3.PutObjectInput{
 		Bucket:      aws.String(bucketName),
 		Body:        bytes.NewReader([]byte(indexMessage)),
 		ContentType: aws.String("text/html"),
 		Key:         aws.String("index.html"),
 		Tagging:     aws.String("yale:spinup=true"),
-	})
-	if err != nil {
+	}); err != nil {
 		msg := fmt.Sprintf("failed to create default index file for website %s: %s", bucketName, err.Error())
 		handleError(w, errors.Wrap(err, msg))
 		return
@@ -409,8 +390,8 @@ func (s *server) CreateWebsiteHandler(w http.ResponseWriter, r *http.Request) {
 		DnsChange    *route53.ChangeInfo
 	}{
 		bucketOutput.Location,
-		[]*iam.Policy{bktPolicyOutput.Policy, webPolicyOutput.Policy},
-		[]*iam.Group{bktGroup.Group, webGroup.Group},
+		[]*iam.Policy{bktPolicy, webPolicy},
+		[]*iam.Group{bktGroup, webGroup},
 		distribution,
 		dnsChange,
 	}
@@ -644,8 +625,7 @@ func (s *server) WebsiteDeleteHandler(w http.ResponseWriter, r *http.Request) {
 		log.Warnf("error trying to delete default index.html: %s", err)
 	}
 
-	err = s3Service.DeleteEmptyBucket(r.Context(), &s3.DeleteBucketInput{Bucket: aws.String(website)})
-	if err != nil {
+	if err := s3Service.DeleteEmptyBucket(r.Context(), &s3.DeleteBucketInput{Bucket: aws.String(website)}); err != nil {
 		handleError(w, err)
 		return
 	}
@@ -673,7 +653,7 @@ func (s *server) WebsiteDeleteHandler(w http.ResponseWriter, r *http.Request) {
 			}
 
 			if strings.HasPrefix(aws.StringValue(p.PolicyName), website+"-") {
-				if _, err := iamService.DeletePolicy(r.Context(), &iam.DeletePolicyInput{PolicyArn: p.PolicyArn}); err != nil {
+				if err := iamService.DeletePolicy(r.Context(), &iam.DeletePolicyInput{PolicyArn: p.PolicyArn}); err != nil {
 					log.Warnf("failed to delete group policy %s when deleting website %s: %s", aws.StringValue(p.PolicyArn), website, err)
 					j, _ := json.Marshal("failed to delete group policy: " + err.Error())
 					w.Write(j)
@@ -700,7 +680,7 @@ func (s *server) WebsiteDeleteHandler(w http.ResponseWriter, r *http.Request) {
 		}
 		groupUsers = append(groupUsers, users...)
 
-		if _, err := iamService.DeleteGroup(r.Context(), &iam.DeleteGroupInput{GroupName: aws.String(groupName)}); err != nil {
+		if err := iamService.DeleteGroup(r.Context(), &iam.DeleteGroupInput{GroupName: aws.String(groupName)}); err != nil {
 			log.Warnf("failed to delete group %s when deleting website %s: %s", groupName, website, err)
 			j, _ := json.Marshal("failed to delete group: " + err.Error())
 			w.Write(j)

@@ -236,8 +236,8 @@ func TestCreateUser(t *testing.T) {
 	i.Service.(*mockIAMClient).err = awserr.New(iam.ErrCodeNoSuchEntityException, "entity not found", nil)
 	_, err = i.CreateUser(context.TODO(), &iam.CreateUserInput{UserName: aws.String("testuser")})
 	if aerr, ok := err.(apierror.Error); ok {
-		if aerr.Code != apierror.ErrBadRequest {
-			t.Errorf("expected error code %s, got: %s", apierror.ErrBadRequest, aerr.Code)
+		if aerr.Code != apierror.ErrNotFound {
+			t.Errorf("expected error code %s, got: %s", apierror.ErrNotFound, aerr.Code)
 		}
 	} else {
 		t.Errorf("expected apierror.Error, got: %s", reflect.TypeOf(err).String())
@@ -280,8 +280,8 @@ func TestCreateUser(t *testing.T) {
 	i.Service.(*mockIAMClient).err = awserr.New(iam.ErrCodeDeleteConflictException, "delete conflict", nil)
 	_, err = i.CreateUser(context.TODO(), &iam.CreateUserInput{UserName: aws.String("testuser")})
 	if aerr, ok := err.(apierror.Error); ok {
-		if aerr.Code != apierror.ErrBadRequest {
-			t.Errorf("expected error code %s, got: %s", apierror.ErrBadRequest, aerr.Code)
+		if aerr.Code != apierror.ErrConflict {
+			t.Errorf("expected error code %s, got: %s", apierror.ErrConflict, aerr.Code)
 		}
 	} else {
 		t.Errorf("expected apierror.Error, got: %s", reflect.TypeOf(err).String())
@@ -303,18 +303,13 @@ func TestDeleteUser(t *testing.T) {
 	i := IAM{Service: newMockIAMClient(t, nil)}
 
 	// test success
-	expected := &iam.DeleteUserOutput{}
-	out, err := i.DeleteUser(context.TODO(), &iam.DeleteUserInput{UserName: aws.String("testuser")})
+	err := i.DeleteUser(context.TODO(), &iam.DeleteUserInput{UserName: aws.String("testuser")})
 	if err != nil {
 		t.Errorf("expected nil error, got: %s", err)
 	}
 
-	if !reflect.DeepEqual(out, expected) {
-		t.Errorf("expected %+v, got %+v", expected, out)
-	}
-
 	// test nil input
-	_, err = i.DeleteUser(context.TODO(), nil)
+	err = i.DeleteUser(context.TODO(), nil)
 	if aerr, ok := err.(apierror.Error); ok {
 		if aerr.Code != apierror.ErrBadRequest {
 			t.Errorf("expected error code %s, got: %s", apierror.ErrBadRequest, aerr.Code)
@@ -324,7 +319,7 @@ func TestDeleteUser(t *testing.T) {
 	}
 
 	// test empty user name
-	_, err = i.DeleteUser(context.TODO(), &iam.DeleteUserInput{})
+	err = i.DeleteUser(context.TODO(), &iam.DeleteUserInput{})
 	if aerr, ok := err.(apierror.Error); ok {
 		if aerr.Code != apierror.ErrBadRequest {
 			t.Errorf("expected error code %s, got: %s", apierror.ErrBadRequest, aerr.Code)
@@ -335,7 +330,7 @@ func TestDeleteUser(t *testing.T) {
 
 	// test ErrCodeLimitExceededException
 	i.Service.(*mockIAMClient).err = awserr.New(iam.ErrCodeLimitExceededException, "limit exceeded", nil)
-	_, err = i.DeleteUser(context.TODO(), &iam.DeleteUserInput{UserName: aws.String("testuser")})
+	err = i.DeleteUser(context.TODO(), &iam.DeleteUserInput{UserName: aws.String("testuser")})
 	if aerr, ok := err.(apierror.Error); ok {
 		if aerr.Code != apierror.ErrLimitExceeded {
 			t.Errorf("expected error code %s, got: %s", apierror.ErrLimitExceeded, aerr.Code)
@@ -346,7 +341,7 @@ func TestDeleteUser(t *testing.T) {
 
 	// test ErrCodeNoSuchEntityException
 	i.Service.(*mockIAMClient).err = awserr.New(iam.ErrCodeNoSuchEntityException, "entity not found", nil)
-	_, err = i.DeleteUser(context.TODO(), &iam.DeleteUserInput{UserName: aws.String("testuser")})
+	err = i.DeleteUser(context.TODO(), &iam.DeleteUserInput{UserName: aws.String("testuser")})
 	if aerr, ok := err.(apierror.Error); ok {
 		if aerr.Code != apierror.ErrNotFound {
 			t.Errorf("expected error code %s, got: %s", apierror.ErrNotFound, aerr.Code)
@@ -357,7 +352,7 @@ func TestDeleteUser(t *testing.T) {
 
 	// test ErrCodeDeleteConflictException
 	i.Service.(*mockIAMClient).err = awserr.New(iam.ErrCodeDeleteConflictException, "invalid input", nil)
-	_, err = i.DeleteUser(context.TODO(), &iam.DeleteUserInput{UserName: aws.String("testuser")})
+	err = i.DeleteUser(context.TODO(), &iam.DeleteUserInput{UserName: aws.String("testuser")})
 	if aerr, ok := err.(apierror.Error); ok {
 		if aerr.Code != apierror.ErrConflict {
 			t.Errorf("expected error code %s, got: %s", apierror.ErrConflict, aerr.Code)
@@ -368,7 +363,7 @@ func TestDeleteUser(t *testing.T) {
 
 	// test ErrCodeConcurrentModificationException
 	i.Service.(*mockIAMClient).err = awserr.New(iam.ErrCodeConcurrentModificationException, "service failed", nil)
-	_, err = i.DeleteUser(context.TODO(), &iam.DeleteUserInput{UserName: aws.String("testuser")})
+	err = i.DeleteUser(context.TODO(), &iam.DeleteUserInput{UserName: aws.String("testuser")})
 	if aerr, ok := err.(apierror.Error); ok {
 		if aerr.Code != apierror.ErrConflict {
 			t.Errorf("expected error code %s, got: %s", apierror.ErrConflict, aerr.Code)
@@ -379,7 +374,7 @@ func TestDeleteUser(t *testing.T) {
 
 	// test ErrCodeServiceFailureException
 	i.Service.(*mockIAMClient).err = awserr.New(iam.ErrCodeServiceFailureException, "service failed", nil)
-	_, err = i.DeleteUser(context.TODO(), &iam.DeleteUserInput{UserName: aws.String("testuser")})
+	err = i.DeleteUser(context.TODO(), &iam.DeleteUserInput{UserName: aws.String("testuser")})
 	if aerr, ok := err.(apierror.Error); ok {
 		if aerr.Code != apierror.ErrServiceUnavailable {
 			t.Errorf("expected error code %s, got: %s", apierror.ErrServiceUnavailable, aerr.Code)
@@ -390,10 +385,10 @@ func TestDeleteUser(t *testing.T) {
 
 	// test some other, unexpected AWS error
 	i.Service.(*mockIAMClient).err = awserr.New(iam.ErrCodeEntityAlreadyExistsException, "delete conflict", nil)
-	_, err = i.DeleteUser(context.TODO(), &iam.DeleteUserInput{UserName: aws.String("testuser")})
+	err = i.DeleteUser(context.TODO(), &iam.DeleteUserInput{UserName: aws.String("testuser")})
 	if aerr, ok := err.(apierror.Error); ok {
-		if aerr.Code != apierror.ErrBadRequest {
-			t.Errorf("expected error code %s, got: %s", apierror.ErrBadRequest, aerr.Code)
+		if aerr.Code != apierror.ErrConflict {
+			t.Errorf("expected error code %s, got: %s", apierror.ErrConflict, aerr.Code)
 		}
 	} else {
 		t.Errorf("expected apierror.Error, got: %s", reflect.TypeOf(err).String())
@@ -401,7 +396,7 @@ func TestDeleteUser(t *testing.T) {
 
 	// test non-aws error
 	i.Service.(*mockIAMClient).err = errors.New("things blowing up!")
-	_, err = i.DeleteUser(context.TODO(), &iam.DeleteUserInput{UserName: aws.String("testuser")})
+	err = i.DeleteUser(context.TODO(), &iam.DeleteUserInput{UserName: aws.String("testuser")})
 	if aerr, ok := err.(apierror.Error); ok {
 		if aerr.Code != apierror.ErrInternalError {
 			t.Errorf("expected error code %s, got: %s", apierror.ErrInternalError, aerr.Code)
@@ -471,8 +466,8 @@ func TestGetUser(t *testing.T) {
 	i.Service.(*mockIAMClient).err = awserr.New(iam.ErrCodeEntityAlreadyExistsException, "delete conflict", nil)
 	_, err = i.GetUser(context.TODO(), &iam.GetUserInput{UserName: aws.String("testuser")})
 	if aerr, ok := err.(apierror.Error); ok {
-		if aerr.Code != apierror.ErrBadRequest {
-			t.Errorf("expected error code %s, got: %s", apierror.ErrBadRequest, aerr.Code)
+		if aerr.Code != apierror.ErrConflict {
+			t.Errorf("expected error code %s, got: %s", apierror.ErrConflict, aerr.Code)
 		}
 	} else {
 		t.Errorf("expected apierror.Error, got: %s", reflect.TypeOf(err).String())
@@ -561,8 +556,8 @@ func TestCreateAccessKey(t *testing.T) {
 	i.Service.(*mockIAMClient).err = awserr.New(iam.ErrCodeDeleteConflictException, "delete conflict", nil)
 	_, err = i.CreateAccessKey(context.TODO(), &iam.CreateAccessKeyInput{UserName: aws.String("testuser")})
 	if aerr, ok := err.(apierror.Error); ok {
-		if aerr.Code != apierror.ErrBadRequest {
-			t.Errorf("expected error code %s, got: %s", apierror.ErrBadRequest, aerr.Code)
+		if aerr.Code != apierror.ErrConflict {
+			t.Errorf("expected error code %s, got: %s", apierror.ErrConflict, aerr.Code)
 		}
 	} else {
 		t.Errorf("expected apierror.Error, got: %s", reflect.TypeOf(err).String())
@@ -584,8 +579,7 @@ func TestDeleteAccessKeys(t *testing.T) {
 	i := IAM{Service: newMockIAMClient(t, nil)}
 
 	// test success
-	expected := &iam.DeleteAccessKeyOutput{}
-	out, err := i.DeleteAccessKey(context.TODO(), &iam.DeleteAccessKeyInput{
+	err := i.DeleteAccessKey(context.TODO(), &iam.DeleteAccessKeyInput{
 		UserName:    aws.String("testuser"),
 		AccessKeyId: aws.String("SOMEACCESSKEYID"),
 	})
@@ -593,12 +587,8 @@ func TestDeleteAccessKeys(t *testing.T) {
 		t.Errorf("expected nil error, got: %s", err)
 	}
 
-	if !reflect.DeepEqual(out, expected) {
-		t.Errorf("expected %+v, got %+v", expected, out)
-	}
-
 	// test nil input
-	_, err = i.DeleteAccessKey(context.TODO(), nil)
+	err = i.DeleteAccessKey(context.TODO(), nil)
 	if aerr, ok := err.(apierror.Error); ok {
 		if aerr.Code != apierror.ErrBadRequest {
 			t.Errorf("expected error code %s, got: %s", apierror.ErrBadRequest, aerr.Code)
@@ -608,7 +598,7 @@ func TestDeleteAccessKeys(t *testing.T) {
 	}
 
 	// test empty user name
-	_, err = i.DeleteAccessKey(context.TODO(), &iam.DeleteAccessKeyInput{})
+	err = i.DeleteAccessKey(context.TODO(), &iam.DeleteAccessKeyInput{})
 	if aerr, ok := err.(apierror.Error); ok {
 		if aerr.Code != apierror.ErrBadRequest {
 			t.Errorf("expected error code %s, got: %s", apierror.ErrBadRequest, aerr.Code)
@@ -619,7 +609,7 @@ func TestDeleteAccessKeys(t *testing.T) {
 
 	// test ErrCodeNoSuchEntityException
 	i.Service.(*mockIAMClient).err = awserr.New(iam.ErrCodeNoSuchEntityException, "not found", nil)
-	_, err = i.DeleteAccessKey(context.TODO(), &iam.DeleteAccessKeyInput{
+	err = i.DeleteAccessKey(context.TODO(), &iam.DeleteAccessKeyInput{
 		UserName:    aws.String("testuser"),
 		AccessKeyId: aws.String("SOMEACCESSKEYID"),
 	})
@@ -633,7 +623,7 @@ func TestDeleteAccessKeys(t *testing.T) {
 
 	// test ErrCodeLimitExceededException
 	i.Service.(*mockIAMClient).err = awserr.New(iam.ErrCodeLimitExceededException, "limit exceeded", nil)
-	_, err = i.DeleteAccessKey(context.TODO(), &iam.DeleteAccessKeyInput{
+	err = i.DeleteAccessKey(context.TODO(), &iam.DeleteAccessKeyInput{
 		UserName:    aws.String("testuser"),
 		AccessKeyId: aws.String("SOMEACCESSKEYID"),
 	})
@@ -647,7 +637,7 @@ func TestDeleteAccessKeys(t *testing.T) {
 
 	// test ErrCodeServiceFailureException
 	i.Service.(*mockIAMClient).err = awserr.New(iam.ErrCodeServiceFailureException, "service failure", nil)
-	_, err = i.DeleteAccessKey(context.TODO(), &iam.DeleteAccessKeyInput{
+	err = i.DeleteAccessKey(context.TODO(), &iam.DeleteAccessKeyInput{
 		UserName:    aws.String("testuser"),
 		AccessKeyId: aws.String("SOMEACCESSKEYID"),
 	})
@@ -661,13 +651,13 @@ func TestDeleteAccessKeys(t *testing.T) {
 
 	// test some other, unexpected AWS error
 	i.Service.(*mockIAMClient).err = awserr.New(iam.ErrCodeDeleteConflictException, "delete conflict", nil)
-	_, err = i.DeleteAccessKey(context.TODO(), &iam.DeleteAccessKeyInput{
+	err = i.DeleteAccessKey(context.TODO(), &iam.DeleteAccessKeyInput{
 		UserName:    aws.String("testuser"),
 		AccessKeyId: aws.String("SOMEACCESSKEYID"),
 	})
 	if aerr, ok := err.(apierror.Error); ok {
-		if aerr.Code != apierror.ErrBadRequest {
-			t.Errorf("expected error code %s, got: %s", apierror.ErrBadRequest, aerr.Code)
+		if aerr.Code != apierror.ErrConflict {
+			t.Errorf("expected error code %s, got: %s", apierror.ErrConflict, aerr.Code)
 		}
 	} else {
 		t.Errorf("expected apierror.Error, got: %s", reflect.TypeOf(err).String())
@@ -675,7 +665,7 @@ func TestDeleteAccessKeys(t *testing.T) {
 
 	// test non-aws error
 	i.Service.(*mockIAMClient).err = errors.New("things blowing up!")
-	_, err = i.DeleteAccessKey(context.TODO(), &iam.DeleteAccessKeyInput{
+	err = i.DeleteAccessKey(context.TODO(), &iam.DeleteAccessKeyInput{
 		UserName:    aws.String("testuser"),
 		AccessKeyId: aws.String("SOMEACCESSKEYID"),
 	})
@@ -748,8 +738,8 @@ func TestListAccessKeys(t *testing.T) {
 	i.Service.(*mockIAMClient).err = awserr.New(iam.ErrCodeDeleteConflictException, "delete conflict", nil)
 	_, err = i.ListAccessKeys(context.TODO(), &iam.ListAccessKeysInput{UserName: aws.String("testuser")})
 	if aerr, ok := err.(apierror.Error); ok {
-		if aerr.Code != apierror.ErrBadRequest {
-			t.Errorf("expected error code %s, got: %s", apierror.ErrBadRequest, aerr.Code)
+		if aerr.Code != apierror.ErrConflict {
+			t.Errorf("expected error code %s, got: %s", apierror.ErrConflict, aerr.Code)
 		}
 	} else {
 		t.Errorf("expected apierror.Error, got: %s", reflect.TypeOf(err).String())
@@ -771,18 +761,13 @@ func TestAddUserToGroup(t *testing.T) {
 	i := IAM{Service: newMockIAMClient(t, nil)}
 
 	// test success
-	expected := &iam.AddUserToGroupOutput{}
-	out, err := i.AddUserToGroup(context.TODO(), &iam.AddUserToGroupInput{UserName: aws.String("testuser"), GroupName: aws.String("testgroup")})
+	err := i.AddUserToGroup(context.TODO(), &iam.AddUserToGroupInput{UserName: aws.String("testuser"), GroupName: aws.String("testgroup")})
 	if err != nil {
 		t.Errorf("expected nil error, got: %s", err)
 	}
 
-	if !reflect.DeepEqual(out, expected) {
-		t.Errorf("expected %+v, got %+v", expected, out)
-	}
-
 	// test nil input
-	_, err = i.AddUserToGroup(context.TODO(), nil)
+	err = i.AddUserToGroup(context.TODO(), nil)
 	if aerr, ok := err.(apierror.Error); ok {
 		if aerr.Code != apierror.ErrBadRequest {
 			t.Errorf("expected error code %s, got: %s", apierror.ErrBadRequest, aerr.Code)
@@ -792,7 +777,7 @@ func TestAddUserToGroup(t *testing.T) {
 	}
 
 	// test empty user name and group name
-	_, err = i.AddUserToGroup(context.TODO(), &iam.AddUserToGroupInput{})
+	err = i.AddUserToGroup(context.TODO(), &iam.AddUserToGroupInput{})
 	if aerr, ok := err.(apierror.Error); ok {
 		if aerr.Code != apierror.ErrBadRequest {
 			t.Errorf("expected error code %s, got: %s", apierror.ErrBadRequest, aerr.Code)
@@ -803,7 +788,7 @@ func TestAddUserToGroup(t *testing.T) {
 
 	// test ErrCodeNoSuchEntityException
 	i.Service.(*mockIAMClient).err = awserr.New(iam.ErrCodeNoSuchEntityException, "not found", nil)
-	_, err = i.AddUserToGroup(context.TODO(), &iam.AddUserToGroupInput{UserName: aws.String("testuser"), GroupName: aws.String("testgroup")})
+	err = i.AddUserToGroup(context.TODO(), &iam.AddUserToGroupInput{UserName: aws.String("testuser"), GroupName: aws.String("testgroup")})
 	if aerr, ok := err.(apierror.Error); ok {
 		if aerr.Code != apierror.ErrNotFound {
 			t.Errorf("expected error code %s, got: %s", apierror.ErrNotFound, aerr.Code)
@@ -814,7 +799,7 @@ func TestAddUserToGroup(t *testing.T) {
 
 	// test ErrCodeLimitExceededException
 	i.Service.(*mockIAMClient).err = awserr.New(iam.ErrCodeLimitExceededException, "limit exceeded", nil)
-	_, err = i.AddUserToGroup(context.TODO(), &iam.AddUserToGroupInput{UserName: aws.String("testuser"), GroupName: aws.String("testgroup")})
+	err = i.AddUserToGroup(context.TODO(), &iam.AddUserToGroupInput{UserName: aws.String("testuser"), GroupName: aws.String("testgroup")})
 	if aerr, ok := err.(apierror.Error); ok {
 		if aerr.Code != apierror.ErrLimitExceeded {
 			t.Errorf("expected error code %s, got: %s", apierror.ErrLimitExceeded, aerr.Code)
@@ -825,7 +810,7 @@ func TestAddUserToGroup(t *testing.T) {
 
 	// test ErrCodeServiceFailureException
 	i.Service.(*mockIAMClient).err = awserr.New(iam.ErrCodeServiceFailureException, "service failure", nil)
-	_, err = i.AddUserToGroup(context.TODO(), &iam.AddUserToGroupInput{UserName: aws.String("testuser"), GroupName: aws.String("testgroup")})
+	err = i.AddUserToGroup(context.TODO(), &iam.AddUserToGroupInput{UserName: aws.String("testuser"), GroupName: aws.String("testgroup")})
 	if aerr, ok := err.(apierror.Error); ok {
 		if aerr.Code != apierror.ErrServiceUnavailable {
 			t.Errorf("expected error code %s, got: %s", apierror.ErrServiceUnavailable, aerr.Code)
@@ -836,10 +821,10 @@ func TestAddUserToGroup(t *testing.T) {
 
 	// test some other, unexpected AWS error
 	i.Service.(*mockIAMClient).err = awserr.New(iam.ErrCodeDeleteConflictException, "delete conflict", nil)
-	_, err = i.AddUserToGroup(context.TODO(), &iam.AddUserToGroupInput{UserName: aws.String("testuser"), GroupName: aws.String("testgroup")})
+	err = i.AddUserToGroup(context.TODO(), &iam.AddUserToGroupInput{UserName: aws.String("testuser"), GroupName: aws.String("testgroup")})
 	if aerr, ok := err.(apierror.Error); ok {
-		if aerr.Code != apierror.ErrBadRequest {
-			t.Errorf("expected error code %s, got: %s", apierror.ErrBadRequest, aerr.Code)
+		if aerr.Code != apierror.ErrConflict {
+			t.Errorf("expected error code %s, got: %s", apierror.ErrConflict, aerr.Code)
 		}
 	} else {
 		t.Errorf("expected apierror.Error, got: %s", reflect.TypeOf(err).String())
@@ -847,7 +832,7 @@ func TestAddUserToGroup(t *testing.T) {
 
 	// test non-aws error
 	i.Service.(*mockIAMClient).err = errors.New("things blowing up!")
-	_, err = i.AddUserToGroup(context.TODO(), &iam.AddUserToGroupInput{UserName: aws.String("testuser"), GroupName: aws.String("testgroup")})
+	err = i.AddUserToGroup(context.TODO(), &iam.AddUserToGroupInput{UserName: aws.String("testuser"), GroupName: aws.String("testgroup")})
 	if aerr, ok := err.(apierror.Error); ok {
 		if aerr.Code != apierror.ErrInternalError {
 			t.Errorf("expected error code %s, got: %s", apierror.ErrInternalError, aerr.Code)
@@ -923,8 +908,8 @@ func TestRemoveUserFromGroup(t *testing.T) {
 	i.Service.(*mockIAMClient).err = awserr.New(iam.ErrCodeDeleteConflictException, "delete conflict", nil)
 	err = i.RemoveUserFromGroup(context.TODO(), &iam.RemoveUserFromGroupInput{UserName: aws.String("testuser"), GroupName: aws.String("testgroup")})
 	if aerr, ok := err.(apierror.Error); ok {
-		if aerr.Code != apierror.ErrBadRequest {
-			t.Errorf("expected error code %s, got: %s", apierror.ErrBadRequest, aerr.Code)
+		if aerr.Code != apierror.ErrConflict {
+			t.Errorf("expected error code %s, got: %s", apierror.ErrConflict, aerr.Code)
 		}
 	} else {
 		t.Errorf("expected apierror.Error, got: %s", reflect.TypeOf(err).String())
@@ -991,8 +976,8 @@ func TestListUserGroups(t *testing.T) {
 	i.Service.(*mockIAMClient).err = awserr.New(iam.ErrCodeDeleteConflictException, "delete conflict", nil)
 	_, err = i.ListUserGroups(context.TODO(), &iam.ListGroupsForUserInput{UserName: aws.String("testuser")})
 	if aerr, ok := err.(apierror.Error); ok {
-		if aerr.Code != apierror.ErrBadRequest {
-			t.Errorf("expected error code %s, got: %s", apierror.ErrBadRequest, aerr.Code)
+		if aerr.Code != apierror.ErrConflict {
+			t.Errorf("expected error code %s, got: %s", apierror.ErrConflict, aerr.Code)
 		}
 	} else {
 		t.Errorf("expected apierror.Error, got: %s", reflect.TypeOf(err).String())
@@ -1081,8 +1066,8 @@ func TestListUserPolicies(t *testing.T) {
 	i.Service.(*mockIAMClient).err = awserr.New(iam.ErrCodeDeleteConflictException, "delete conflict", nil)
 	_, err = i.ListUserPolicies(context.TODO(), &iam.ListAttachedUserPoliciesInput{UserName: aws.String("testuser")})
 	if aerr, ok := err.(apierror.Error); ok {
-		if aerr.Code != apierror.ErrBadRequest {
-			t.Errorf("expected error code %s, got: %s", apierror.ErrBadRequest, aerr.Code)
+		if aerr.Code != apierror.ErrConflict {
+			t.Errorf("expected error code %s, got: %s", apierror.ErrConflict, aerr.Code)
 		}
 	} else {
 		t.Errorf("expected apierror.Error, got: %s", reflect.TypeOf(err).String())
@@ -1188,8 +1173,8 @@ func TestDetachUserPolicy(t *testing.T) {
 	i.Service.(*mockIAMClient).err = awserr.New(iam.ErrCodeDeleteConflictException, "delete conflict", nil)
 	err = i.DetachUserPolicy(context.TODO(), &iam.DetachUserPolicyInput{UserName: username, PolicyArn: policyarn})
 	if aerr, ok := err.(apierror.Error); ok {
-		if aerr.Code != apierror.ErrBadRequest {
-			t.Errorf("expected error code %s, got: %s", apierror.ErrBadRequest, aerr.Code)
+		if aerr.Code != apierror.ErrConflict {
+			t.Errorf("expected error code %s, got: %s", apierror.ErrConflict, aerr.Code)
 		}
 	} else {
 		t.Errorf("expected apierror.Error, got: %s", reflect.TypeOf(err).String())

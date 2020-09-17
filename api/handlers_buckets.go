@@ -1,6 +1,7 @@
 package api
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"net/http"
@@ -47,8 +48,7 @@ func (s *server) BucketCreateHandler(w http.ResponseWriter, r *http.Request) {
 		Tags        []*s3.Tag
 		BucketInput s3.CreateBucketInput
 	}
-	err := json.NewDecoder(r.Body).Decode(&req)
-	if err != nil {
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		msg := fmt.Sprintf("cannot decode body into create bucket input: %s", err)
 		handleError(w, apierror.New(apierror.ErrBadRequest, msg, err))
 		return
@@ -60,8 +60,9 @@ func (s *server) BucketCreateHandler(w http.ResponseWriter, r *http.Request) {
 		Value: aws.String(Org),
 	})
 
-	// setup err var, rollback function list and defer execution, note that we depend on the err variable defined above this
-	var rollBackTasks []func() error
+	// setup err var, rollback function list and defer execution
+	var err error
+	var rollBackTasks []rollbackFunc
 	defer func() {
 		if err != nil {
 			log.Errorf("recovering from error: %s, executing %d rollback tasks", err, len(rollBackTasks))
@@ -70,26 +71,24 @@ func (s *server) BucketCreateHandler(w http.ResponseWriter, r *http.Request) {
 	}()
 
 	bucketName := aws.StringValue(req.BucketInput.Bucket)
-	bucketOutput, err := s3Service.CreateBucket(r.Context(), &req.BucketInput)
-	if err != nil {
+	var bucketOutput *s3.CreateBucketOutput
+	if bucketOutput, err = s3Service.CreateBucket(r.Context(), &req.BucketInput); err != nil {
 		msg := fmt.Sprintf("failed to create bucket: %s", err)
 		handleError(w, errors.Wrap(err, msg))
 		return
 	}
 
 	// append bucket delete to rollback tasks
-	rbfunc := func() error {
-		return func() error {
-			if err := s3Service.DeleteEmptyBucket(r.Context(), &s3.DeleteBucketInput{Bucket: aws.String(bucketName)}); err != nil {
-				return err
-			}
-			return nil
-		}()
+	rbfunc := func(ctx context.Context) error {
+		if err := s3Service.DeleteEmptyBucket(ctx, &s3.DeleteBucketInput{Bucket: aws.String(bucketName)}); err != nil {
+			return err
+		}
+		return nil
 	}
 	rollBackTasks = append(rollBackTasks, rbfunc)
 
 	// wait for the bucket to exist
-	err = retry(3, 2*time.Second, func() error {
+	if err = retry(3, 2*time.Second, func() error {
 		log.Infof("checking if bucket exists before continuing: %s", bucketName)
 		exists, err := s3Service.BucketExists(r.Context(), bucketName)
 		if err != nil {
@@ -103,31 +102,27 @@ func (s *server) BucketCreateHandler(w http.ResponseWriter, r *http.Request) {
 
 		msg := fmt.Sprintf("s3 bucket (%s) doesn't exist", bucketName)
 		return errors.New(msg)
-	})
-
-	if err != nil {
+	}); err != nil {
 		msg := fmt.Sprintf("failed to create bucket %s, timeout waiting for create: %s", bucketName, err.Error())
 		handleError(w, errors.Wrap(err, msg))
 		return
 	}
 
 	// retry tagging
-	err = retry(3, 2*time.Second, func() error {
+	if err = retry(3, 2*time.Second, func() error {
 		if err := s3Service.TagBucket(r.Context(), bucketName, req.Tags); err != nil {
 			log.Warnf("error tagging website bucket %s: %s", bucketName, err)
 			return err
 		}
 		return nil
-	})
-
-	if err != nil {
+	}); err != nil {
 		msg := fmt.Sprintf("failed to tag bucket %s: %s", bucketName, err.Error())
 		handleError(w, errors.Wrap(err, msg))
 		return
 	}
 
 	// enable AWS managed serverside encryption for the bucket
-	err = s3Service.UpdateBucketEncryption(r.Context(), &s3.PutBucketEncryptionInput{
+	if err = s3Service.UpdateBucketEncryption(r.Context(), &s3.PutBucketEncryptionInput{
 		Bucket: aws.String(bucketName),
 		ServerSideEncryptionConfiguration: &s3.ServerSideEncryptionConfiguration{
 			Rules: []*s3.ServerSideEncryptionRule{
@@ -138,8 +133,7 @@ func (s *server) BucketCreateHandler(w http.ResponseWriter, r *http.Request) {
 				},
 			},
 		},
-	})
-	if err != nil {
+	}); err != nil {
 		msg := fmt.Sprintf("failed to enable encryption for bucket %s: %s", bucketName, err.Error())
 		handleError(w, errors.Wrap(err, msg))
 		return
@@ -147,8 +141,7 @@ func (s *server) BucketCreateHandler(w http.ResponseWriter, r *http.Request) {
 
 	// enable logging access for the bucket to a central repo if the target bucket is set
 	if s3Service.LoggingBucket != "" {
-		err = s3Service.UpdateBucketLogging(r.Context(), bucketName, s3Service.LoggingBucket, s3Service.LoggingBucketPrefix)
-		if err != nil {
+		if err = s3Service.UpdateBucketLogging(r.Context(), bucketName, s3Service.LoggingBucket, s3Service.LoggingBucketPrefix); err != nil {
 			msg := fmt.Sprintf("failed to enable logging for bucket %s: %s", bucketName, err.Error())
 			handleError(w, errors.Wrap(err, msg))
 			return
@@ -156,61 +149,56 @@ func (s *server) BucketCreateHandler(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// build the default IAM bucket admin policy (from the config and known inputs)
-	defaultPolicy, err := iamService.DefaultBucketAdminPolicy(aws.String(bucketName))
-	if err != nil {
+	var defaultPolicy []byte
+	if defaultPolicy, err = iamService.DefaultBucketAdminPolicy(aws.String(bucketName)); err != nil {
 		msg := fmt.Sprintf("failed creating default IAM policy for bucket %s: %s", bucketName, err.Error())
 		handleError(w, errors.Wrap(err, msg))
 		return
 	}
 
-	policyOutput, err := iamService.CreatePolicy(r.Context(), &iam.CreatePolicyInput{
+	var policy *iam.Policy
+	if policy, err = iamService.CreatePolicy(r.Context(), &iam.CreatePolicyInput{
 		Description:    aws.String(fmt.Sprintf("Admin policy for %s bucket", bucketName)),
 		PolicyDocument: aws.String(string(defaultPolicy)),
 		PolicyName:     aws.String(fmt.Sprintf("%s-BktAdmPlc", bucketName)),
-	})
-
-	if err != nil {
+	}); err != nil {
 		msg := fmt.Sprintf("failed to create policy: %s", err.Error())
 		handleError(w, errors.Wrap(err, msg))
 		return
 	}
 
 	// append policy delete to rollback tasks
-	rbfunc = func() error {
-		return func() error {
-			if _, err := iamService.DeletePolicy(r.Context(), &iam.DeletePolicyInput{PolicyArn: policyOutput.Policy.Arn}); err != nil {
-				return err
-			}
-			return nil
-		}()
+	rbfunc = func(ctx context.Context) error {
+		if err := iamService.DeletePolicy(ctx, &iam.DeletePolicyInput{PolicyArn: policy.Arn}); err != nil {
+			return err
+		}
+		return nil
 	}
 	rollBackTasks = append(rollBackTasks, rbfunc)
 
 	groupName := fmt.Sprintf("%s-BktAdmGrp", bucketName)
-	group, err := iamService.CreateGroup(r.Context(), &iam.CreateGroupInput{
-		GroupName: aws.String(groupName),
-	})
 
-	if err != nil {
+	var group *iam.Group
+	if group, err = iamService.CreateGroup(r.Context(), &iam.CreateGroupInput{
+		GroupName: aws.String(groupName),
+	}); err != nil {
 		msg := fmt.Sprintf("failed to create group: %s", err.Error())
 		handleError(w, errors.Wrap(err, msg))
 		return
 	}
 
 	// append group delete to rollback tasks
-	rbfunc = func() error {
-		return func() error {
-			if _, err := iamService.DeleteGroup(r.Context(), &iam.DeleteGroupInput{GroupName: aws.String(groupName)}); err != nil {
-				return err
-			}
-			return nil
-		}()
+	rbfunc = func(ctx context.Context) error {
+		if err := iamService.DeleteGroup(ctx, &iam.DeleteGroupInput{GroupName: aws.String(groupName)}); err != nil {
+			return err
+		}
+		return nil
 	}
 	rollBackTasks = append(rollBackTasks, rbfunc)
 
-	if _, err = iamService.AttachGroupPolicy(r.Context(), &iam.AttachGroupPolicyInput{
+	if err = iamService.AttachGroupPolicy(r.Context(), &iam.AttachGroupPolicyInput{
 		GroupName: aws.String(groupName),
-		PolicyArn: policyOutput.Policy.Arn,
+		PolicyArn: policy.Arn,
 	}); err != nil {
 		msg := fmt.Sprintf("failed to create group: %s", err.Error())
 		handleError(w, errors.Wrap(err, msg))
@@ -223,8 +211,8 @@ func (s *server) BucketCreateHandler(w http.ResponseWriter, r *http.Request) {
 		Group  *iam.Group
 	}{
 		bucketOutput.Location,
-		policyOutput.Policy,
-		group.Group,
+		policy,
+		group,
 	}
 
 	j, err := json.Marshal(output)
@@ -334,63 +322,51 @@ func (s *server) BucketDeleteHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	for _, g := range []string{"BktAdmGrp", "BktRWGrp", "BktROGrp"} {
+		groupName := fmt.Sprintf("%s-%s", bucket, g)
+
+		// TODO: if this fails with a NotFound, we should continue on because its probably a legacy bucket
+		policies, err := iamService.ListGroupPolicies(r.Context(), &iam.ListAttachedGroupPoliciesInput{GroupName: aws.String(groupName)})
+		if err != nil {
+			log.Warnf("failed to list group policies when deleting bucket %s: %s", bucket, err)
+			continue
+		}
+
+		for _, p := range policies {
+			if err := iamService.DetachGroupPolicy(r.Context(), &iam.DetachGroupPolicyInput{
+				GroupName: aws.String(groupName),
+				PolicyArn: p.PolicyArn,
+			}); err != nil {
+				log.Warnf("failed to detach policy %s from group %s when deleting bucket %s: %s", aws.StringValue(p.PolicyArn), groupName, bucket, err)
+			}
+
+			if strings.HasPrefix(aws.StringValue(p.PolicyName), bucket+"-") {
+				if err := iamService.DeletePolicy(r.Context(), &iam.DeletePolicyInput{PolicyArn: p.PolicyArn}); err != nil {
+					log.Warnf("failed to delete group policy %s when deleting bucket %s: %s", aws.StringValue(p.PolicyArn), bucket, err)
+				}
+			}
+		}
+
+		users, err := iamService.ListGroupUsers(r.Context(), &iam.GetGroupInput{GroupName: aws.String(groupName)})
+		if err != nil {
+			log.Warnf("failed to list group's users when deleting bucket %s: %s", bucket, err)
+			continue
+		}
+
+		for _, u := range users {
+			if err := iamService.RemoveUserFromGroup(r.Context(), &iam.RemoveUserFromGroupInput{UserName: u.UserName, GroupName: aws.String(groupName)}); err != nil {
+				log.Warnf("failed to remove user %s from group %s when deleting bucket %s: %s", aws.StringValue(u.UserName), groupName, bucket, err)
+			}
+		}
+
+		if err := iamService.DeleteGroup(r.Context(), &iam.DeleteGroupInput{GroupName: aws.String(groupName)}); err != nil {
+			log.Warnf("failed to delete group %s when deleting bucket %s: %s", groupName, bucket, err)
+			continue
+		}
+	}
+
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusOK)
-
-	// TODO: if this fails with a NotFound, we should continue on because its probably a legacy bucket
-	groupName := fmt.Sprintf("%s-BktAdmGrp", bucket)
-	policies, err := iamService.ListGroupPolicies(r.Context(), &iam.ListAttachedGroupPoliciesInput{GroupName: aws.String(groupName)})
-	if err != nil {
-		log.Warnf("failed to list group policies when deleting bucket %s: %s", bucket, err)
-		j, _ := json.Marshal("failed to list group policies: " + err.Error())
-		w.Write(j)
-	}
-
-	for _, p := range policies {
-		if err := iamService.DetachGroupPolicy(r.Context(), &iam.DetachGroupPolicyInput{
-			GroupName: aws.String(groupName),
-			PolicyArn: p.PolicyArn,
-		}); err != nil {
-			log.Warnf("failed to detach policy %s from group %s when deleting bucket %s: %s", aws.StringValue(p.PolicyArn), groupName, bucket, err)
-			j, _ := json.Marshal("failed to detatch group policy: " + err.Error())
-			w.Write(j)
-			return
-		}
-
-		if strings.HasPrefix(aws.StringValue(p.PolicyName), bucket+"-") {
-			if _, err := iamService.DeletePolicy(r.Context(), &iam.DeletePolicyInput{PolicyArn: p.PolicyArn}); err != nil {
-				log.Warnf("failed to delete group policy %s when deleting bucket %s: %s", aws.StringValue(p.PolicyArn), bucket, err)
-				j, _ := json.Marshal("failed to delete group policy: " + err.Error())
-				w.Write(j)
-				return
-			}
-			break
-		}
-	}
-
-	users, err := iamService.ListGroupUsers(r.Context(), &iam.GetGroupInput{GroupName: aws.String(groupName)})
-	if err != nil {
-		log.Warnf("failed to list group's users when deleting bucket %s: %s", bucket, err)
-		j, _ := json.Marshal("failed to list group users: " + err.Error())
-		w.Write(j)
-	}
-
-	for _, u := range users {
-		if err := iamService.RemoveUserFromGroup(r.Context(), &iam.RemoveUserFromGroupInput{UserName: u.UserName, GroupName: aws.String(groupName)}); err != nil {
-			log.Warnf("failed to remove user %s from group %s when deleting bucket %s: %s", aws.StringValue(u.UserName), groupName, bucket, err)
-			j, _ := json.Marshal("failed to remove user from group group: " + err.Error())
-			w.Write(j)
-			return
-		}
-	}
-
-	if _, err := iamService.DeleteGroup(r.Context(), &iam.DeleteGroupInput{GroupName: aws.String(groupName)}); err != nil {
-		log.Warnf("failed to delete group %s when deleting bucket %s: %s", groupName, bucket, err)
-		j, _ := json.Marshal("failed to delete group: " + err.Error())
-		w.Write(j)
-		return
-	}
-
 	w.Write([]byte{})
 }
 
