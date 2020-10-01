@@ -117,7 +117,7 @@ func TestCreateGroup(t *testing.T) {
 	}
 
 	// test success
-	expected := &iam.CreateGroupOutput{Group: &testGroup}
+	expected := &testGroup
 	out, err := i.CreateGroup(context.TODO(), &iam.CreateGroupInput{GroupName: aws.String("testgroup")})
 	if err != nil {
 		t.Errorf("expected nil error, got: %s", err)
@@ -173,8 +173,8 @@ func TestCreateGroup(t *testing.T) {
 	i.Service.(*mockIAMClient).err = awserr.New(iam.ErrCodeNoSuchEntityException, "entity not found", nil)
 	_, err = i.CreateGroup(context.TODO(), &iam.CreateGroupInput{GroupName: aws.String("testgroup")})
 	if aerr, ok := err.(apierror.Error); ok {
-		if aerr.Code != apierror.ErrBadRequest {
-			t.Errorf("expected error code %s, got: %s", apierror.ErrBadRequest, aerr.Code)
+		if aerr.Code != apierror.ErrNotFound {
+			t.Errorf("expected error code %s, got: %s", apierror.ErrNotFound, aerr.Code)
 		}
 	} else {
 		t.Errorf("expected apierror.Error, got: %s", reflect.TypeOf(err).String())
@@ -195,8 +195,8 @@ func TestCreateGroup(t *testing.T) {
 	i.Service.(*mockIAMClient).err = awserr.New(iam.ErrCodeDeleteConflictException, "delete conflict", nil)
 	_, err = i.CreateGroup(context.TODO(), &iam.CreateGroupInput{GroupName: aws.String("testgroup")})
 	if aerr, ok := err.(apierror.Error); ok {
-		if aerr.Code != apierror.ErrBadRequest {
-			t.Errorf("expected error code %s, got: %s", apierror.ErrBadRequest, aerr.Code)
+		if aerr.Code != apierror.ErrConflict {
+			t.Errorf("expected error code %s, got: %s", apierror.ErrConflict, aerr.Code)
 		}
 	} else {
 		t.Errorf("expected apierror.Error, got: %s", reflect.TypeOf(err).String())
@@ -222,18 +222,13 @@ func TestDeleteGroup(t *testing.T) {
 	}
 
 	// test success
-	expected := &iam.DeleteGroupOutput{}
-	out, err := i.DeleteGroup(context.TODO(), &iam.DeleteGroupInput{GroupName: aws.String("testgroup")})
+	err := i.DeleteGroup(context.TODO(), &iam.DeleteGroupInput{GroupName: aws.String("testgroup")})
 	if err != nil {
 		t.Errorf("expected nil error, got: %s", err)
 	}
 
-	if !reflect.DeepEqual(out, expected) {
-		t.Errorf("expected %+v, got %+v", expected, out)
-	}
-
 	// test nil input
-	_, err = i.DeleteGroup(context.TODO(), nil)
+	err = i.DeleteGroup(context.TODO(), nil)
 	if aerr, ok := err.(apierror.Error); ok {
 		if aerr.Code != apierror.ErrBadRequest {
 			t.Errorf("expected error code %s, got: %s", apierror.ErrBadRequest, aerr.Code)
@@ -243,7 +238,7 @@ func TestDeleteGroup(t *testing.T) {
 	}
 
 	// test empty group name
-	_, err = i.DeleteGroup(context.TODO(), &iam.DeleteGroupInput{})
+	err = i.DeleteGroup(context.TODO(), &iam.DeleteGroupInput{})
 	if aerr, ok := err.(apierror.Error); ok {
 		if aerr.Code != apierror.ErrBadRequest {
 			t.Errorf("expected error code %s, got: %s", apierror.ErrBadRequest, aerr.Code)
@@ -254,7 +249,7 @@ func TestDeleteGroup(t *testing.T) {
 
 	// test ErrCodeNoSuchEntityException
 	i.Service.(*mockIAMClient).err = awserr.New(iam.ErrCodeNoSuchEntityException, "entity not found", nil)
-	_, err = i.DeleteGroup(context.TODO(), &iam.DeleteGroupInput{GroupName: aws.String("testgroup")})
+	err = i.DeleteGroup(context.TODO(), &iam.DeleteGroupInput{GroupName: aws.String("testgroup")})
 	if aerr, ok := err.(apierror.Error); ok {
 		if aerr.Code != apierror.ErrNotFound {
 			t.Errorf("expected error code %s, got: %s", apierror.ErrNotFound, aerr.Code)
@@ -265,7 +260,7 @@ func TestDeleteGroup(t *testing.T) {
 
 	// test ErrCodeLimitExceededException
 	i.Service.(*mockIAMClient).err = awserr.New(iam.ErrCodeLimitExceededException, "limit exceeded", nil)
-	_, err = i.DeleteGroup(context.TODO(), &iam.DeleteGroupInput{GroupName: aws.String("testgroup")})
+	err = i.DeleteGroup(context.TODO(), &iam.DeleteGroupInput{GroupName: aws.String("testgroup")})
 	if aerr, ok := err.(apierror.Error); ok {
 		if aerr.Code != apierror.ErrLimitExceeded {
 			t.Errorf("expected error code %s, got: %s", apierror.ErrLimitExceeded, aerr.Code)
@@ -276,7 +271,7 @@ func TestDeleteGroup(t *testing.T) {
 
 	// test ErrCodeDeleteConflictException
 	i.Service.(*mockIAMClient).err = awserr.New(iam.ErrCodeDeleteConflictException, "delete conflict", nil)
-	_, err = i.DeleteGroup(context.TODO(), &iam.DeleteGroupInput{GroupName: aws.String("testgroup")})
+	err = i.DeleteGroup(context.TODO(), &iam.DeleteGroupInput{GroupName: aws.String("testgroup")})
 	if aerr, ok := err.(apierror.Error); ok {
 		if aerr.Code != apierror.ErrConflict {
 			t.Errorf("expected error code %s, got: %s", apierror.ErrConflict, aerr.Code)
@@ -287,7 +282,7 @@ func TestDeleteGroup(t *testing.T) {
 
 	// test ErrCodeServiceFailureException
 	i.Service.(*mockIAMClient).err = awserr.New(iam.ErrCodeServiceFailureException, "service failed", nil)
-	_, err = i.DeleteGroup(context.TODO(), &iam.DeleteGroupInput{GroupName: aws.String("testgroup")})
+	err = i.DeleteGroup(context.TODO(), &iam.DeleteGroupInput{GroupName: aws.String("testgroup")})
 	if aerr, ok := err.(apierror.Error); ok {
 		if aerr.Code != apierror.ErrServiceUnavailable {
 			t.Errorf("expected error code %s, got: %s", apierror.ErrServiceUnavailable, aerr.Code)
@@ -298,10 +293,10 @@ func TestDeleteGroup(t *testing.T) {
 
 	// test some other, unexpected AWS error
 	i.Service.(*mockIAMClient).err = awserr.New(iam.ErrCodeEntityAlreadyExistsException, "entity already exists", nil)
-	_, err = i.DeleteGroup(context.TODO(), &iam.DeleteGroupInput{GroupName: aws.String("testgroup")})
+	err = i.DeleteGroup(context.TODO(), &iam.DeleteGroupInput{GroupName: aws.String("testgroup")})
 	if aerr, ok := err.(apierror.Error); ok {
-		if aerr.Code != apierror.ErrBadRequest {
-			t.Errorf("expected error code %s, got: %s", apierror.ErrBadRequest, aerr.Code)
+		if aerr.Code != apierror.ErrConflict {
+			t.Errorf("expected error code %s, got: %s", apierror.ErrConflict, aerr.Code)
 		}
 	} else {
 		t.Errorf("expected apierror.Error, got: %s", reflect.TypeOf(err).String())
@@ -309,7 +304,7 @@ func TestDeleteGroup(t *testing.T) {
 
 	// test non-aws error
 	i.Service.(*mockIAMClient).err = errors.New("things blowing up!")
-	_, err = i.DeleteGroup(context.TODO(), &iam.DeleteGroupInput{GroupName: aws.String("testgroup")})
+	err = i.DeleteGroup(context.TODO(), &iam.DeleteGroupInput{GroupName: aws.String("testgroup")})
 	if aerr, ok := err.(apierror.Error); ok {
 		if aerr.Code != apierror.ErrInternalError {
 			t.Errorf("expected error code %s, got: %s", apierror.ErrInternalError, aerr.Code)
@@ -327,8 +322,7 @@ func TestAttachGroupPolicy(t *testing.T) {
 	}
 
 	// test success
-	expected := &iam.AttachGroupPolicyOutput{}
-	out, err := i.AttachGroupPolicy(context.TODO(), &iam.AttachGroupPolicyInput{
+	err := i.AttachGroupPolicy(context.TODO(), &iam.AttachGroupPolicyInput{
 		GroupName: aws.String("testgroup"),
 		PolicyArn: aws.String("arn:aws:iam::12345678910:policy/testPolicy"),
 	})
@@ -336,12 +330,8 @@ func TestAttachGroupPolicy(t *testing.T) {
 		t.Errorf("expected nil error, got: %s", err)
 	}
 
-	if !reflect.DeepEqual(out, expected) {
-		t.Errorf("expected %+v, got %+v", expected, out)
-	}
-
 	// test nil input
-	_, err = i.AttachGroupPolicy(context.TODO(), nil)
+	err = i.AttachGroupPolicy(context.TODO(), nil)
 	if aerr, ok := err.(apierror.Error); ok {
 		if aerr.Code != apierror.ErrBadRequest {
 			t.Errorf("expected error code %s, got: %s", apierror.ErrBadRequest, aerr.Code)
@@ -351,7 +341,7 @@ func TestAttachGroupPolicy(t *testing.T) {
 	}
 
 	// test empty group name and empty policy arn
-	_, err = i.AttachGroupPolicy(context.TODO(), &iam.AttachGroupPolicyInput{})
+	err = i.AttachGroupPolicy(context.TODO(), &iam.AttachGroupPolicyInput{})
 	if aerr, ok := err.(apierror.Error); ok {
 		if aerr.Code != apierror.ErrBadRequest {
 			t.Errorf("expected error code %s, got: %s", apierror.ErrBadRequest, aerr.Code)
@@ -362,7 +352,7 @@ func TestAttachGroupPolicy(t *testing.T) {
 
 	// test ErrCodeNoSuchEntityException
 	i.Service.(*mockIAMClient).err = awserr.New(iam.ErrCodeNoSuchEntityException, "entity not found", nil)
-	_, err = i.AttachGroupPolicy(context.TODO(), &iam.AttachGroupPolicyInput{
+	err = i.AttachGroupPolicy(context.TODO(), &iam.AttachGroupPolicyInput{
 		GroupName: aws.String("testgroup"),
 		PolicyArn: aws.String("arn:aws:iam::12345678910:policy/testPolicy"),
 	})
@@ -376,7 +366,7 @@ func TestAttachGroupPolicy(t *testing.T) {
 
 	// test ErrCodeLimitExceededException
 	i.Service.(*mockIAMClient).err = awserr.New(iam.ErrCodeLimitExceededException, "limit exceeded", nil)
-	_, err = i.AttachGroupPolicy(context.TODO(), &iam.AttachGroupPolicyInput{
+	err = i.AttachGroupPolicy(context.TODO(), &iam.AttachGroupPolicyInput{
 		GroupName: aws.String("testgroup"),
 		PolicyArn: aws.String("arn:aws:iam::12345678910:policy/testPolicy"),
 	})
@@ -390,7 +380,7 @@ func TestAttachGroupPolicy(t *testing.T) {
 
 	// test ErrCodeInvalidInputException
 	i.Service.(*mockIAMClient).err = awserr.New(iam.ErrCodeInvalidInputException, "limit exceeded", nil)
-	_, err = i.AttachGroupPolicy(context.TODO(), &iam.AttachGroupPolicyInput{
+	err = i.AttachGroupPolicy(context.TODO(), &iam.AttachGroupPolicyInput{
 		GroupName: aws.String("testgroup"),
 		PolicyArn: aws.String("arn:aws:iam::12345678910:policy/testPolicy"),
 	})
@@ -404,7 +394,7 @@ func TestAttachGroupPolicy(t *testing.T) {
 
 	// test ErrCodePolicyNotAttachableException
 	i.Service.(*mockIAMClient).err = awserr.New(iam.ErrCodePolicyNotAttachableException, "limit exceeded", nil)
-	_, err = i.AttachGroupPolicy(context.TODO(), &iam.AttachGroupPolicyInput{
+	err = i.AttachGroupPolicy(context.TODO(), &iam.AttachGroupPolicyInput{
 		GroupName: aws.String("testgroup"),
 		PolicyArn: aws.String("arn:aws:iam::12345678910:policy/testPolicy"),
 	})
@@ -418,7 +408,7 @@ func TestAttachGroupPolicy(t *testing.T) {
 
 	// test ErrCodeServiceFailureException
 	i.Service.(*mockIAMClient).err = awserr.New(iam.ErrCodeServiceFailureException, "limit exceeded", nil)
-	_, err = i.AttachGroupPolicy(context.TODO(), &iam.AttachGroupPolicyInput{
+	err = i.AttachGroupPolicy(context.TODO(), &iam.AttachGroupPolicyInput{
 		GroupName: aws.String("testgroup"),
 		PolicyArn: aws.String("arn:aws:iam::12345678910:policy/testPolicy"),
 	})
@@ -432,13 +422,13 @@ func TestAttachGroupPolicy(t *testing.T) {
 
 	// test some other, unexpected AWS error
 	i.Service.(*mockIAMClient).err = awserr.New(iam.ErrCodeDeleteConflictException, "entity already exists", nil)
-	_, err = i.AttachGroupPolicy(context.TODO(), &iam.AttachGroupPolicyInput{
+	err = i.AttachGroupPolicy(context.TODO(), &iam.AttachGroupPolicyInput{
 		GroupName: aws.String("testgroup"),
 		PolicyArn: aws.String("arn:aws:iam::12345678910:policy/testPolicy"),
 	})
 	if aerr, ok := err.(apierror.Error); ok {
-		if aerr.Code != apierror.ErrBadRequest {
-			t.Errorf("expected error code %s, got: %s", apierror.ErrBadRequest, aerr.Code)
+		if aerr.Code != apierror.ErrConflict {
+			t.Errorf("expected error code %s, got: %s", apierror.ErrConflict, aerr.Code)
 		}
 	} else {
 		t.Errorf("expected apierror.Error, got: %s", reflect.TypeOf(err).String())
@@ -446,7 +436,7 @@ func TestAttachGroupPolicy(t *testing.T) {
 
 	// test non-aws error
 	i.Service.(*mockIAMClient).err = errors.New("things blowing up!")
-	_, err = i.AttachGroupPolicy(context.TODO(), &iam.AttachGroupPolicyInput{
+	err = i.AttachGroupPolicy(context.TODO(), &iam.AttachGroupPolicyInput{
 		GroupName: aws.String("testgroup"),
 		PolicyArn: aws.String("arn:aws:iam::12345678910:policy/testPolicy"),
 	})
@@ -558,8 +548,8 @@ func TestDetachGroupPolicy(t *testing.T) {
 		PolicyArn: aws.String("arn:aws:iam::12345678910:policy/testPolicy"),
 	})
 	if aerr, ok := err.(apierror.Error); ok {
-		if aerr.Code != apierror.ErrBadRequest {
-			t.Errorf("expected error code %s, got: %s", apierror.ErrBadRequest, aerr.Code)
+		if aerr.Code != apierror.ErrConflict {
+			t.Errorf("expected error code %s, got: %s", apierror.ErrConflict, aerr.Code)
 		}
 	} else {
 		t.Errorf("expected apierror.Error, got: %s", reflect.TypeOf(err).String())
@@ -655,8 +645,8 @@ func TestListGroupPolicies(t *testing.T) {
 	i.Service.(*mockIAMClient).err = awserr.New(iam.ErrCodeDeleteConflictException, "entity already exists", nil)
 	_, err = i.ListGroupPolicies(context.TODO(), &iam.ListAttachedGroupPoliciesInput{GroupName: aws.String("testgroup")})
 	if aerr, ok := err.(apierror.Error); ok {
-		if aerr.Code != apierror.ErrBadRequest {
-			t.Errorf("expected error code %s, got: %s", apierror.ErrBadRequest, aerr.Code)
+		if aerr.Code != apierror.ErrConflict {
+			t.Errorf("expected error code %s, got: %s", apierror.ErrConflict, aerr.Code)
 		}
 	} else {
 		t.Errorf("expected apierror.Error, got: %s", reflect.TypeOf(err).String())
@@ -738,8 +728,8 @@ func TestListGroupUsers(t *testing.T) {
 	i.Service.(*mockIAMClient).err = awserr.New(iam.ErrCodeDeleteConflictException, "entity already exists", nil)
 	_, err = i.ListGroupUsers(context.TODO(), &iam.GetGroupInput{GroupName: aws.String("testgroup")})
 	if aerr, ok := err.(apierror.Error); ok {
-		if aerr.Code != apierror.ErrBadRequest {
-			t.Errorf("expected error code %s, got: %s", apierror.ErrBadRequest, aerr.Code)
+		if aerr.Code != apierror.ErrConflict {
+			t.Errorf("expected error code %s, got: %s", apierror.ErrConflict, aerr.Code)
 		}
 	} else {
 		t.Errorf("expected apierror.Error, got: %s", reflect.TypeOf(err).String())
@@ -748,6 +738,77 @@ func TestListGroupUsers(t *testing.T) {
 	// test non-aws error
 	i.Service.(*mockIAMClient).err = errors.New("things blowing up!")
 	_, err = i.ListGroupUsers(context.TODO(), &iam.GetGroupInput{GroupName: aws.String("testgroup")})
+	if aerr, ok := err.(apierror.Error); ok {
+		if aerr.Code != apierror.ErrInternalError {
+			t.Errorf("expected error code %s, got: %s", apierror.ErrInternalError, aerr.Code)
+		}
+	} else {
+		t.Errorf("expected apierror.Error, got: %s", reflect.TypeOf(err).String())
+	}
+}
+
+func TestGetGroup(t *testing.T) {
+	i := IAM{
+		Service: newMockIAMClient(t, nil),
+	}
+
+	// test success
+	expected := &testGroup
+	out, err := i.GetGroup(context.TODO(), "testgroup")
+	if err != nil {
+		t.Errorf("expected nil error, got: %s", err)
+	}
+
+	if !reflect.DeepEqual(out, expected) {
+		t.Errorf("expected %+v, got %+v", expected, out)
+	}
+
+	// test empty group name
+	_, err = i.GetGroup(context.TODO(), "")
+	if aerr, ok := err.(apierror.Error); ok {
+		if aerr.Code != apierror.ErrBadRequest {
+			t.Errorf("expected error code %s, got: %s", apierror.ErrBadRequest, aerr.Code)
+		}
+	} else {
+		t.Errorf("expected apierror.Error, got: %s", reflect.TypeOf(err).String())
+	}
+
+	// test ErrCodeNoSuchEntityException
+	i.Service.(*mockIAMClient).err = awserr.New(iam.ErrCodeNoSuchEntityException, "entity not found", nil)
+	_, err = i.GetGroup(context.TODO(), "testgroup")
+	if aerr, ok := err.(apierror.Error); ok {
+		if aerr.Code != apierror.ErrNotFound {
+			t.Errorf("expected error code %s, got: %s", apierror.ErrNotFound, aerr.Code)
+		}
+	} else {
+		t.Errorf("expected apierror.Error, got: %s", reflect.TypeOf(err).String())
+	}
+
+	// test ErrCodeServiceFailureException
+	i.Service.(*mockIAMClient).err = awserr.New(iam.ErrCodeServiceFailureException, "limit exceeded", nil)
+	_, err = i.GetGroup(context.TODO(), "testgroup")
+	if aerr, ok := err.(apierror.Error); ok {
+		if aerr.Code != apierror.ErrServiceUnavailable {
+			t.Errorf("expected error code %s, got: %s", apierror.ErrServiceUnavailable, aerr.Code)
+		}
+	} else {
+		t.Errorf("expected apierror.Error, got: %s", reflect.TypeOf(err).String())
+	}
+
+	// test some other, unexpected AWS error
+	i.Service.(*mockIAMClient).err = awserr.New(iam.ErrCodeDeleteConflictException, "entity already exists", nil)
+	_, err = i.GetGroup(context.TODO(), "testgroup")
+	if aerr, ok := err.(apierror.Error); ok {
+		if aerr.Code != apierror.ErrConflict {
+			t.Errorf("expected error code %s, got: %s", apierror.ErrConflict, aerr.Code)
+		}
+	} else {
+		t.Errorf("expected apierror.Error, got: %s", reflect.TypeOf(err).String())
+	}
+
+	// test non-aws error
+	i.Service.(*mockIAMClient).err = errors.New("things blowing up!")
+	_, err = i.GetGroup(context.TODO(), "testgroup")
 	if aerr, ok := err.(apierror.Error); ok {
 		if aerr.Code != apierror.ErrInternalError {
 			t.Errorf("expected error code %s, got: %s", apierror.ErrInternalError, aerr.Code)

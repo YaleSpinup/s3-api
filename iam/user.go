@@ -2,11 +2,10 @@ package iam
 
 import (
 	"context"
-	"fmt"
 
 	"github.com/YaleSpinup/apierror"
 	"github.com/aws/aws-sdk-go/aws"
-	"github.com/aws/aws-sdk-go/aws/awserr"
+	"github.com/aws/aws-sdk-go/aws/awsutil"
 	"github.com/aws/aws-sdk-go/service/iam"
 	log "github.com/sirupsen/logrus"
 )
@@ -18,109 +17,30 @@ func (i *IAM) CreateUser(ctx context.Context, input *iam.CreateUserInput) (*iam.
 	}
 
 	log.Infof("creating iam user: %s", aws.StringValue(input.UserName))
+
 	output, err := i.Service.CreateUserWithContext(ctx, input)
-
 	if err != nil {
-		if aerr, ok := err.(awserr.Error); ok {
-			switch aerr.Code() {
-			// * ErrCodeLimitExceededException "LimitExceeded"
-			// The request was rejected because it attempted to create resources beyond
-			// the current AWS account limits. The error message describes the limit exceeded.
-			case iam.ErrCodeLimitExceededException:
-				msg := fmt.Sprintf("%s: %s", aerr.Code(), aerr.Error())
-				return nil, apierror.New(apierror.ErrLimitExceeded, msg, err)
-			// * ErrCodeEntityAlreadyExistsException "EntityAlreadyExists"
-			// The request was rejected because it attempted to create a resource that already
-			// exists.
-			case iam.ErrCodeEntityAlreadyExistsException:
-				msg := fmt.Sprintf("%s: %s", aerr.Code(), aerr.Error())
-				return nil, apierror.New(apierror.ErrConflict, msg, err)
-			// * ErrCodeNoSuchEntityException "NoSuchEntity"
-			// The request was rejected because it referenced a resource entity that does
-			// not exist. The error message describes the resource.
-			case iam.ErrCodeNoSuchEntityException:
-				msg := fmt.Sprintf("%s: %s", aerr.Code(), aerr.Error())
-				return nil, apierror.New(apierror.ErrBadRequest, msg, err)
-			// * ErrCodeInvalidInputException "InvalidInput"
-			// The request was rejected because an invalid or out-of-range value was supplied
-			// for an input parameter.
-			case iam.ErrCodeInvalidInputException:
-				msg := fmt.Sprintf("%s: %s", aerr.Code(), aerr.Error())
-				return nil, apierror.New(apierror.ErrBadRequest, msg, err)
-			// * ErrCodeConcurrentModificationException "ConcurrentModification"
-			// The request was rejected because multiple requests to change this object
-			// were submitted simultaneously. Wait a few minutes and submit your request
-			// again.
-			case iam.ErrCodeConcurrentModificationException:
-				msg := fmt.Sprintf("%s: %s", aerr.Code(), aerr.Error())
-				return nil, apierror.New(apierror.ErrConflict, msg, err)
-			// * ErrCodeServiceFailureException "ServiceFailure"
-			// The request processing has failed because of an unknown error, exception
-			// or failure
-			case iam.ErrCodeServiceFailureException:
-				msg := fmt.Sprintf("%s: %s", aerr.Code(), aerr.Error())
-				return nil, apierror.New(apierror.ErrServiceUnavailable, msg, err)
-			default:
-				return nil, apierror.New(apierror.ErrBadRequest, aerr.Message(), err)
-			}
-		}
-
-		return nil, apierror.New(apierror.ErrInternalError, "unknown error occurred", err)
+		return nil, ErrCode("failed to create iam user", err)
 	}
+
+	log.Debugf("output creating user: %s", awsutil.Prettify(output))
 
 	return output, nil
 }
 
-func (i *IAM) DeleteUser(ctx context.Context, input *iam.DeleteUserInput) (*iam.DeleteUserOutput, error) {
+func (i *IAM) DeleteUser(ctx context.Context, input *iam.DeleteUserInput) error {
 	if input == nil || aws.StringValue(input.UserName) == "" {
-		return nil, apierror.New(apierror.ErrBadRequest, "invalid input", nil)
+		return apierror.New(apierror.ErrBadRequest, "invalid input", nil)
 	}
 
 	log.Infof("deleting iam user %s", aws.StringValue(input.UserName))
 
-	output, err := i.Service.DeleteUserWithContext(ctx, input)
+	_, err := i.Service.DeleteUserWithContext(ctx, input)
 	if err != nil {
-		if aerr, ok := err.(awserr.Error); ok {
-			switch aerr.Code() {
-			// * ErrCodeLimitExceededException "LimitExceeded"
-			// The request was rejected because it attempted to create resources beyond
-			// the current AWS account limits. The error message describes the limit exceeded.
-			case iam.ErrCodeLimitExceededException:
-				msg := fmt.Sprintf("%s: %s", aerr.Code(), aerr.Error())
-				return nil, apierror.New(apierror.ErrLimitExceeded, msg, err)
-			// * ErrCodeNoSuchEntityException "NoSuchEntity"
-			// The request was rejected because it referenced a resource entity that does
-			// not exist. The error message describes the resource.
-			case iam.ErrCodeNoSuchEntityException:
-				msg := fmt.Sprintf("%s: %s", aerr.Code(), aerr.Error())
-				return nil, apierror.New(apierror.ErrNotFound, msg, err)
-			// * ErrCodeDeleteConflictException "DeleteConflict"
-			// The request was rejected because it attempted to delete a resource that has
-			// attached subordinate entities. The error message describes these entities.
-			case iam.ErrCodeDeleteConflictException:
-				msg := fmt.Sprintf("%s: %s", aerr.Code(), aerr.Error())
-				return nil, apierror.New(apierror.ErrConflict, msg, err)
-			// * ErrCodeConcurrentModificationException "ConcurrentModification"
-			// The request was rejected because multiple requests to change this object
-			// were submitted simultaneously. Wait a few minutes and submit your request
-			// again.
-			case iam.ErrCodeConcurrentModificationException:
-				msg := fmt.Sprintf("%s: %s", aerr.Code(), aerr.Error())
-				return nil, apierror.New(apierror.ErrConflict, msg, err)
-			// * ErrCodeServiceFailureException "ServiceFailure"
-			// The request processing has failed because of an unknown error, exception
-			// or failure.
-			case iam.ErrCodeServiceFailureException:
-				msg := fmt.Sprintf("%s: %s", aerr.Code(), aerr.Error())
-				return nil, apierror.New(apierror.ErrServiceUnavailable, msg, err)
-			default:
-				return nil, apierror.New(apierror.ErrBadRequest, aerr.Message(), err)
-			}
-		}
-		return nil, apierror.New(apierror.ErrInternalError, "unknown error occurred", err)
+		return ErrCode("failed to delete iam user", err)
 	}
 
-	return output, nil
+	return nil
 }
 
 // GetUser gets the details for an IAM user
@@ -133,26 +53,10 @@ func (i *IAM) GetUser(ctx context.Context, input *iam.GetUserInput) (*iam.GetUse
 
 	output, err := i.Service.GetUser(input)
 	if err != nil {
-		if aerr, ok := err.(awserr.Error); ok {
-			switch aerr.Code() {
-			// * ErrCodeNoSuchEntityException "NoSuchEntity"
-			// The request was rejected because it referenced a resource entity that does
-			// not exist. The error message describes the resource.
-			case iam.ErrCodeNoSuchEntityException:
-				msg := fmt.Sprintf("%s: %s", aerr.Code(), aerr.Error())
-				return nil, apierror.New(apierror.ErrNotFound, msg, err)
-			// * ErrCodeServiceFailureException "ServiceFailure"
-			// The request processing has failed because of an unknown error, exception
-			// or failure.
-			case iam.ErrCodeServiceFailureException:
-				msg := fmt.Sprintf("%s: %s", aerr.Code(), aerr.Error())
-				return nil, apierror.New(apierror.ErrServiceUnavailable, msg, err)
-			default:
-				return nil, apierror.New(apierror.ErrBadRequest, aerr.Message(), err)
-			}
-		}
-		return nil, apierror.New(apierror.ErrInternalError, "unknown error occurred", err)
+		return nil, ErrCode("failed to get iam user", err)
 	}
+
+	log.Debugf("get user output: %s", awsutil.Prettify(output))
 
 	return output, nil
 }
@@ -167,74 +71,26 @@ func (i *IAM) CreateAccessKey(ctx context.Context, input *iam.CreateAccessKeyInp
 
 	output, err := i.Service.CreateAccessKeyWithContext(ctx, input)
 	if err != nil {
-		if aerr, ok := err.(awserr.Error); ok {
-			switch aerr.Code() {
-			// * ErrCodeLimitExceededException "LimitExceeded"
-			// The request was rejected because it attempted to create resources beyond
-			// the current AWS account limits. The error message describes the limit exceeded.
-			case iam.ErrCodeLimitExceededException:
-				msg := fmt.Sprintf("%s: %s", aerr.Code(), aerr.Error())
-				return nil, apierror.New(apierror.ErrLimitExceeded, msg, err)
-			// * ErrCodeNoSuchEntityException "NoSuchEntity"
-			// The request was rejected because it referenced a resource entity that does
-			// not exist. The error message describes the resource.
-			case iam.ErrCodeNoSuchEntityException:
-				msg := fmt.Sprintf("%s: %s", aerr.Code(), aerr.Error())
-				return nil, apierror.New(apierror.ErrNotFound, msg, err)
-			// * ErrCodeServiceFailureException "ServiceFailure"
-			// The request processing has failed because of an unknown error, exception
-			// or failure.
-			case iam.ErrCodeServiceFailureException:
-				msg := fmt.Sprintf("%s: %s", aerr.Code(), aerr.Error())
-				return nil, apierror.New(apierror.ErrServiceUnavailable, msg, err)
-			default:
-				return nil, apierror.New(apierror.ErrBadRequest, aerr.Message(), err)
-			}
-		}
-		return nil, apierror.New(apierror.ErrInternalError, "unknown error occurred", err)
+		return nil, ErrCode("failed to create iam access key", err)
 	}
 
 	return output, nil
 }
 
 // DeleteAccessKey deletes a users access key
-func (i *IAM) DeleteAccessKey(ctx context.Context, input *iam.DeleteAccessKeyInput) (*iam.DeleteAccessKeyOutput, error) {
+func (i *IAM) DeleteAccessKey(ctx context.Context, input *iam.DeleteAccessKeyInput) error {
 	if input == nil || aws.StringValue(input.UserName) == "" || aws.StringValue(input.AccessKeyId) == "" {
-		return nil, apierror.New(apierror.ErrBadRequest, "invalid input", nil)
+		return apierror.New(apierror.ErrBadRequest, "invalid input", nil)
 	}
 
 	log.Infof("deleting access key id %s for iam user %s", aws.StringValue(input.AccessKeyId), aws.StringValue(input.UserName))
 
-	output, err := i.Service.DeleteAccessKeyWithContext(ctx, input)
+	_, err := i.Service.DeleteAccessKeyWithContext(ctx, input)
 	if err != nil {
-		if aerr, ok := err.(awserr.Error); ok {
-			switch aerr.Code() {
-			// * ErrCodeLimitExceededException "LimitExceeded"
-			// The request was rejected because it attempted to create resources beyond
-			// the current AWS account limits. The error message describes the limit exceeded.
-			case iam.ErrCodeLimitExceededException:
-				msg := fmt.Sprintf("%s: %s", aerr.Code(), aerr.Error())
-				return nil, apierror.New(apierror.ErrLimitExceeded, msg, err)
-			// * ErrCodeNoSuchEntityException "NoSuchEntity"
-			// The request was rejected because it referenced a resource entity that does
-			// not exist. The error message describes the resource.
-			case iam.ErrCodeNoSuchEntityException:
-				msg := fmt.Sprintf("%s: %s", aerr.Code(), aerr.Error())
-				return nil, apierror.New(apierror.ErrNotFound, msg, err)
-			// * ErrCodeServiceFailureException "ServiceFailure"
-			// The request processing has failed because of an unknown error, exception
-			// or failure.
-			case iam.ErrCodeServiceFailureException:
-				msg := fmt.Sprintf("%s: %s", aerr.Code(), aerr.Error())
-				return nil, apierror.New(apierror.ErrServiceUnavailable, msg, err)
-			default:
-				return nil, apierror.New(apierror.ErrBadRequest, aerr.Message(), err)
-			}
-		}
-		return nil, apierror.New(apierror.ErrInternalError, "unknown error occurred", err)
+		return ErrCode("failed to delete iam access key", err)
 	}
 
-	return output, nil
+	return nil
 }
 
 // ListAccessKeys lists the access keys for a user
@@ -251,72 +107,32 @@ func (i *IAM) ListAccessKeys(ctx context.Context, input *iam.ListAccessKeysInput
 	for truncated {
 		output, err := i.Service.ListAccessKeysWithContext(ctx, input)
 		if err != nil {
-			if aerr, ok := err.(awserr.Error); ok {
-				switch aerr.Code() {
-				// * ErrCodeNoSuchEntityException "NoSuchEntity"
-				// The request was rejected because it referenced a resource entity that does
-				// not exist. The error message describes the resource.
-				case iam.ErrCodeNoSuchEntityException:
-					msg := fmt.Sprintf("%s: %s", aerr.Code(), aerr.Error())
-					return nil, apierror.New(apierror.ErrNotFound, msg, err)
-				// * ErrCodeServiceFailureException "ServiceFailure"
-				// The request processing has failed because of an unknown error, exception
-				// or failure.
-				case iam.ErrCodeServiceFailureException:
-					msg := fmt.Sprintf("%s: %s", aerr.Code(), aerr.Error())
-					return nil, apierror.New(apierror.ErrServiceUnavailable, msg, err)
-				default:
-					return nil, apierror.New(apierror.ErrBadRequest, aerr.Message(), err)
-				}
-			}
-			return nil, apierror.New(apierror.ErrInternalError, "unknown error occurred", err)
+			return nil, ErrCode("failed to list iam access keys", err)
 		}
 		truncated = aws.BoolValue(output.IsTruncated)
 		keys = append(keys, output.AccessKeyMetadata...)
 		input.Marker = output.Marker
 	}
 
+	log.Debugf("list access keys output: %s", awsutil.Prettify(keys))
+
 	return keys, nil
 }
 
 // AddUserToGroup adds the existing user to an existing group
-func (i *IAM) AddUserToGroup(ctx context.Context, input *iam.AddUserToGroupInput) (*iam.AddUserToGroupOutput, error) {
+func (i *IAM) AddUserToGroup(ctx context.Context, input *iam.AddUserToGroupInput) error {
 	if input == nil || aws.StringValue(input.UserName) == "" || aws.StringValue(input.GroupName) == "" {
-		return nil, apierror.New(apierror.ErrBadRequest, "invalid input", nil)
+		return apierror.New(apierror.ErrBadRequest, "invalid input", nil)
 	}
 
 	log.Infof("adding user %s to group %s", aws.StringValue(input.UserName), aws.StringValue(input.GroupName))
 
-	output, err := i.Service.AddUserToGroupWithContext(ctx, input)
+	_, err := i.Service.AddUserToGroupWithContext(ctx, input)
 	if err != nil {
-		if aerr, ok := err.(awserr.Error); ok {
-			switch aerr.Code() {
-			// * ErrCodeNoSuchEntityException "NoSuchEntity"
-			// The request was rejected because it referenced a resource entity that does
-			// not exist. The error message describes the resource.
-			case iam.ErrCodeNoSuchEntityException:
-				msg := fmt.Sprintf("%s: %s", aerr.Code(), aerr.Error())
-				return nil, apierror.New(apierror.ErrNotFound, msg, err)
-			// * ErrCodeLimitExceededException "LimitExceeded"
-			// The request was rejected because it attempted to create resources beyond
-			// the current AWS account limits. The error message describes the limit exceeded.
-			case iam.ErrCodeLimitExceededException:
-				msg := fmt.Sprintf("%s: %s", aerr.Code(), aerr.Error())
-				return nil, apierror.New(apierror.ErrLimitExceeded, msg, err)
-			// * ErrCodeServiceFailureException "ServiceFailure"
-			// The request processing has failed because of an unknown error, exception
-			// or failure.
-			case iam.ErrCodeServiceFailureException:
-				msg := fmt.Sprintf("%s: %s", aerr.Code(), aerr.Error())
-				return nil, apierror.New(apierror.ErrServiceUnavailable, msg, err)
-			default:
-				return nil, apierror.New(apierror.ErrBadRequest, aerr.Message(), err)
-			}
-		}
-		return nil, apierror.New(apierror.ErrInternalError, "unknown error occurred", err)
+		return ErrCode("failed to add user to group", err)
 	}
 
-	return output, nil
+	return nil
 }
 
 // RemoveUserFromGroup removes an existing user from a group
@@ -329,31 +145,7 @@ func (i *IAM) RemoveUserFromGroup(ctx context.Context, input *iam.RemoveUserFrom
 
 	_, err := i.Service.RemoveUserFromGroupWithContext(ctx, input)
 	if err != nil {
-		if aerr, ok := err.(awserr.Error); ok {
-			switch aerr.Code() {
-			// * ErrCodeNoSuchEntityException "NoSuchEntity"
-			// The request was rejected because it referenced a resource entity that does
-			// not exist. The error message describes the resource.
-			case iam.ErrCodeNoSuchEntityException:
-				msg := fmt.Sprintf("%s: %s", aerr.Code(), aerr.Error())
-				return apierror.New(apierror.ErrNotFound, msg, err)
-			// * ErrCodeLimitExceededException "LimitExceeded"
-			// The request was rejected because it attempted to create resources beyond
-			// the current AWS account limits. The error message describes the limit exceeded.
-			case iam.ErrCodeLimitExceededException:
-				msg := fmt.Sprintf("%s: %s", aerr.Code(), aerr.Error())
-				return apierror.New(apierror.ErrLimitExceeded, msg, err)
-			// * ErrCodeServiceFailureException "ServiceFailure"
-			// The request processing has failed because of an unknown error, exception
-			// or failure.
-			case iam.ErrCodeServiceFailureException:
-				msg := fmt.Sprintf("%s: %s", aerr.Code(), aerr.Error())
-				return apierror.New(apierror.ErrServiceUnavailable, msg, err)
-			default:
-				return apierror.New(apierror.ErrBadRequest, aerr.Message(), err)
-			}
-		}
-		return apierror.New(apierror.ErrInternalError, "unknown error occurred", err)
+		return ErrCode("failed to remove user from group", err)
 	}
 
 	return nil
@@ -373,24 +165,14 @@ func (i *IAM) ListUserGroups(ctx context.Context, input *iam.ListGroupsForUserIn
 	for truncated {
 		output, err := i.Service.ListGroupsForUserWithContext(ctx, input)
 		if err != nil {
-			if aerr, ok := err.(awserr.Error); ok {
-				switch aerr.Code() {
-				// * ErrCodeNoSuchEntityException "NoSuchEntity"
-				// The request was rejected because it referenced a resource entity that does
-				// not exist. The error message describes the resource.
-				case iam.ErrCodeNoSuchEntityException:
-					msg := fmt.Sprintf("%s: %s", aerr.Code(), aerr.Error())
-					return groups, apierror.New(apierror.ErrNotFound, msg, err)
-				default:
-					return groups, apierror.New(apierror.ErrBadRequest, aerr.Message(), err)
-				}
-			}
-			return groups, apierror.New(apierror.ErrInternalError, "unknown error occurred", err)
+			return nil, ErrCode("failed to list groups for user", err)
 		}
 		truncated = aws.BoolValue(output.IsTruncated)
 		groups = append(groups, output.Groups...)
 		input.Marker = output.Marker
 	}
+
+	log.Debugf("got list of groups for user %s: %s", aws.StringValue(input.UserName), awsutil.Prettify(groups))
 
 	return groups, nil
 }
@@ -409,36 +191,14 @@ func (i *IAM) ListUserPolicies(ctx context.Context, input *iam.ListAttachedUserP
 	for truncated {
 		output, err := i.Service.ListAttachedUserPoliciesWithContext(ctx, input)
 		if err != nil {
-			if aerr, ok := err.(awserr.Error); ok {
-				switch aerr.Code() {
-				// * ErrCodeNoSuchEntityException "NoSuchEntity"
-				// The request was rejected because it referenced a resource entity that does
-				// not exist. The error message describes the resource.
-				case iam.ErrCodeNoSuchEntityException:
-					msg := fmt.Sprintf("%s: %s", aerr.Code(), aerr.Error())
-					return policies, apierror.New(apierror.ErrNotFound, msg, err)
-				// * ErrCodeInvalidInputException "InvalidInput"
-				// The request was rejected because an invalid or out-of-range value was supplied
-				// for an input parameter.
-				case iam.ErrCodeInvalidInputException:
-					msg := fmt.Sprintf("%s: %s", aerr.Code(), aerr.Error())
-					return policies, apierror.New(apierror.ErrBadRequest, msg, err)
-				// * ErrCodeServiceFailureException "ServiceFailure"
-				// The request processing has failed because of an unknown error, exception
-				// or failure.
-				case iam.ErrCodeServiceFailureException:
-					msg := fmt.Sprintf("%s: %s", aerr.Code(), aerr.Error())
-					return policies, apierror.New(apierror.ErrServiceUnavailable, msg, err)
-				default:
-					return policies, apierror.New(apierror.ErrBadRequest, aerr.Message(), err)
-				}
-			}
-			return policies, apierror.New(apierror.ErrInternalError, "unknown error occurred", err)
+			return nil, ErrCode("failed to list policies for user", err)
 		}
 		truncated = aws.BoolValue(output.IsTruncated)
 		policies = append(policies, output.AttachedPolicies...)
 		input.Marker = output.Marker
 	}
+
+	log.Debugf("got list of policies for user %s: %s", aws.StringValue(input.UserName), awsutil.Prettify(policies))
 
 	return policies, nil
 }
@@ -453,37 +213,7 @@ func (i *IAM) DetachUserPolicy(ctx context.Context, input *iam.DetachUserPolicyI
 
 	_, err := i.Service.DetachUserPolicyWithContext(ctx, input)
 	if err != nil {
-		if aerr, ok := err.(awserr.Error); ok {
-			switch aerr.Code() {
-			// * ErrCodeNoSuchEntityException "NoSuchEntity"
-			// The request was rejected because it referenced a resource entity that does
-			// not exist. The error message describes the resource.
-			case iam.ErrCodeNoSuchEntityException:
-				msg := fmt.Sprintf("%s: %s", aerr.Code(), aerr.Error())
-				return apierror.New(apierror.ErrNotFound, msg, err)
-			// * ErrCodeLimitExceededException "LimitExceeded"
-			// The request was rejected because it attempted to create resources beyond
-			// the current AWS account limits. The error message describes the limit exceeded.
-			case iam.ErrCodeLimitExceededException:
-				msg := fmt.Sprintf("%s: %s", aerr.Code(), aerr.Error())
-				return apierror.New(apierror.ErrLimitExceeded, msg, err)
-			// * ErrCodeInvalidInputException "InvalidInput"
-			// The request was rejected because an invalid or out-of-range value was supplied
-			// for an input parameter.
-			case iam.ErrCodeInvalidInputException:
-				msg := fmt.Sprintf("%s: %s", aerr.Code(), aerr.Error())
-				return apierror.New(apierror.ErrBadRequest, msg, err)
-			// * ErrCodeServiceFailureException "ServiceFailure"
-			// The request processing has failed because of an unknown error, exception
-			// or failure.
-			case iam.ErrCodeServiceFailureException:
-				msg := fmt.Sprintf("%s: %s", aerr.Code(), aerr.Error())
-				return apierror.New(apierror.ErrServiceUnavailable, msg, err)
-			default:
-				return apierror.New(apierror.ErrBadRequest, aerr.Message(), err)
-			}
-		}
-		return apierror.New(apierror.ErrInternalError, "unknown error occurred", err)
+		return ErrCode("failed to detach policy for user", err)
 	}
 
 	return nil

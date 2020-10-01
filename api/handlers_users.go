@@ -1,6 +1,7 @@
 package api
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"net/http"
@@ -34,15 +35,20 @@ func (s *server) UserCreateHandler(w http.ResponseWriter, r *http.Request) {
 		User   *iam.CreateUserInput
 		Groups []string
 	}
-	err := json.NewDecoder(r.Body).Decode(&req)
-	if err != nil {
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		msg := fmt.Sprintf("cannot decode body into create user input: %s", err)
 		handleError(w, apierror.New(apierror.ErrBadRequest, msg, err))
 		return
 	}
 
-	// setup err var, rollback function list and defer execution, note that we depend on the err variable defined above this
-	var rollBackTasks []func() error
+	if req.User == nil || req.Groups == nil {
+		handleError(w, apierror.New(apierror.ErrBadRequest, "user and groups input are required", nil))
+		return
+	}
+
+	// setup err var, rollback function list and defer execution
+	var err error
+	var rollBackTasks []rollbackFunc
 	defer func() {
 		if err != nil {
 			log.Errorf("recovering from error: %s, executing %d rollback tasks", err, len(rollBackTasks))
@@ -58,7 +64,7 @@ func (s *server) UserCreateHandler(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// wait for the user to exist
-	err = retry(3, 2*time.Second, func() error {
+	if err = retry(3, 2*time.Second, func() error {
 		log.Infof("checking if user exists before continuing: %s", aws.StringValue(userOutput.User.UserName))
 		out, err := iamService.GetUser(r.Context(), &iam.GetUserInput{
 			UserName: userOutput.User.UserName,
@@ -69,26 +75,23 @@ func (s *server) UserCreateHandler(w http.ResponseWriter, r *http.Request) {
 
 		log.Debugf("got user output: %s", awsutil.Prettify(out))
 		return nil
-	})
-
-	if err != nil {
+	}); err != nil {
 		msg := fmt.Sprintf("failed to create user %s for bucket %s: timeout waiting for create %s", aws.StringValue(req.User.UserName), bucket, err)
 		handleError(w, errors.Wrap(err, msg))
 		return
 	}
 
 	// append user delete to rollback tasks
-	rbfunc := func() error {
-		return func() error {
-			if _, err := iamService.DeleteUser(r.Context(), &iam.DeleteUserInput{UserName: req.User.UserName}); err != nil {
-				return err
-			}
-			return nil
-		}()
+	rbfunc := func(ctx context.Context) error {
+		if err := iamService.DeleteUser(ctx, &iam.DeleteUserInput{UserName: req.User.UserName}); err != nil {
+			return err
+		}
+		return nil
 	}
 	rollBackTasks = append(rollBackTasks, rbfunc)
 
-	keyOutput, err := iamService.CreateAccessKey(r.Context(), &iam.CreateAccessKeyInput{UserName: userOutput.User.UserName})
+	var keyOutput *iam.CreateAccessKeyOutput
+	keyOutput, err = iamService.CreateAccessKey(r.Context(), &iam.CreateAccessKeyInput{UserName: userOutput.User.UserName})
 	if err != nil {
 		msg := fmt.Sprintf("failed to create access key for user: %s, bucket %s", aws.StringValue(userOutput.User.UserName), bucket)
 		handleError(w, errors.Wrap(err, msg))
@@ -96,27 +99,36 @@ func (s *server) UserCreateHandler(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// append access key delete to rollback tasks
-	rbfunc = func() error {
-		return func() error {
-			if _, err := iamService.DeleteAccessKey(r.Context(), &iam.DeleteAccessKeyInput{
-				UserName:    keyOutput.AccessKey.UserName,
-				AccessKeyId: keyOutput.AccessKey.AccessKeyId,
-			}); err != nil {
-				return err
-			}
-			return nil
-		}()
+	rbfunc = func(ctx context.Context) error {
+		if err := iamService.DeleteAccessKey(ctx, &iam.DeleteAccessKeyInput{
+			UserName:    keyOutput.AccessKey.UserName,
+			AccessKeyId: keyOutput.AccessKey.AccessKeyId,
+		}); err != nil {
+			return err
+		}
+		return nil
 	}
 	rollBackTasks = append(rollBackTasks, rbfunc)
 
-	groupNames := req.Groups
-	if groupNames == nil {
-		groupNames = []string{"BktAdmGrp"}
-	}
-
-	for _, group := range groupNames {
+	for _, group := range req.Groups {
 		groupName := fmt.Sprintf("%s-%s", bucket, group)
-		if _, err = iamService.AddUserToGroup(r.Context(), &iam.AddUserToGroupInput{
+		_, err = iamService.GetGroup(r.Context(), groupName)
+		if err != nil {
+			if aerr, ok := err.(apierror.Error); ok && aerr.Code == apierror.ErrNotFound {
+				var rbTasks []rollbackFunc
+				rbTasks, err = s.CreateBucketGroupPolicy(r.Context(), account, bucket, group)
+				if err != nil {
+					handleError(w, err)
+					return
+				}
+				rollBackTasks = append(rollBackTasks, rbTasks...)
+			} else {
+				handleError(w, err)
+				return
+			}
+		}
+
+		if err = iamService.AddUserToGroup(r.Context(), &iam.AddUserToGroupInput{
 			UserName:  userOutput.User.UserName,
 			GroupName: aws.String(groupName),
 		}); err != nil {
@@ -126,16 +138,14 @@ func (s *server) UserCreateHandler(w http.ResponseWriter, r *http.Request) {
 		}
 
 		// append detach group to rollback funciton
-		rbfunc = func() error {
-			return func() error {
-				if err := iamService.RemoveUserFromGroup(r.Context(), &iam.RemoveUserFromGroupInput{
-					UserName:  keyOutput.AccessKey.UserName,
-					GroupName: aws.String(groupName),
-				}); err != nil {
-					return err
-				}
-				return nil
-			}()
+		rbfunc = func(ctx context.Context) error {
+			if err := iamService.RemoveUserFromGroup(ctx, &iam.RemoveUserFromGroupInput{
+				UserName:  keyOutput.AccessKey.UserName,
+				GroupName: aws.String(groupName),
+			}); err != nil {
+				return err
+			}
+			return nil
 		}
 		rollBackTasks = append(rollBackTasks, rbfunc)
 	}
@@ -184,7 +194,7 @@ func (s *server) UserDeleteHandler(w http.ResponseWriter, r *http.Request) {
 
 	// delete the access keys
 	for _, k := range keys {
-		_, err = iamService.DeleteAccessKey(r.Context(), &iam.DeleteAccessKeyInput{UserName: aws.String(user), AccessKeyId: k.AccessKeyId})
+		err = iamService.DeleteAccessKey(r.Context(), &iam.DeleteAccessKeyInput{UserName: aws.String(user), AccessKeyId: k.AccessKeyId})
 		if err != nil {
 			handleError(w, err)
 			return
@@ -228,16 +238,10 @@ func (s *server) UserDeleteHandler(w http.ResponseWriter, r *http.Request) {
 				w.Write(j)
 				return
 			}
-
-			if _, err := iamService.DeletePolicy(r.Context(), &iam.DeletePolicyInput{PolicyArn: p.PolicyArn}); err != nil {
-				j, _ := json.Marshal("failed to delete user policy: " + err.Error())
-				w.Write(j)
-				return
-			}
 		}
 	}
 
-	_, err = iamService.DeleteUser(r.Context(), &iam.DeleteUserInput{UserName: aws.String(user)})
+	err = iamService.DeleteUser(r.Context(), &iam.DeleteUserInput{UserName: aws.String(user)})
 	if err != nil {
 		handleError(w, err)
 		return
@@ -263,14 +267,15 @@ func (s *server) UserUpdateKeyHandler(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// get a list of users access keys
-	keys, err := iamService.ListAccessKeys(r.Context(), &iam.ListAccessKeysInput{UserName: aws.String(user)})
-	if err != nil {
-		handleError(w, err)
+	keys, kerr := iamService.ListAccessKeys(r.Context(), &iam.ListAccessKeysInput{UserName: aws.String(user)})
+	if kerr != nil {
+		handleError(w, kerr)
 		return
 	}
 
-	// setup err var, rollback function list and defer execution, note that we depend on the err variable defined above this
-	var rollBackTasks []func() error
+	// setup err var, rollback function list and defer execution
+	var err error
+	var rollBackTasks []rollbackFunc
 	defer func() {
 		if err != nil {
 			log.Errorf("recovering from error: %s, executing %d rollback tasks", err, len(rollBackTasks))
@@ -286,23 +291,21 @@ func (s *server) UserUpdateKeyHandler(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// append access key delete to rollback tasks
-	rbfunc := func() error {
-		return func() error {
-			if _, err := iamService.DeleteAccessKey(r.Context(), &iam.DeleteAccessKeyInput{
-				UserName:    newKeyOutput.AccessKey.UserName,
-				AccessKeyId: newKeyOutput.AccessKey.AccessKeyId,
-			}); err != nil {
-				return err
-			}
-			return nil
-		}()
+	rbfunc := func(ctx context.Context) error {
+		if err := iamService.DeleteAccessKey(ctx, &iam.DeleteAccessKeyInput{
+			UserName:    newKeyOutput.AccessKey.UserName,
+			AccessKeyId: newKeyOutput.AccessKey.AccessKeyId,
+		}); err != nil {
+			return err
+		}
+		return nil
 	}
 	rollBackTasks = append(rollBackTasks, rbfunc)
 
 	deletedKeyIds := []*string{}
 	// delete the old access keys
 	for _, k := range keys {
-		_, err = iamService.DeleteAccessKey(r.Context(), &iam.DeleteAccessKeyInput{UserName: aws.String(user), AccessKeyId: k.AccessKeyId})
+		err = iamService.DeleteAccessKey(r.Context(), &iam.DeleteAccessKeyInput{UserName: aws.String(user), AccessKeyId: k.AccessKeyId})
 		if err != nil {
 			msg := fmt.Sprintf("unable to delete access key id %s for user %s", user, aws.StringValue(k.AccessKeyId))
 			handleError(w, errors.Wrap(err, msg))
@@ -331,10 +334,9 @@ func (s *server) UserUpdateKeyHandler(w http.ResponseWriter, r *http.Request) {
 	w.Write(j)
 }
 
-// UserListHandler lists the users for a bucket.  It tries to return the members of the
-// bucket admin group: <<bucket>>-BktAdmGrp, but if that returns an error, it looks for
-// a user with the same name as the bucket and returns that if it exists, otherwise it
-// returns an error code.
+// UserListHandler lists the users for a bucket.  It tries to return the members of the predefined
+// bucket management groups: <<bucket>>-BktAdmGrp,  <<bucket>>-BktRWGrp, <<bucket>>-BktROGrp. It also
+// looks for a user with the same name as the bucket and returns that if it exists.
 func (s *server) UserListHandler(w http.ResponseWriter, r *http.Request) {
 	w = LogWriter{w}
 	vars := mux.Vars(r)
@@ -348,18 +350,22 @@ func (s *server) UserListHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// TODO: if we support more than admins, we need to add those group names here
-	groupName := fmt.Sprintf("%s-BktAdmGrp", bucket)
-	// get a list of users in a group
-	users, err := iamService.ListGroupUsers(r.Context(), &iam.GetGroupInput{GroupName: aws.String(groupName)})
-	if err != nil {
-		// check if there is a user with the same name as the bucket to support legacy buckets
-		user, err := iamService.GetUser(r.Context(), &iam.GetUserInput{UserName: aws.String(bucket)})
-		if err != nil {
-			handleError(w, err)
-			return
-		}
+	// TODO check if bucket exists and fail if it doesn't?
 
+	users := []*iam.User{}
+	for _, g := range []string{"BktAdmGrp", "BktRWGrp", "BktROGrp"} {
+		groupName := fmt.Sprintf("%s-%s", bucket, g)
+		u, err := iamService.ListGroupUsers(r.Context(), &iam.GetGroupInput{GroupName: aws.String(groupName)})
+		if err != nil {
+			log.Warnf("error listing bucket %s group %s users %s", bucket, groupName, err)
+			continue
+		}
+		users = append(users, u...)
+	}
+
+	// check if there is a user with the same name as the bucket to support legacy buckets
+	user, err := iamService.GetUser(r.Context(), &iam.GetUserInput{UserName: aws.String(bucket)})
+	if err == nil {
 		users = []*iam.User{user.User}
 	}
 
@@ -378,8 +384,9 @@ func (s *server) UserListHandler(w http.ResponseWriter, r *http.Request) {
 }
 
 // UserShowHandler gets and returns details of a bucket user.  This is accomplished by getting all of the
-// users for a bucket's [group] and then comparing that to the passed user.  This would be more efficient if we
-// just GetUser for the passed in user, but then we can't be sure it's associated with the bucket.
+// users for a bucket's management groups and then comparing that to the passed user.  This would be more
+// efficient if we just GetUser for the passed in user, but then we can't be sure it's associated with the
+// bucket.
 func (s *server) UserShowHandler(w http.ResponseWriter, r *http.Request) {
 	w = LogWriter{w}
 	vars := mux.Vars(r)
@@ -394,19 +401,23 @@ func (s *server) UserShowHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// TODO: if we support more than admins, we need to add those group names here
-	groupName := fmt.Sprintf("%s-BktAdmGrp", bucket)
-	// get a list of users in a group
-	users, err := iamService.ListGroupUsers(r.Context(), &iam.GetGroupInput{GroupName: aws.String(groupName)})
-	if err != nil {
-		// check if there is a user with the same name as the bucket to support legacy buckets
-		u, err := iamService.GetUser(r.Context(), &iam.GetUserInput{UserName: aws.String(bucket)})
+	// collect the list of users in the various management groups
+	users := []*iam.User{}
+	for _, g := range []string{"BktAdmGrp", "BktRWGrp", "BktROGrp"} {
+		groupName := fmt.Sprintf("%s-%s", bucket, g)
+		grpUsers, err := iamService.ListGroupUsers(r.Context(), &iam.GetGroupInput{GroupName: aws.String(groupName)})
 		if err != nil {
-			handleError(w, err)
-			return
+			log.Warnf("error getting users for the %s goup", groupName)
+			continue
 		}
 
-		users = []*iam.User{u.User}
+		users = append(users, grpUsers...)
+	}
+
+	// check if there is a user with the same name as the bucket to support legacy buckets
+	u, err := iamService.GetUser(r.Context(), &iam.GetUserInput{UserName: aws.String(bucket)})
+	if err == nil {
+		users = append(users, u.User)
 	}
 
 	// range over all of the users we found and return the user if it matches the requested user
@@ -457,7 +468,7 @@ func (s *server) UserShowHandler(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	log.Warnf("requested user %s does not belong to bucket %s", user, bucket)
+	log.Warnf("requested user %s does not exist or does not belong to bucket %s", user, bucket)
 	w.WriteHeader(http.StatusNotFound)
 	w.Write([]byte{})
 }

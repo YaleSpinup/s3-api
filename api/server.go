@@ -139,19 +139,37 @@ func (w LogWriter) Write(p []byte) (n int, err error) {
 	return
 }
 
+type rollbackFunc func(ctx context.Context) error
+
 // rollBack executes functions from a stack of rollback functions
-func rollBack(t *[]func() error) {
+func rollBack(t *[]rollbackFunc) {
 	if t == nil {
 		return
 	}
 
-	tasks := *t
-	log.Errorf("executing rollback of %d tasks", len(tasks))
-	for i := len(tasks) - 1; i >= 0; i-- {
-		f := tasks[i]
-		if funcerr := f(); funcerr != nil {
-			log.Errorf("rollback task error: %s, continuing rollback", funcerr)
+	timeout, cancel := context.WithTimeout(context.Background(), 120*time.Second)
+	defer cancel()
+
+	done := make(chan string, 1)
+	go func() {
+		tasks := *t
+		log.Errorf("executing rollback of %d tasks", len(tasks))
+		for i := len(tasks) - 1; i >= 0; i-- {
+			f := tasks[i]
+			if funcerr := f(timeout); funcerr != nil {
+				log.Errorf("rollback task error: %s, continuing rollback", funcerr)
+			}
+			log.Infof("executed rollback task %d of %d", len(tasks)-i, len(tasks))
 		}
+		done <- "success"
+	}()
+
+	// wait for a done context
+	select {
+	case <-timeout.Done():
+		log.Error("timeout waiting for successful rollback")
+	case <-done:
+		log.Info("successfully rolled back")
 	}
 }
 
