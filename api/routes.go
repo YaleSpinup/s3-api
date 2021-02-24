@@ -19,6 +19,7 @@ func (s *server) routes() {
 	api.HandleFunc("/{account}/buckets/{bucket}", s.BucketShowHandler).Methods(http.MethodGet)
 	api.HandleFunc("/{account}/buckets/{bucket}", s.BucketDeleteHandler).Methods(http.MethodDelete)
 	api.HandleFunc("/{account}/buckets/{bucket}", s.BucketUpdateHandler).Methods(http.MethodPut)
+	api.HandleFunc("/{account}/buckets/{bucket}/duck", s.BucketDuck).Methods(http.MethodGet)
 
 	// bucket users handlers
 	api.HandleFunc("/{account}/buckets/{bucket}/users", s.UserListHandler).Methods(http.MethodGet)
@@ -34,6 +35,7 @@ func (s *server) routes() {
 	api.HandleFunc("/{account}/websites/{website}", s.WebsiteDeleteHandler).Methods(http.MethodDelete)
 	api.HandleFunc("/{account}/websites/{website}", s.WebsiteUpdateHandler).Methods(http.MethodPut)
 	api.HandleFunc("/{account}/websites/{website}", s.WebsitePartialUpdateHandler).Methods(http.MethodPatch)
+	api.HandleFunc("/{account}/websites/{website}/duck", s.BucketDuck).Methods(http.MethodGet)
 
 	// website users handlers
 	api.HandleFunc("/{account}/websites/{bucket}/users", s.UserListHandler).Methods(http.MethodGet)
