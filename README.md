@@ -16,6 +16,7 @@ HEAD /v1/s3/{account}/buckets/{bucket}
 GET /v1/s3/{account}/buckets/{bucket}
 PUT /v1/s3/{account}/buckets/{bucket}
 DELETE /v1/s3/{account}/buckets/{bucket}
+GET /v1/s3/{account}/buckets/{bucket}/duck
 
 # Managing bucket users
 POST /v1/s3/{account}/buckets/{bucket}/users
@@ -31,6 +32,7 @@ GET /v1/s3/{account}/websites/{website}
 PUT /v1/s3/{account}/websites/{website}
 PATCH /v1/s3/{account}/websites/{website}
 DELETE /v1/s3/{account}/websites/{website}
+GET /v1/s3/{account}/websites/{website}/duck
 
 # Managing website users
 POST /v1/s3/{account}/websites/{website}/users
@@ -583,6 +585,12 @@ POST `/v1/s3/{account}/websites`
 | **500 Internal Server Error** | a server error occurred              |
 | **503 Service Unavailable**   | an AWS service is unavailable        |
 
+### Generate a Cyberduck bookmark for a bucket
+
+You can generate a cyberduck bookmark file based on your bucket name.  The file should be saved with the `.duck` extension.  This file does not contain secrets and is safe for distribution.  When imported into cyberduck, you will be prompted for the access keys.
+
+GET `/v1/s3/{account}/buckets/{bucket}/duck`
+
 ### Check if a website exists
 
 HEAD `/v1/s3/{account}/websites/{website}`
@@ -830,6 +838,12 @@ Responds with a status code and the changes
 | **403 Forbidden**             | you don't have access           |  
 | **404 Not Found**             | account or website not found    |  
 | **500 Internal Server Error** | a server error occurred         |
+
+### Generate a Cyberduck bookmark for a website
+
+You can generate a cyberduck bookmark file based on your website name.  The file should be saved with the `.duck` extension.  This file does not contain secrets and is safe for distribution.  When imported into cyberduck, you will be prompted for the access keys.
+
+GET `/v1/s3/{account}/websites/{website}/duck`
 
 ### Create a website user
 
