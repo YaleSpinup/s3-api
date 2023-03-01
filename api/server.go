@@ -13,8 +13,10 @@ import (
 	"github.com/YaleSpinup/s3-api/iam"
 	"github.com/YaleSpinup/s3-api/route53"
 	"github.com/YaleSpinup/s3-api/s3"
+	"github.com/YaleSpinup/s3-api/session"
 	"github.com/gorilla/handlers"
 	"github.com/gorilla/mux"
+	"github.com/patrickmn/go-cache"
 
 	log "github.com/sirupsen/logrus"
 )
@@ -24,6 +26,7 @@ func init() {
 }
 
 type server struct {
+	accountsMap        map[string]string
 	s3Services         map[string]s3.S3
 	iamServices        map[string]iam.IAM
 	cloudFrontServices map[string]cloudfront.CloudFront
@@ -31,6 +34,17 @@ type server struct {
 	router             *mux.Router
 	version            common.Version
 	context            context.Context
+	session            *session.Session
+	sessionCache       *cache.Cache
+	org                string
+}
+
+// if we have an entry for the account name, return the associated account number
+func (s *server) mapAccountNumber(name string) string {
+	if a, ok := s.accountsMap[name]; ok {
+		return a
+	}
+	return name
 }
 
 // cleaner will do its action once every interval
@@ -49,11 +63,21 @@ var Org string
 
 // NewServer creates a new server and starts it
 func NewServer(config common.Config) error {
+	if config.Org == "" {
+		return errors.New("'org' cannot be empty in the configuration")
+	}
+
 	// setup server context with cancellation
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
-
+	sess := session.New(
+		session.WithCredentials(config.Account.Akid, config.Account.Secret, ""),
+		session.WithRegion(config.Account.Region),
+		session.WithExternalID(config.Account.ExternalID),
+		session.WithExternalRoleName(config.Account.Role),
+	)
 	s := server{
+		accountsMap:        config.AccountsMap,
 		s3Services:         make(map[string]s3.S3),
 		iamServices:        make(map[string]iam.IAM),
 		cloudFrontServices: make(map[string]cloudfront.CloudFront),
@@ -61,17 +85,17 @@ func NewServer(config common.Config) error {
 		router:             mux.NewRouter(),
 		version:            config.Version,
 		context:            ctx,
+		session:            &sess,
+		org:                config.Org,
+		sessionCache:       cache.New(600*time.Second, 900*time.Second),
 	}
 
-	if config.Org == "" {
-		return errors.New("'org' cannot be empty in the configuration")
-	}
 	Org = config.Org
 
 	// Create a shared S3 session
 	for name, c := range config.Accounts {
 		log.Debugf("Creating new S3 service for account '%s' with key '%s' in region '%s' (org: %s)", name, c.Akid, c.Region, Org)
-		s.s3Services[name] = s3.NewSession(c)
+		s.s3Services[name] = s3.NewSession(nil, c)
 		s.iamServices[name] = iam.NewSession(c)
 		s.cloudFrontServices[name] = cloudfront.NewSession(c)
 		s.route53Services[name] = route53.NewSession(c)

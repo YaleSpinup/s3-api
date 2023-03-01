@@ -26,7 +26,7 @@ func newMockS3Client(t *testing.T, err error) s3iface.S3API {
 }
 
 func TestNewSession(t *testing.T) {
-	e := NewSession(common.Account{})
+	e := NewSession(nil, common.Account{})
 	to := reflect.TypeOf(e).String()
 	if to != "s3.S3" {
 		t.Errorf("expected type to be 's3.S3', got %s", to)

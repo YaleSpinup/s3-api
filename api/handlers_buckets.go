@@ -9,6 +9,8 @@ import (
 	"time"
 
 	"github.com/YaleSpinup/apierror"
+	"github.com/YaleSpinup/s3-api/common"
+	s3api "github.com/YaleSpinup/s3-api/s3"
 	"github.com/aws/aws-sdk-go/aws"
 	"github.com/aws/aws-sdk-go/service/iam"
 	"github.com/aws/aws-sdk-go/service/s3"
@@ -231,15 +233,30 @@ func (s *server) BucketCreateHandler(w http.ResponseWriter, r *http.Request) {
 func (s *server) BucketListHandler(w http.ResponseWriter, r *http.Request) {
 	w = LogWriter{w}
 	vars := mux.Vars(r)
-	account := vars["account"]
-	s3Service, ok := s.s3Services[account]
-	if !ok {
-		log.Errorf("account not found: %s", account)
-		w.WriteHeader(http.StatusNotFound)
+	accountId := s.mapAccountNumber(vars["account"])
+	role := fmt.Sprintf("arn:aws:iam::%s:role/%s", accountId, s.session.RoleName)
+	policy, err := generatePolicy("rds:ListBucket")
+	if err != nil {
+		log.Errorf("cannot generate policy: %s", err)
+		w.WriteHeader(http.StatusInternalServerError)
 		return
 	}
 
-	output, err := s3Service.ListBuckets(r.Context(), &s3.ListBucketsInput{})
+	session, err := s.assumeRole(
+		r.Context(),
+		s.session.ExternalID,
+		role,
+		policy,
+		"arn:aws:iam::aws:policy/AmazonS3ReadOnlyAccess",
+	)
+	if err != nil {
+		log.Errorf("failed to assume role in account: %s", accountId)
+		w.WriteHeader(http.StatusInternalServerError)
+		return
+	}
+
+	s3Client := s3api.NewSession(session.Session, common.Account{})
+	output, err := s3Client.ListBuckets(r.Context(), &s3.ListBucketsInput{})
 	if err != nil {
 		handleError(w, err)
 		return
