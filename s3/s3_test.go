@@ -32,7 +32,7 @@ func TestNewSession(t *testing.T) {
 		t.Errorf("expected type to be 's3.S3', got %s", to)
 	}
 
-	e = NewSession(common.Account{
+	e = NewSession(nil, common.Account{
 		AccessLog: &common.AccessLog{
 			Bucket: "foologbucket",
 			Prefix: "s3",
