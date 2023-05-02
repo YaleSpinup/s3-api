@@ -96,7 +96,7 @@ func NewServer(config common.Config) error {
 	for name, c := range config.Accounts {
 		log.Debugf("Creating new S3 service for account '%s' with key '%s' in region '%s' (org: %s)", name, c.Akid, c.Region, Org)
 		s.s3Services[name] = s3.NewSession(nil, c)
-		s.iamServices[name] = iam.NewSession(c)
+		s.iamServices[name] = iam.NewSession(nil, c)
 		s.cloudFrontServices[name] = cloudfront.NewSession(c)
 		s.route53Services[name] = route53.NewSession(c)
 		if c.Cleaner != nil {
