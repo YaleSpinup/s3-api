@@ -10,6 +10,7 @@ import (
 
 	"github.com/YaleSpinup/apierror"
 	"github.com/YaleSpinup/s3-api/common"
+	iamapi "github.com/YaleSpinup/s3-api/iam"
 	s3api "github.com/YaleSpinup/s3-api/s3"
 	"github.com/aws/aws-sdk-go/aws"
 	"github.com/aws/aws-sdk-go/service/iam"
@@ -31,20 +32,45 @@ import (
 func (s *server) BucketCreateHandler(w http.ResponseWriter, r *http.Request) {
 	w = LogWriter{w}
 	vars := mux.Vars(r)
-	account := vars["account"]
-	s3Service, ok := s.s3Services[account]
-	if !ok {
-		msg := fmt.Sprintf("s3 service not found for account: %s", account)
-		handleError(w, apierror.New(apierror.ErrNotFound, msg, nil))
+	accountId := s.mapAccountNumber(vars["account"])
+	role := fmt.Sprintf("arn:aws:iam::%s:role/%s", accountId, s.session.RoleName)
+	policy, err := generatePolicy("s3:*", "iam:*")
+	if err != nil {
+		log.Errorf("cannot generate policy: %s", err)
+		w.WriteHeader(http.StatusInternalServerError)
 		return
 	}
 
-	iamService, ok := s.iamServices[account]
-	if !ok {
-		msg := fmt.Sprintf("IAM service not found for account: %s", account)
-		handleError(w, apierror.New(apierror.ErrNotFound, msg, nil))
+	session, err := s.assumeRole(
+		r.Context(),
+		s.session.ExternalID,
+		role,
+		policy,
+		// "arn:aws:iam::aws:policy/AmazonS3ReadOnlyAccess",
+	)
+	if err != nil {
+		log.Errorf("failed to assume role in account: %s", accountId)
+		w.WriteHeader(http.StatusInternalServerError)
 		return
 	}
+
+	s3Service := s3api.NewSession(session.Session, common.Account{})
+	iamService := iamapi.NewSession(session.Session, common.Config.Accounts[accountId])
+
+	// account := vars["account"]
+	// s3Service, ok := s.s3Services[account]
+	// if !ok {
+	// 	msg := fmt.Sprintf("s3 service not found for account: %s", account)
+	// 	handleError(w, apierror.New(apierror.ErrNotFound, msg, nil))
+	// 	return
+	// }
+
+	// iamService, ok := s.iamServices[account]
+	// if !ok {
+	// 	msg := fmt.Sprintf("IAM service not found for account: %s", account)
+	// 	handleError(w, apierror.New(apierror.ErrNotFound, msg, nil))
+	// 	return
+	// }
 
 	var req struct {
 		Tags        []*s3.Tag
@@ -63,7 +89,7 @@ func (s *server) BucketCreateHandler(w http.ResponseWriter, r *http.Request) {
 	})
 
 	// setup err var, rollback function list and defer execution
-	var err error
+	// var err error
 	var rollBackTasks []rollbackFunc
 	defer func() {
 		if err != nil {
@@ -158,8 +184,8 @@ func (s *server) BucketCreateHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	var policy *iam.Policy
-	if policy, err = iamService.CreatePolicy(r.Context(), &iam.CreatePolicyInput{
+	var iamPolicy *iam.Policy
+	if iamPolicy, err = iamService.CreatePolicy(r.Context(), &iam.CreatePolicyInput{
 		Description:    aws.String(fmt.Sprintf("Admin policy for %s bucket", bucketName)),
 		PolicyDocument: aws.String(string(defaultPolicy)),
 		PolicyName:     aws.String(fmt.Sprintf("%s-BktAdmPlc", bucketName)),
@@ -171,7 +197,7 @@ func (s *server) BucketCreateHandler(w http.ResponseWriter, r *http.Request) {
 
 	// append policy delete to rollback tasks
 	rbfunc = func(ctx context.Context) error {
-		if err := iamService.DeletePolicy(ctx, &iam.DeletePolicyInput{PolicyArn: policy.Arn}); err != nil {
+		if err := iamService.DeletePolicy(ctx, &iam.DeletePolicyInput{PolicyArn: iamPolicy.Arn}); err != nil {
 			return err
 		}
 		return nil
@@ -200,7 +226,7 @@ func (s *server) BucketCreateHandler(w http.ResponseWriter, r *http.Request) {
 
 	if err = iamService.AttachGroupPolicy(r.Context(), &iam.AttachGroupPolicyInput{
 		GroupName: aws.String(groupName),
-		PolicyArn: policy.Arn,
+		PolicyArn: iamPolicy.Arn,
 	}); err != nil {
 		msg := fmt.Sprintf("failed to create group: %s", err.Error())
 		handleError(w, errors.Wrap(err, msg))
@@ -213,7 +239,7 @@ func (s *server) BucketCreateHandler(w http.ResponseWriter, r *http.Request) {
 		Group  *iam.Group
 	}{
 		bucketOutput.Location,
-		policy,
+		iamPolicy,
 		group,
 	}
 

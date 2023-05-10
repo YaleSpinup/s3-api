@@ -134,6 +134,7 @@ func NewSession(sess *session.Session, account common.Account) IAM {
 
 	i := IAM{}
 	i.Service = iam.New(sess)
+	fmt.Println("heloooooooooo", account.DefaultS3BucketActions)
 	i.DefaultS3BucketActions = account.DefaultS3BucketActions
 	i.DefaultS3ObjectActions = account.DefaultS3ObjectActions
 	i.DefaultCloudfrontDistributionActions = account.DefaultCloudfrontDistributionActions
@@ -257,14 +258,16 @@ func (i *IAM) DefaultBucketAdminPolicy(bucket *string) ([]byte, error) {
 		Version: "2012-10-17",
 		Statement: []PolicyStatement{
 			{
-				Effect:   "Allow",
-				Action:   i.DefaultS3BucketActions,
-				Resource: []string{fmt.Sprintf("arn:aws:s3:::%s", b)},
+				Effect:    "Allow",
+				Action:    i.DefaultS3BucketActions,
+				Resource:  []string{fmt.Sprintf("arn:aws:s3:::%s", b)},
+				Principal: "*",
 			},
 			{
-				Effect:   "Allow",
-				Action:   i.DefaultS3ObjectActions,
-				Resource: []string{fmt.Sprintf("arn:aws:s3:::%s/*", b)},
+				Effect:    "Allow",
+				Action:    i.DefaultS3ObjectActions,
+				Resource:  []string{fmt.Sprintf("arn:aws:s3:::%s/*", b)},
+				Principal: "*",
 			},
 		},
 	})

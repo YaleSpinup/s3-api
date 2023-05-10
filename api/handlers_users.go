@@ -26,12 +26,29 @@ func (s *server) UserCreateHandler(w http.ResponseWriter, r *http.Request) {
 	account := vars["account"]
 	bucket := vars["bucket"]
 
-	iamService, ok := s.iamServices[account]
-	if !ok {
-		msg := fmt.Sprintf("IAM service not found for account: %s", account)
-		handleError(w, apierror.New(apierror.ErrNotFound, msg, nil))
+	accountId := s.mapAccountNumber(vars["account"])
+
+	role := fmt.Sprintf("arn:aws:iam::%s:role/%s", accountId, s.session.RoleName)
+	policy, err := generatePolicy("iam:*")
+	if err != nil {
+		log.Errorf("cannot generate policy: %s", err)
+		w.WriteHeader(http.StatusInternalServerError)
 		return
 	}
+
+	session, err := s.assumeRole(
+		r.Context(),
+		s.session.ExternalID,
+		role,
+		policy,
+	)
+	if err != nil {
+		log.Errorf("failed to assume role in account: %s", accountId)
+		w.WriteHeader(http.StatusInternalServerError)
+		return
+	}
+
+	iamService := iamapi.NewSession(session.Session, common.Account{})
 
 	var req struct {
 		User   *iam.CreateUserInput
@@ -49,7 +66,7 @@ func (s *server) UserCreateHandler(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// setup err var, rollback function list and defer execution
-	var err error
+	// var err error
 	var rollBackTasks []rollbackFunc
 	defer func() {
 		if err != nil {
@@ -347,7 +364,7 @@ func (s *server) UserListHandler(w http.ResponseWriter, r *http.Request) {
 	accountId := s.mapAccountNumber(vars["account"])
 	print("acccccccccc", accountId)
 	role := fmt.Sprintf("arn:aws:iam::%s:role/%s", accountId, s.session.RoleName)
-	policy, err := generatePolicy("s3:Get*", "iam:GetGroup")
+	policy, err := generatePolicy("s3:Get*", "iam:*")
 	if err != nil {
 		log.Errorf("cannot generate policy: %s", err)
 		w.WriteHeader(http.StatusInternalServerError)
@@ -367,7 +384,7 @@ func (s *server) UserListHandler(w http.ResponseWriter, r *http.Request) {
 	}
 
 	iamService := iamapi.NewSession(session.Session, common.Account{})
-	iamService, _ = s.iamServices[vars["account"]]
+	// iamService, _ = s.iamServices[vars["account"]]
 
 	// TODO check if bucket exists and fail if it doesn't?
 
@@ -384,8 +401,10 @@ func (s *server) UserListHandler(w http.ResponseWriter, r *http.Request) {
 
 	// check if there is a user with the same name as the bucket to support legacy buckets
 	user, err := iamService.GetUser(r.Context(), &iam.GetUserInput{UserName: aws.String(bucket)})
+	fmt.Println(err)
 	if err == nil {
-		users = []*iam.User{user.User}
+		users = append(users, user.User)
+		//users = []*iam.User{user.User}
 	}
 
 	log.Debugf("%+v", users)
