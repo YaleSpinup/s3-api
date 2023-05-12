@@ -110,6 +110,16 @@ func (s *server) CreateWebsiteHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Update public access for s3 website bucket
+	if _, err = s3Service.SetPublicAccessBlock(r.Context(), &s3.PutPublicAccessBlockInput{
+		Bucket:                         aws.String(bucketName),
+		PublicAccessBlockConfiguration: &s3.PublicAccessBlockConfiguration{BlockPublicPolicy: aws.Bool(false)},
+	}); err != nil {
+		msg := fmt.Sprintf("failed to set bucket access to public for %s", bucketName)
+		handleError(w, errors.Wrap(err, msg))
+		return
+	}
+
 	// append bucket delete to rollback tasks
 	rbfunc := func(ctx context.Context) error {
 		err := s3Service.DeleteEmptyBucket(r.Context(), &s3.DeleteBucketInput{Bucket: aws.String(bucketName)})
