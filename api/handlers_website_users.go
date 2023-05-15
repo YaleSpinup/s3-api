@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/YaleSpinup/apierror"
+	iamapi "github.com/YaleSpinup/s3-api/iam"
 	"github.com/aws/aws-sdk-go/aws"
 	"github.com/aws/aws-sdk-go/aws/awsutil"
 	"github.com/aws/aws-sdk-go/service/iam"
@@ -20,21 +21,36 @@ import (
 func (s *server) WebsiteUserCreateHandler(w http.ResponseWriter, r *http.Request) {
 	w = LogWriter{w}
 	vars := mux.Vars(r)
-	account := vars["account"]
+	accountId := s.mapAccountNumber(vars["account"])
 	website := vars["website"]
 
-	iamService, ok := s.iamServices[account]
-	if !ok {
-		msg := fmt.Sprintf("IAM service not found for account: %s", account)
-		handleError(w, apierror.New(apierror.ErrNotFound, msg, nil))
+	role := fmt.Sprintf("arn:aws:iam::%s:role/%s", accountId, s.session.RoleName)
+	policy, err := generatePolicy("iam:*")
+	if err != nil {
+		log.Errorf("cannot generate policy: %s", err)
+		w.WriteHeader(http.StatusInternalServerError)
 		return
 	}
+
+	session, err := s.assumeRole(
+		r.Context(),
+		s.session.ExternalID,
+		role,
+		policy,
+	)
+	if err != nil {
+		log.Errorf("failed to assume role in account: %s", accountId)
+		w.WriteHeader(http.StatusInternalServerError)
+		return
+	}
+
+	iamService := iamapi.NewSession(session.Session, s.account)
 
 	var req struct {
 		User   *iam.CreateUserInput
 		Groups []string
 	}
-	err := json.NewDecoder(r.Body).Decode(&req)
+	err = json.NewDecoder(r.Body).Decode(&req)
 	if err != nil {
 		msg := fmt.Sprintf("cannot decode body into create user input: %s", err)
 		handleError(w, apierror.New(apierror.ErrBadRequest, msg, err))

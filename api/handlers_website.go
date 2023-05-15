@@ -10,7 +10,11 @@ import (
 	"time"
 
 	"github.com/YaleSpinup/apierror"
+	cfapi "github.com/YaleSpinup/s3-api/cloudfront"
 	"github.com/YaleSpinup/s3-api/common"
+	iamapi "github.com/YaleSpinup/s3-api/iam"
+	route53api "github.com/YaleSpinup/s3-api/route53"
+	s3api "github.com/YaleSpinup/s3-api/s3"
 	"github.com/aws/aws-sdk-go/aws"
 	"github.com/aws/aws-sdk-go/service/cloudfront"
 	"github.com/aws/aws-sdk-go/service/iam"
@@ -38,41 +42,38 @@ import (
 func (s *server) CreateWebsiteHandler(w http.ResponseWriter, r *http.Request) {
 	w = LogWriter{w}
 	vars := mux.Vars(r)
-	account := vars["account"]
-	s3Service, ok := s.s3Services[account]
-	if !ok {
-		msg := fmt.Sprintf("s3 service not found for account: %s", account)
-		handleError(w, apierror.New(apierror.ErrNotFound, msg, nil))
+	accountId := s.mapAccountNumber(vars["account"])
+	role := fmt.Sprintf("arn:aws:iam::%s:role/%s", accountId, s.session.RoleName)
+	policy, err := generatePolicy("s3:*", "iam:*", "cloudfront:*", "route53:*")
+	if err != nil {
+		log.Errorf("cannot generate policy: %s", err)
+		w.WriteHeader(http.StatusInternalServerError)
 		return
 	}
 
-	iamService, ok := s.iamServices[account]
-	if !ok {
-		msg := fmt.Sprintf("IAM service not found for account: %s", account)
-		handleError(w, apierror.New(apierror.ErrNotFound, msg, nil))
+	session, err := s.assumeRole(
+		r.Context(),
+		s.session.ExternalID,
+		role,
+		policy,
+	)
+	if err != nil {
+		log.Errorf("failed to assume role in account: %s", accountId)
+		w.WriteHeader(http.StatusInternalServerError)
 		return
 	}
 
-	cloudFrontService, ok := s.cloudFrontServices[account]
-	if !ok {
-		msg := fmt.Sprintf("CloudFront service not found for account: %s", account)
-		handleError(w, apierror.New(apierror.ErrNotFound, msg, nil))
-		return
-	}
-
-	route53Service, ok := s.route53Services[account]
-	if !ok {
-		msg := fmt.Sprintf("Route53 service not found for account: %s", account)
-		handleError(w, apierror.New(apierror.ErrNotFound, msg, nil))
-		return
-	}
+	s3Service := s3api.NewSession(session.Session, s.account)
+	iamService := iamapi.NewSession(session.Session, s.account)
+	cloudFrontService := cfapi.NewSession(session.Session, s.account)
+	route53Service := route53api.NewSession(session.Session, s.account)
 
 	var req struct {
 		Tags                 []*s3.Tag
 		BucketInput          s3.CreateBucketInput
 		WebsiteConfiguration s3.WebsiteConfiguration
 	}
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+	if err = json.NewDecoder(r.Body).Decode(&req); err != nil {
 		msg := fmt.Sprintf("cannot decode body into create website input: %s", err)
 		handleError(w, apierror.New(apierror.ErrBadRequest, msg, err))
 		return
@@ -85,7 +86,6 @@ func (s *server) CreateWebsiteHandler(w http.ResponseWriter, r *http.Request) {
 	})
 
 	// setup err var, rollback function list and defer execution
-	var err error
 	var rollBackTasks []rollbackFunc
 	defer func() {
 		if err != nil {
@@ -427,29 +427,32 @@ func (s *server) CreateWebsiteHandler(w http.ResponseWriter, r *http.Request) {
 func (s *server) WebsiteShowHandler(w http.ResponseWriter, r *http.Request) {
 	w = LogWriter{w}
 	vars := mux.Vars(r)
-	account := vars["account"]
+	accountId := s.mapAccountNumber(vars["account"])
 	website := vars["website"]
 
-	s3Service, ok := s.s3Services[account]
-	if !ok {
-		log.Errorf("account not found: %s", account)
-		w.WriteHeader(http.StatusNotFound)
+	role := fmt.Sprintf("arn:aws:iam::%s:role/%s", accountId, s.session.RoleName)
+	policy, err := generatePolicy("s3:*", "cloudfront:*", "route53:*")
+	if err != nil {
+		log.Errorf("cannot generate policy: %s", err)
+		w.WriteHeader(http.StatusInternalServerError)
 		return
 	}
 
-	cloudFrontService, ok := s.cloudFrontServices[account]
-	if !ok {
-		msg := fmt.Sprintf("CloudFront service not found for account: %s", account)
-		handleError(w, apierror.New(apierror.ErrNotFound, msg, nil))
+	session, err := s.assumeRole(
+		r.Context(),
+		s.session.ExternalID,
+		role,
+		policy,
+	)
+	if err != nil {
+		log.Errorf("failed to assume role in account: %s", accountId)
+		w.WriteHeader(http.StatusInternalServerError)
 		return
 	}
 
-	route53Service, ok := s.route53Services[account]
-	if !ok {
-		msg := fmt.Sprintf("Route53 service not found for account: %s", account)
-		handleError(w, apierror.New(apierror.ErrNotFound, msg, nil))
-		return
-	}
+	s3Service := s3api.NewSession(session.Session, s.account)
+	cloudFrontService := cfapi.NewSession(session.Session, s.account)
+	route53Service := route53api.NewSession(session.Session, s.account)
 
 	// get the tags on the bucket backing the website
 	// TODO get tags for other resources (cloudfront, route53, etc)
@@ -555,36 +558,33 @@ func (s *server) WebsiteShowHandler(w http.ResponseWriter, r *http.Request) {
 func (s *server) WebsiteDeleteHandler(w http.ResponseWriter, r *http.Request) {
 	w = LogWriter{w}
 	vars := mux.Vars(r)
-	account := vars["account"]
+	accountId := s.mapAccountNumber(vars["account"])
 	website := vars["website"]
 
-	s3Service, ok := s.s3Services[account]
-	if !ok {
-		log.Errorf("account not found: %s", account)
-		w.WriteHeader(http.StatusNotFound)
+	role := fmt.Sprintf("arn:aws:iam::%s:role/%s", accountId, s.session.RoleName)
+	policy, err := generatePolicy("s3:*", "iam:*", "cloudfront:*", "route53:*")
+	if err != nil {
+		log.Errorf("cannot generate policy: %s", err)
+		w.WriteHeader(http.StatusInternalServerError)
 		return
 	}
 
-	iamService, ok := s.iamServices[account]
-	if !ok {
-		msg := fmt.Sprintf("IAM service not found for account: %s", account)
-		handleError(w, apierror.New(apierror.ErrNotFound, msg, nil))
+	session, err := s.assumeRole(
+		r.Context(),
+		s.session.ExternalID,
+		role,
+		policy,
+	)
+	if err != nil {
+		log.Errorf("failed to assume role in account: %s", accountId)
+		w.WriteHeader(http.StatusInternalServerError)
 		return
 	}
 
-	cloudFrontService, ok := s.cloudFrontServices[account]
-	if !ok {
-		msg := fmt.Sprintf("CloudFront service not found for account: %s", account)
-		handleError(w, apierror.New(apierror.ErrNotFound, msg, nil))
-		return
-	}
-
-	route53Service, ok := s.route53Services[account]
-	if !ok {
-		msg := fmt.Sprintf("Route53 service not found for account: %s", account)
-		handleError(w, apierror.New(apierror.ErrNotFound, msg, nil))
-		return
-	}
+	s3Service := s3api.NewSession(session.Session, s.account)
+	iamService := iamapi.NewSession(session.Session, s.account)
+	cloudFrontService := cfapi.NewSession(session.Session, s.account)
+	route53Service := route53api.NewSession(session.Session, s.account)
 
 	domain, err := cloudFrontService.WebsiteDomain(website)
 	if err != nil {
@@ -760,20 +760,35 @@ func (s *server) WebsiteDeleteHandler(w http.ResponseWriter, r *http.Request) {
 func (s *server) WebsitePartialUpdateHandler(w http.ResponseWriter, r *http.Request) {
 	w = LogWriter{w}
 	vars := mux.Vars(r)
-	account := vars["account"]
+	accountId := s.mapAccountNumber(vars["account"])
 	website := vars["website"]
 
-	cloudFrontService, ok := s.cloudFrontServices[account]
-	if !ok {
-		msg := fmt.Sprintf("CloudFront service not found for account: %s", account)
-		handleError(w, apierror.New(apierror.ErrNotFound, msg, nil))
+	role := fmt.Sprintf("arn:aws:iam::%s:role/%s", accountId, s.session.RoleName)
+	policy, err := generatePolicy("cloudfront:*")
+	if err != nil {
+		log.Errorf("cannot generate policy: %s", err)
+		w.WriteHeader(http.StatusInternalServerError)
 		return
 	}
+
+	session, err := s.assumeRole(
+		r.Context(),
+		s.session.ExternalID,
+		role,
+		policy,
+	)
+	if err != nil {
+		log.Errorf("failed to assume role in account: %s", accountId)
+		w.WriteHeader(http.StatusInternalServerError)
+		return
+	}
+
+	cloudFrontService := cfapi.NewSession(session.Session, s.account)
 
 	var req struct {
 		CacheInvalidation []string
 	}
-	err := json.NewDecoder(r.Body).Decode(&req)
+	err = json.NewDecoder(r.Body).Decode(&req)
 	if err != nil {
 		msg := fmt.Sprintf("cannot decode body into create website input: %s", err)
 		handleError(w, apierror.New(apierror.ErrBadRequest, msg, err))
@@ -811,26 +826,35 @@ func (s *server) WebsitePartialUpdateHandler(w http.ResponseWriter, r *http.Requ
 func (s *server) WebsiteUpdateHandler(w http.ResponseWriter, r *http.Request) {
 	w = LogWriter{w}
 	vars := mux.Vars(r)
-	account := vars["account"]
+	accountId := s.mapAccountNumber(vars["account"])
 	website := vars["website"]
-	s3Service, ok := s.s3Services[account]
-	if !ok {
-		msg := fmt.Sprintf("s3 service not found for account: %s", account)
-		handleError(w, apierror.New(apierror.ErrNotFound, msg, nil))
+	role := fmt.Sprintf("arn:aws:iam::%s:role/%s", accountId, s.session.RoleName)
+	policy, err := generatePolicy("s3:*", "cloudfront:*")
+	if err != nil {
+		log.Errorf("cannot generate policy: %s", err)
+		w.WriteHeader(http.StatusInternalServerError)
 		return
 	}
 
-	cloudFrontService, ok := s.cloudFrontServices[account]
-	if !ok {
-		msg := fmt.Sprintf("CloudFront service not found for account: %s", account)
-		handleError(w, apierror.New(apierror.ErrNotFound, msg, nil))
+	session, err := s.assumeRole(
+		r.Context(),
+		s.session.ExternalID,
+		role,
+		policy,
+	)
+	if err != nil {
+		log.Errorf("failed to assume role in account: %s", accountId)
+		w.WriteHeader(http.StatusInternalServerError)
 		return
 	}
+
+	s3Service := s3api.NewSession(session.Session, s.account)
+	cloudFrontService := cfapi.NewSession(session.Session, s.account)
 
 	var req struct {
 		Tags []*s3.Tag
 	}
-	err := json.NewDecoder(r.Body).Decode(&req)
+	err = json.NewDecoder(r.Body).Decode(&req)
 	if err != nil {
 		msg := fmt.Sprintf("cannot decode body into update website input: %s", err)
 		handleError(w, apierror.New(apierror.ErrBadRequest, msg, err))

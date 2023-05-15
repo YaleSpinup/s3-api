@@ -9,7 +9,6 @@ import (
 	"time"
 
 	"github.com/YaleSpinup/apierror"
-	"github.com/YaleSpinup/s3-api/common"
 	iamapi "github.com/YaleSpinup/s3-api/iam"
 	s3api "github.com/YaleSpinup/s3-api/s3"
 	"github.com/aws/aws-sdk-go/aws"
@@ -46,7 +45,6 @@ func (s *server) BucketCreateHandler(w http.ResponseWriter, r *http.Request) {
 		s.session.ExternalID,
 		role,
 		policy,
-		// "arn:aws:iam::aws:policy/AmazonS3ReadOnlyAccess",
 	)
 	if err != nil {
 		log.Errorf("failed to assume role in account: %s", accountId)
@@ -54,23 +52,8 @@ func (s *server) BucketCreateHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	s3Service := s3api.NewSession(session.Session, common.Account{})
-	iamService := iamapi.NewSession(session.Session, common.Config.Accounts[accountId])
-
-	// account := vars["account"]
-	// s3Service, ok := s.s3Services[account]
-	// if !ok {
-	// 	msg := fmt.Sprintf("s3 service not found for account: %s", account)
-	// 	handleError(w, apierror.New(apierror.ErrNotFound, msg, nil))
-	// 	return
-	// }
-
-	// iamService, ok := s.iamServices[account]
-	// if !ok {
-	// 	msg := fmt.Sprintf("IAM service not found for account: %s", account)
-	// 	handleError(w, apierror.New(apierror.ErrNotFound, msg, nil))
-	// 	return
-	// }
+	s3Service := s3api.NewSession(session.Session, s.account)
+	iamService := iamapi.NewSession(session.Session, s.account)
 
 	var req struct {
 		Tags        []*s3.Tag
@@ -281,7 +264,7 @@ func (s *server) BucketListHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	s3Client := s3api.NewSession(session.Session, common.Account{})
+	s3Client := s3api.NewSession(session.Session, s.account)
 	output, err := s3Client.ListBuckets(r.Context(), &s3.ListBucketsInput{})
 	if err != nil {
 		handleError(w, err)
@@ -332,7 +315,7 @@ func (s *server) BucketHeadHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	s3Client := s3api.NewSession(session.Session, common.Account{})
+	s3Client := s3api.NewSession(session.Session, s.account)
 
 	log.Infof("checking if bucket exists: %s", bucket)
 	exists, err := s3Client.BucketExists(r.Context(), bucket)
@@ -358,24 +341,33 @@ func (s *server) BucketHeadHandler(w http.ResponseWriter, r *http.Request) {
 func (s *server) BucketDeleteHandler(w http.ResponseWriter, r *http.Request) {
 	w = LogWriter{w}
 	vars := mux.Vars(r)
-	account := vars["account"]
+	accountId := s.mapAccountNumber(vars["account"])
 	bucket := vars["bucket"]
 
-	s3Service, ok := s.s3Services[account]
-	if !ok {
-		log.Errorf("account not found: %s", account)
-		w.WriteHeader(http.StatusNotFound)
+	role := fmt.Sprintf("arn:aws:iam::%s:role/%s", accountId, s.session.RoleName)
+	policy, err := generatePolicy("s3:*", "iam:*")
+	if err != nil {
+		log.Errorf("cannot generate policy: %s", err)
+		w.WriteHeader(http.StatusInternalServerError)
 		return
 	}
 
-	iamService, ok := s.iamServices[account]
-	if !ok {
-		msg := fmt.Sprintf("IAM service not found for account: %s", account)
-		handleError(w, apierror.New(apierror.ErrNotFound, msg, nil))
+	session, err := s.assumeRole(
+		r.Context(),
+		s.session.ExternalID,
+		role,
+		policy,
+	)
+	if err != nil {
+		log.Errorf("failed to assume role in account: %s", accountId)
+		w.WriteHeader(http.StatusInternalServerError)
 		return
 	}
 
-	err := s3Service.DeleteEmptyBucket(r.Context(), &s3.DeleteBucketInput{Bucket: aws.String(bucket)})
+	s3Service := s3api.NewSession(session.Session, s.account)
+	iamService := iamapi.NewSession(session.Session, s.account)
+
+	err = s3Service.DeleteEmptyBucket(r.Context(), &s3.DeleteBucketInput{Bucket: aws.String(bucket)})
 	if err != nil {
 		handleError(w, err)
 		return
@@ -457,7 +449,7 @@ func (s *server) BucketShowHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	s3Client := s3api.NewSession(session.Session, common.Account{})
+	s3Client := s3api.NewSession(session.Session, s.account)
 
 	tags, err := s3Client.GetBucketTags(r.Context(), bucket)
 	if err != nil {
@@ -528,7 +520,7 @@ func (s *server) BucketUpdateHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	s3Client := s3api.NewSession(session.Session, common.Account{})
+	s3Client := s3api.NewSession(session.Session, s.account)
 
 	var req struct {
 		Tags []*s3.Tag

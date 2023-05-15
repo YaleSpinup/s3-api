@@ -258,16 +258,14 @@ func (i *IAM) DefaultBucketAdminPolicy(bucket *string) ([]byte, error) {
 		Version: "2012-10-17",
 		Statement: []PolicyStatement{
 			{
-				Effect:    "Allow",
-				Action:    i.DefaultS3BucketActions,
-				Resource:  []string{fmt.Sprintf("arn:aws:s3:::%s", b)},
-				Principal: "*",
+				Effect:   "Allow",
+				Action:   i.DefaultS3BucketActions,
+				Resource: []string{fmt.Sprintf("arn:aws:s3:::%s", b)},
 			},
 			{
-				Effect:    "Allow",
-				Action:    i.DefaultS3ObjectActions,
-				Resource:  []string{fmt.Sprintf("arn:aws:s3:::%s/*", b)},
-				Principal: "*",
+				Effect:   "Allow",
+				Action:   i.DefaultS3ObjectActions,
+				Resource: []string{fmt.Sprintf("arn:aws:s3:::%s/*", b)},
 			},
 		},
 	})

@@ -22,13 +22,15 @@ type CloudFront struct {
 }
 
 // NewSession creates a new cloudfront session
-func NewSession(account common.Account) CloudFront {
+func NewSession(sess *session.Session, account common.Account) CloudFront {
 	c := CloudFront{}
-	log.Infof("creating new aws session for cloudfront with key id %s in region %s", account.Akid, account.Region)
-	sess := session.Must(session.NewSession(&aws.Config{
-		Credentials: credentials.NewStaticCredentials(account.Akid, account.Secret, ""),
-		Region:      aws.String(account.Region),
-	}))
+	if sess == nil {
+		log.Infof("creating new aws session for cloudfront with key id %s in region %s", account.Akid, account.Region)
+		sess = session.Must(session.NewSession(&aws.Config{
+			Credentials: credentials.NewStaticCredentials(account.Akid, account.Secret, ""),
+			Region:      aws.String(account.Region),
+		}))
+	}
 	c.Service = cloudfront.New(sess)
 	c.Domains = account.Domains
 	c.WebsiteEndpoint = "s3-website-" + account.Region + ".amazonaws.com"

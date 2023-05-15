@@ -26,14 +26,14 @@ func newmockCloudFrontClient(t *testing.T, err error) cloudfrontiface.CloudFront
 }
 
 func TestNewSession(t *testing.T) {
-	e := NewSession(common.Account{})
+	e := NewSession(nil, common.Account{})
 	if to := reflect.TypeOf(e).String(); to != "cloudfront.CloudFront" {
 		t.Errorf("expected type to be 'cloudfront.CloudFront', got %s", to)
 	}
 }
 
 func TestWebsiteDomain(t *testing.T) {
-	e := NewSession(common.Account{
+	e := NewSession(nil, common.Account{
 		Domains: map[string]*common.Domain{
 			"hyper.converged": {
 				CertArn: "arn:aws:acm::12345678910:certificate/111111111-2222-3333-4444-555555555555",
@@ -114,7 +114,7 @@ func TestDefaultWebsiteDistributionConfig(t *testing.T) {
 		},
 	}
 
-	e := NewSession(common.Account{
+	e := NewSession(nil, common.Account{
 		Domains: map[string]*common.Domain{
 			"hyper.converged": {
 				CertArn: "arn:aws:acm::12345678910:certificate/111111111-2222-3333-4444-555555555555",

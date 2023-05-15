@@ -17,13 +17,15 @@ type Route53 struct {
 }
 
 // NewSession creates a new cloudfront session
-func NewSession(account common.Account) Route53 {
+func NewSession(sess *session.Session, account common.Account) Route53 {
 	r := Route53{}
-	log.Infof("creating new aws session for route53 with key id %s in region %s", account.Akid, account.Region)
-	sess := session.Must(session.NewSession(&aws.Config{
-		Credentials: credentials.NewStaticCredentials(account.Akid, account.Secret, ""),
-		Region:      aws.String(account.Region),
-	}))
+	if sess == nil {
+		log.Infof("creating new aws session for route53 with key id %s in region %s", account.Akid, account.Region)
+		sess = session.Must(session.NewSession(&aws.Config{
+			Credentials: credentials.NewStaticCredentials(account.Akid, account.Secret, ""),
+			Region:      aws.String(account.Region),
+		}))
+	}
 	r.Service = route53.New(sess)
 	r.Domains = account.Domains
 	return r
