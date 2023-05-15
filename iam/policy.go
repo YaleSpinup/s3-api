@@ -16,7 +16,7 @@ func (i *IAM) CreatePolicy(ctx context.Context, input *iam.CreatePolicyInput) (*
 		return nil, apierror.New(apierror.ErrBadRequest, "invalid input", nil)
 	}
 
-	log.Infof("creating iam policy: %s", *input.PolicyName, awsutil.Prettify(input))
+	log.Infof("creating iam policy: %s", *input.PolicyName)
 
 	output, err := i.Service.CreatePolicyWithContext(ctx, input)
 	if err != nil {
