@@ -60,6 +60,18 @@ func (s *S3) CreateBucket(ctx context.Context, input *s3.CreateBucketInput) (*s3
 	return output, nil
 }
 
+// SetPublicAccessBlock this sets the public access block on a s3 bucket (mainly used for static websites)
+func (s *S3) SetPublicAccessBlock(ctx context.Context, input *s3.PutPublicAccessBlockInput) (*s3.PutPublicAccessBlockOutput, error) {
+	log.Infof("setting public access: %+v", input)
+
+	output, err := s.Service.PutPublicAccessBlockWithContext(ctx, input)
+	if err != nil {
+		return nil, ErrCode("failed to set public access", err)
+	}
+
+	return output, nil
+}
+
 // DeleteEmptyBucket handles deleting an empty bucket
 func (s *S3) DeleteEmptyBucket(ctx context.Context, input *s3.DeleteBucketInput) error {
 	if input == nil || aws.StringValue(input.Bucket) == "" {
