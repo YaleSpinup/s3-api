@@ -11,6 +11,8 @@ import (
 // Config is representation of the configuration data
 type Config struct {
 	ListenAddress string
+	Account       Account
+	AccountsMap   map[string]string
 	Accounts      map[string]Account
 	Token         string
 	LogLevel      string
@@ -24,6 +26,8 @@ type Account struct {
 	Region                               string
 	Akid                                 string
 	Secret                               string
+	ExternalID                           string
+	Role                                 string
 	DefaultS3BucketActions               []string
 	DefaultS3ObjectActions               []string
 	DefaultCloudfrontDistributionActions []string
