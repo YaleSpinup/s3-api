@@ -31,7 +31,7 @@ type Account struct {
 	DefaultS3BucketActions               []string
 	DefaultS3ObjectActions               []string
 	DefaultCloudfrontDistributionActions []string
-	AccessLog                            *AccessLog
+	AccessLog                            map[string]*AccessLog
 	Domains                              map[string]*Domain
 	Cleaner                              *Cleaner
 }

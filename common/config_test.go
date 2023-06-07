@@ -26,8 +26,10 @@ var testConfig = []byte(
 				"cloudfront:CreateInvalidation"
 			],
 			"accessLog": {
-				"bucket": "foobucket",
-				"prefix": "spinup"
+				"spinup":{
+					"bucket": "foobucket",
+					"prefix": "spinup"
+				}
 			},
 			"domains": {
 				"example.com": {
@@ -72,9 +74,11 @@ func TestReadConfig(t *testing.T) {
 					"cloudfront:ListInvalidations",
 					"cloudfront:CreateInvalidation",
 				},
-				AccessLog: &AccessLog{
-					Bucket: "foobucket",
-					Prefix: "spinup",
+				AccessLog: map[string]*AccessLog{
+					"spinup": {
+						Bucket: "foobucket",
+						Prefix: "spinup",
+					},
 				},
 				Domains: map[string]*Domain{
 					"example.com": {

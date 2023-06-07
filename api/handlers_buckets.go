@@ -31,6 +31,7 @@ import (
 func (s *server) BucketCreateHandler(w http.ResponseWriter, r *http.Request) {
 	w = LogWriter{w}
 	vars := mux.Vars(r)
+	account := vars["account"]
 	accountId := s.mapAccountNumber(vars["account"])
 	role := fmt.Sprintf("arn:aws:iam::%s:role/%s", accountId, s.session.RoleName)
 	policy, err := generatePolicy("s3:*", "iam:*")
@@ -151,8 +152,9 @@ func (s *server) BucketCreateHandler(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// enable logging access for the bucket to a central repo if the target bucket is set
-	if s3Service.LoggingBucket != "" {
-		if err = s3Service.UpdateBucketLogging(r.Context(), bucketName, s3Service.LoggingBucket, s3Service.LoggingBucketPrefix); err != nil {
+	fmt.Println("Bucket name ::::::::::::::::::::::::, ", s3Service.LoggingBucket[account])
+	if s3Service.LoggingBucket[account] != "" {
+		if err = s3Service.UpdateBucketLogging(r.Context(), bucketName, s3Service.LoggingBucket[account], s3Service.LoggingBucketPrefix[account]); err != nil {
 			msg := fmt.Sprintf("failed to enable logging for bucket %s: %s", bucketName, err.Error())
 			handleError(w, errors.Wrap(err, msg))
 			return

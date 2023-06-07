@@ -33,17 +33,19 @@ func TestNewSession(t *testing.T) {
 	}
 
 	e = NewSession(nil, common.Account{
-		AccessLog: &common.AccessLog{
-			Bucket: "foologbucket",
-			Prefix: "s3",
+		AccessLog: map[string]*common.AccessLog{
+			"spinup": {
+				Bucket: "foologbucket",
+				Prefix: "s3",
+			},
 		},
 	})
 
-	if e.LoggingBucket != "foologbucket" {
+	if e.LoggingBucket["spinup"] != "foologbucket" {
 		t.Errorf("expected logging bucket to be 'foologbucket', got %s", e.LoggingBucket)
 	}
 
-	if e.LoggingBucketPrefix != "s3" {
+	if e.LoggingBucketPrefix["spinup"] != "s3" {
 		t.Errorf("expected logging bucket prefix to be 's3', got %s", e.LoggingBucketPrefix)
 	}
 }

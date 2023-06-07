@@ -1,4 +1,4 @@
-{ 
+{
   "listenAddress": ":8080",
   "accounts": {
     "spinup": {
@@ -58,8 +58,15 @@
         "cloudfront:CreateInvalidation"
       ],
       "accessLog": {
-        "bucket": "{{ .spinup_logging_bucket }}",
-        "prefix": "s3"
+        "spinup": {
+          "bucket": "{{ .spinup_logging_bucket }}",
+          "prefix": "s3"
+        },
+        "spinupsec": {
+          "bucket": "{{ .spinup_logging_bucket }}",
+          "prefix": "s3"
+
+        }
       },
       "domains": {
         "yalepages.org": {
@@ -207,8 +214,15 @@
       }
     },
     "accessLog": {
-      "bucket": "yale-spinup-access-logs",
-      "prefix": "s3"
+      "spinup": {
+        "bucket": "{{ .spinup_logging_bucket }}",
+        "prefix": "s3"
+      },
+      "spinupsec": {
+        "bucket": "{{ .spinup_logging_bucket }}",
+        "prefix": "s3"
+
+      }
     },
     "cleaner": {
       "interval": "1200s",
