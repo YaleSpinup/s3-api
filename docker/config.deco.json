@@ -63,9 +63,8 @@
           "prefix": "s3"
         },
         "spinupsec": {
-          "bucket": "{{ .spinup_logging_bucket }}",
+          "bucket": "{{ .spinupsec_logging_bucket }}",
           "prefix": "s3"
-
         }
       },
       "domains": {
@@ -219,9 +218,8 @@
         "prefix": "s3"
       },
       "spinupsec": {
-        "bucket": "{{ .spinup_logging_bucket }}",
+        "bucket": "{{ .spinupsec_logging_bucket }}",
         "prefix": "s3"
-
       }
     },
     "cleaner": {
