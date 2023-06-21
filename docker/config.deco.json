@@ -139,8 +139,14 @@
         "cloudfront:CreateInvalidation"
       ],
       "accessLog": {
-        "bucket": "{{ .spinupsec_logging_bucket }}",
-        "prefix": "s3"
+        "spinup": {
+          "bucket": "{{ .spinup_logging_bucket }}",
+          "prefix": "s3"
+        },
+        "spinupsec": {
+          "bucket": "{{ .spinupsec_logging_bucket }}",
+          "prefix": "s3"
+        }
       }
     }
   },
