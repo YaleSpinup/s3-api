@@ -3,6 +3,7 @@ package common
 import (
 	"encoding/json"
 	"io"
+	"strings"
 
 	"github.com/pkg/errors"
 	log "github.com/sirupsen/logrus"
@@ -13,7 +14,6 @@ type Config struct {
 	ListenAddress string
 	Account       Account
 	AccountsMap   map[string]string
-	Accounts      map[string]Account
 	Token         string
 	LogLevel      string
 	Version       Version
@@ -26,12 +26,12 @@ type Account struct {
 	Region                               string
 	Akid                                 string
 	Secret                               string
-	ExternalID                           string
+	ExternalId                           string
 	Role                                 string
 	DefaultS3BucketActions               []string
 	DefaultS3ObjectActions               []string
 	DefaultCloudfrontDistributionActions []string
-	AccessLog                            *AccessLog
+	AccessLog                            AccessLog
 	Domains                              map[string]*Domain
 	Cleaner                              *Cleaner
 }
@@ -40,6 +40,13 @@ type Account struct {
 type AccessLog struct {
 	Bucket string
 	Prefix string
+}
+
+// GetBucket gets the bucket name given an account id
+func (a *AccessLog) GetBucket(id string) string {
+	bucket := strings.Replace(a.Bucket, "{account_id}", id, 1)
+
+	return bucket
 }
 
 // Domain is the domain configuration for an S3 site

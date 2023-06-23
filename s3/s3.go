@@ -18,7 +18,7 @@ type S3 struct {
 }
 
 // NewSession creates a new S3 session
-func NewSession(sess *session.Session, account common.Account) S3 {
+func NewSession(sess *session.Session, account common.Account, accountId string) S3 {
 	if sess == nil {
 		config := aws.Config{
 			Credentials: credentials.NewStaticCredentials(account.Akid, account.Secret, ""),
@@ -34,9 +34,11 @@ func NewSession(sess *session.Session, account common.Account) S3 {
 
 	s := S3{}
 	s.Service = s3.New(sess)
-	if account.AccessLog != nil {
-		s.LoggingBucket = account.AccessLog.Bucket
+
+	if account.AccessLog != (common.AccessLog{}) {
+		s.LoggingBucket = account.AccessLog.GetBucket(accountId)
 		s.LoggingBucketPrefix = account.AccessLog.Prefix
 	}
+
 	return s
 }

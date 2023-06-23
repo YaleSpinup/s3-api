@@ -9,6 +9,8 @@ import (
 	"time"
 
 	"github.com/YaleSpinup/apierror"
+	"github.com/YaleSpinup/s3-api/common"
+	iamapi "github.com/YaleSpinup/s3-api/iam"
 	"github.com/aws/aws-sdk-go/aws"
 	"github.com/aws/aws-sdk-go/aws/awsutil"
 	"github.com/aws/aws-sdk-go/service/iam"
@@ -21,15 +23,31 @@ import (
 func (s *server) UserCreateHandler(w http.ResponseWriter, r *http.Request) {
 	w = LogWriter{w}
 	vars := mux.Vars(r)
-	account := vars["account"]
 	bucket := vars["bucket"]
 
-	iamService, ok := s.iamServices[account]
-	if !ok {
-		msg := fmt.Sprintf("IAM service not found for account: %s", account)
-		handleError(w, apierror.New(apierror.ErrNotFound, msg, nil))
+	accountId := s.mapAccountNumber(vars["account"])
+
+	role := fmt.Sprintf("arn:aws:iam::%s:role/%s", accountId, s.session.RoleName)
+	policy, err := generatePolicy("iam:*")
+	if err != nil {
+		log.Errorf("cannot generate policy: %s", err)
+		w.WriteHeader(http.StatusInternalServerError)
 		return
 	}
+
+	session, err := s.assumeRole(
+		r.Context(),
+		s.session.ExternalID,
+		role,
+		policy,
+	)
+	if err != nil {
+		log.Errorf("failed to assume role in account: %s", accountId)
+		w.WriteHeader(http.StatusInternalServerError)
+		return
+	}
+
+	iamService := iamapi.NewSession(session.Session, s.account)
 
 	var req struct {
 		User   *iam.CreateUserInput
@@ -47,7 +65,7 @@ func (s *server) UserCreateHandler(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// setup err var, rollback function list and defer execution
-	var err error
+	// var err error
 	var rollBackTasks []rollbackFunc
 	defer func() {
 		if err != nil {
@@ -116,7 +134,7 @@ func (s *server) UserCreateHandler(w http.ResponseWriter, r *http.Request) {
 		if err != nil {
 			if aerr, ok := err.(apierror.Error); ok && aerr.Code == apierror.ErrNotFound {
 				var rbTasks []rollbackFunc
-				rbTasks, err = s.CreateBucketGroupPolicy(r.Context(), account, bucket, group)
+				rbTasks, err = s.CreateBucketGroupPolicy(r.Context(), iamService, bucket, group)
 				if err != nil {
 					handleError(w, err)
 					return
@@ -174,16 +192,31 @@ func (s *server) UserCreateHandler(w http.ResponseWriter, r *http.Request) {
 func (s *server) UserDeleteHandler(w http.ResponseWriter, r *http.Request) {
 	w = LogWriter{w}
 	vars := mux.Vars(r)
-	account := vars["account"]
+	accountId := s.mapAccountNumber(vars["account"])
 	user := vars["user"]
 	bucket := vars["bucket"]
 
-	iamService, ok := s.iamServices[account]
-	if !ok {
-		msg := fmt.Sprintf("IAM service not found for account: %s", account)
-		handleError(w, apierror.New(apierror.ErrNotFound, msg, nil))
+	role := fmt.Sprintf("arn:aws:iam::%s:role/%s", accountId, s.session.RoleName)
+	policy, err := generatePolicy("iam:*")
+	if err != nil {
+		log.Errorf("cannot generate policy: %s", err)
+		w.WriteHeader(http.StatusInternalServerError)
 		return
 	}
+
+	session, err := s.assumeRole(
+		r.Context(),
+		s.session.ExternalID,
+		role,
+		policy,
+	)
+	if err != nil {
+		log.Errorf("failed to assume role in account: %s", accountId)
+		w.WriteHeader(http.StatusInternalServerError)
+		return
+	}
+
+	iamService := iamapi.NewSession(session.Session, s.account)
 
 	// get a users access keys
 	keys, err := iamService.ListAccessKeys(r.Context(), &iam.ListAccessKeysInput{UserName: aws.String(user)})
@@ -255,16 +288,31 @@ func (s *server) UserDeleteHandler(w http.ResponseWriter, r *http.Request) {
 func (s *server) UserUpdateKeyHandler(w http.ResponseWriter, r *http.Request) {
 	w = LogWriter{w}
 	vars := mux.Vars(r)
-	account := vars["account"]
+	accountId := s.mapAccountNumber(vars["account"])
 	bucket := vars["bucket"]
 	user := vars["user"]
 
-	iamService, ok := s.iamServices[account]
-	if !ok {
-		msg := fmt.Sprintf("IAM service not found for account: %s", account)
-		handleError(w, apierror.New(apierror.ErrNotFound, msg, nil))
+	role := fmt.Sprintf("arn:aws:iam::%s:role/%s", accountId, s.session.RoleName)
+	policy, err := generatePolicy("iam:*")
+	if err != nil {
+		log.Errorf("cannot generate policy: %s", err)
+		w.WriteHeader(http.StatusInternalServerError)
 		return
 	}
+
+	session, err := s.assumeRole(
+		r.Context(),
+		s.session.ExternalID,
+		role,
+		policy,
+	)
+	if err != nil {
+		log.Errorf("failed to assume role in account: %s", accountId)
+		w.WriteHeader(http.StatusInternalServerError)
+		return
+	}
+
+	iamService := iamapi.NewSession(session.Session, s.account)
 
 	// get a list of users access keys
 	keys, kerr := iamService.ListAccessKeys(r.Context(), &iam.ListAccessKeysInput{UserName: aws.String(user)})
@@ -274,7 +322,6 @@ func (s *server) UserUpdateKeyHandler(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// setup err var, rollback function list and defer execution
-	var err error
 	var rollBackTasks []rollbackFunc
 	defer func() {
 		if err != nil {
@@ -340,15 +387,32 @@ func (s *server) UserUpdateKeyHandler(w http.ResponseWriter, r *http.Request) {
 func (s *server) UserListHandler(w http.ResponseWriter, r *http.Request) {
 	w = LogWriter{w}
 	vars := mux.Vars(r)
-	account := vars["account"]
+	//account := vars["account"]
 	bucket := vars["bucket"]
-
-	iamService, ok := s.iamServices[account]
-	if !ok {
-		msg := fmt.Sprintf("IAM service not found for account: %s", account)
-		handleError(w, apierror.New(apierror.ErrNotFound, msg, nil))
+	accountId := s.mapAccountNumber(vars["account"])
+	print("acccccccccc", accountId)
+	role := fmt.Sprintf("arn:aws:iam::%s:role/%s", accountId, s.session.RoleName)
+	policy, err := generatePolicy("s3:Get*", "iam:*")
+	if err != nil {
+		log.Errorf("cannot generate policy: %s", err)
+		w.WriteHeader(http.StatusInternalServerError)
 		return
 	}
+
+	session, err := s.assumeRole(
+		r.Context(),
+		s.session.ExternalID,
+		role,
+		policy,
+	)
+	if err != nil {
+		log.Errorf("failed to assume role in account: %s", accountId)
+		w.WriteHeader(http.StatusInternalServerError)
+		return
+	}
+
+	iamService := iamapi.NewSession(session.Session, common.Account{})
+	// iamService, _ = s.iamServices[vars["account"]]
 
 	// TODO check if bucket exists and fail if it doesn't?
 
@@ -365,8 +429,10 @@ func (s *server) UserListHandler(w http.ResponseWriter, r *http.Request) {
 
 	// check if there is a user with the same name as the bucket to support legacy buckets
 	user, err := iamService.GetUser(r.Context(), &iam.GetUserInput{UserName: aws.String(bucket)})
+	fmt.Println(err)
 	if err == nil {
-		users = []*iam.User{user.User}
+		users = append(users, user.User)
+		//users = []*iam.User{user.User}
 	}
 
 	log.Debugf("%+v", users)
@@ -390,16 +456,31 @@ func (s *server) UserListHandler(w http.ResponseWriter, r *http.Request) {
 func (s *server) UserShowHandler(w http.ResponseWriter, r *http.Request) {
 	w = LogWriter{w}
 	vars := mux.Vars(r)
-	account := vars["account"]
+	accountId := s.mapAccountNumber(vars["account"])
 	bucket := vars["bucket"]
 	user := vars["user"]
 
-	iamService, ok := s.iamServices[account]
-	if !ok {
-		msg := fmt.Sprintf("IAM service not found for account: %s", account)
-		handleError(w, apierror.New(apierror.ErrNotFound, msg, nil))
+	role := fmt.Sprintf("arn:aws:iam::%s:role/%s", accountId, s.session.RoleName)
+	policy, err := generatePolicy("iam:*")
+	if err != nil {
+		log.Errorf("cannot generate policy: %s", err)
+		w.WriteHeader(http.StatusInternalServerError)
 		return
 	}
+
+	session, err := s.assumeRole(
+		r.Context(),
+		s.session.ExternalID,
+		role,
+		policy,
+	)
+	if err != nil {
+		log.Errorf("failed to assume role in account: %s", accountId)
+		w.WriteHeader(http.StatusInternalServerError)
+		return
+	}
+
+	iamService := iamapi.NewSession(session.Session, s.account)
 
 	// collect the list of users in the various management groups
 	users := []*iam.User{}

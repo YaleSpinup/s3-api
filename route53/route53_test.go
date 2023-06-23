@@ -23,7 +23,7 @@ func newmockRoute53Client(t *testing.T, err error) route53iface.Route53API {
 }
 
 func TestNewSession(t *testing.T) {
-	e := NewSession(common.Account{})
+	e := NewSession(nil, common.Account{})
 	to := reflect.TypeOf(e).String()
 	if to != "route53.Route53" {
 		t.Errorf("expected type to be 'route53.Route53', got %s", to)

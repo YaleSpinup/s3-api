@@ -9,9 +9,8 @@ import (
 var testConfig = []byte(
 	`{
 		"listenAddress": ":8000",
-		"accounts": {
-		  "provider1": {
-			"region": "us-east-1",
+		"account": {
+		  "region": "us-east-1",
 			"akid": "key1",
 			"secret": "secret1",
 			"defaultS3BucketActions": [
@@ -39,12 +38,19 @@ var testConfig = []byte(
 				"interval": "300s",
 				"maxSplay": "60s"
 			}
-		  },
-		  "provider2": {
-			"region": "us-west-1",
+		},
+		"token": "SEKRET",
+		"logLevel": "info",
+		"org": "test"
+	}`)
+
+var testConfig2 = []byte(
+	`{
+		"listenAddress": ":8000",
+		"account": {
+		  	"region": "us-west-1",
 			"akid": "key2",
 			"secret": "secret2"
-		  }
 		},
 		"token": "SEKRET",
 		"logLevel": "info",
@@ -53,11 +59,37 @@ var testConfig = []byte(
 
 var brokenConfig = []byte(`{ "foobar": { "baz": "biz" }`)
 
+var workingConfigs = [][]byte{
+	testConfig,
+	testConfig2,
+}
+
+var testAccessLogsInput = []AccessLog{
+	{
+		Bucket: "foo-{account_id}-logs",
+		Prefix: "foo",
+	},
+	{
+		Bucket: "bar-[what_id]-logs",
+		Prefix: "foo",
+	},
+}
+
+var testAccessLogsIdsInput = []string{
+	"123456789",
+	"632623623",
+}
+
+var testAccessLogsExpected = []string{
+	"foo-123456789-logs",
+	"bar-[what_id]-logs",
+}
+
 func TestReadConfig(t *testing.T) {
-	expectedConfig := Config{
-		ListenAddress: ":8000",
-		Accounts: map[string]Account{
-			"provider1": {
+	expectedConfigs := []Config{
+		{
+			ListenAddress: ":8000",
+			Account: Account{
 				Region: "us-east-1",
 				Akid:   "key1",
 				Secret: "secret1",
@@ -72,7 +104,7 @@ func TestReadConfig(t *testing.T) {
 					"cloudfront:ListInvalidations",
 					"cloudfront:CreateInvalidation",
 				},
-				AccessLog: &AccessLog{
+				AccessLog: AccessLog{
 					Bucket: "foobucket",
 					Prefix: "spinup",
 				},
@@ -87,28 +119,49 @@ func TestReadConfig(t *testing.T) {
 					MaxSplay: "60s",
 				},
 			},
-			"provider2": {
+			Token:    "SEKRET",
+			LogLevel: "info",
+			Org:      "test",
+		},
+		{
+			ListenAddress: ":8000",
+			Account: Account{
 				Region: "us-west-1",
 				Akid:   "key2",
 				Secret: "secret2",
 			},
+			Token:    "SEKRET",
+			LogLevel: "info",
+			Org:      "test",
 		},
-		Token:    "SEKRET",
-		LogLevel: "info",
-		Org:      "test",
 	}
 
-	actualConfig, err := ReadConfig(bytes.NewReader(testConfig))
-	if err != nil {
-		t.Error("Failed to read config", err)
+	for i, config := range workingConfigs {
+		actual, err := ReadConfig(bytes.NewReader(config))
+		if err != nil {
+			t.Error("Failed to read config", err)
+		}
+
+		expected := expectedConfigs[i]
+		if !reflect.DeepEqual(actual, expected) {
+			t.Errorf("Expected config to be %+v\n got %+v", expected, actual)
+		}
 	}
 
-	if !reflect.DeepEqual(actualConfig, expectedConfig) {
-		t.Errorf("Expected config to be %+v\n got %+v", expectedConfig, actualConfig)
-	}
-
-	_, err = ReadConfig(bytes.NewReader(brokenConfig))
+	_, err := ReadConfig(bytes.NewReader(brokenConfig))
 	if err == nil {
 		t.Error("expected error reading config, got nil")
+	}
+}
+
+func TestAccessLog_GetBucket(t *testing.T) {
+	for i, input := range testAccessLogsInput {
+		id := testAccessLogsIdsInput[i]
+		expected := testAccessLogsExpected[i]
+		actual := input.GetBucket(id)
+
+		if actual != expected {
+			t.Errorf("unexpected result from GetBucket. wanted %s got %s. input bucket: %s, input account id: %s", expected, actual, input.Bucket, id)
+		}
 	}
 }

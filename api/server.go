@@ -26,6 +26,7 @@ func init() {
 }
 
 type server struct {
+	account            common.Account
 	accountsMap        map[string]string
 	s3Services         map[string]s3.S3
 	iamServices        map[string]iam.IAM
@@ -45,6 +46,17 @@ func (s *server) mapAccountNumber(name string) string {
 		return a
 	}
 	return name
+}
+
+// if we have an account id that matches an id in the accounts map we need that account name for the logging bucket
+func (s *server) mapToAccountName(id string) string {
+	for k, v := range s.accountsMap {
+		if id == v {
+			return k
+		}
+	}
+
+	return id
 }
 
 // cleaner will do its action once every interval
@@ -70,13 +82,15 @@ func NewServer(config common.Config) error {
 	// setup server context with cancellation
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
+
 	sess := session.New(
 		session.WithCredentials(config.Account.Akid, config.Account.Secret, ""),
 		session.WithRegion(config.Account.Region),
-		session.WithExternalID(config.Account.ExternalID),
+		session.WithExternalID(config.Account.ExternalId),
 		session.WithExternalRoleName(config.Account.Role),
 	)
 	s := server{
+		account:            config.Account,
 		accountsMap:        config.AccountsMap,
 		s3Services:         make(map[string]s3.S3),
 		iamServices:        make(map[string]iam.IAM),
@@ -89,19 +103,22 @@ func NewServer(config common.Config) error {
 		org:                config.Org,
 		sessionCache:       cache.New(600*time.Second, 900*time.Second),
 	}
-
 	Org = config.Org
 
 	// Create a shared S3 session
-	for name, c := range config.Accounts {
-		log.Debugf("Creating new S3 service for account '%s' with key '%s' in region '%s' (org: %s)", name, c.Akid, c.Region, Org)
-		s.s3Services[name] = s3.NewSession(nil, c)
-		s.iamServices[name] = iam.NewSession(c)
-		s.cloudFrontServices[name] = cloudfront.NewSession(c)
-		s.route53Services[name] = route53.NewSession(c)
-		if c.Cleaner != nil {
+	for name, accountId := range config.AccountsMap {
+		log.Debugf("Creating new S3 service for account '%s' with key '%s' in region '%s' (org: %s)", name, config.Account.Akid, config.Account.Region, Org)
+
+		s.s3Services[name] = s3.NewSession(nil, config.Account, name)
+		s.iamServices[name] = iam.NewSession(nil, config.Account)
+		s.cloudFrontServices[name] = cloudfront.NewSession(nil, config.Account, accountId)
+		s.route53Services[name] = route53.NewSession(nil, config.Account)
+
+		if config.Account.Cleaner != nil {
 			log.Infof("starting cleaner for account %s (org: %s)", name, Org)
-			interval, err := cleanerInterval(c.Cleaner.Interval, c.Cleaner.MaxSplay)
+
+			interval, err := cleanerInterval(config.Account.Cleaner.Interval, config.Account.Cleaner.MaxSplay)
+
 			if err != nil {
 				return err
 			}
@@ -115,6 +132,7 @@ func NewServer(config common.Config) error {
 				route53Services:   s.route53Services[name],
 				context:           ctx,
 			}
+
 			log.Debugf("initialized cleaner %+v", acctCleaner)
 
 			acctCleaner.run()

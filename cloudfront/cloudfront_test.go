@@ -26,20 +26,20 @@ func newmockCloudFrontClient(t *testing.T, err error) cloudfrontiface.CloudFront
 }
 
 func TestNewSession(t *testing.T) {
-	e := NewSession(common.Account{})
+	e := NewSession(nil, common.Account{}, "12345678910")
 	if to := reflect.TypeOf(e).String(); to != "cloudfront.CloudFront" {
 		t.Errorf("expected type to be 'cloudfront.CloudFront', got %s", to)
 	}
 }
 
 func TestWebsiteDomain(t *testing.T) {
-	e := NewSession(common.Account{
+	e := NewSession(nil, common.Account{
 		Domains: map[string]*common.Domain{
 			"hyper.converged": {
 				CertArn: "arn:aws:acm::12345678910:certificate/111111111-2222-3333-4444-555555555555",
 			},
 		},
-	})
+	}, "12345678910")
 
 	if _, err := e.WebsiteDomain(""); err == nil {
 		t.Error("expected empty website to result in error, got nil")
@@ -114,14 +114,14 @@ func TestDefaultWebsiteDistributionConfig(t *testing.T) {
 		},
 	}
 
-	e := NewSession(common.Account{
+	e := NewSession(nil, common.Account{
 		Domains: map[string]*common.Domain{
 			"hyper.converged": {
 				CertArn: "arn:aws:acm::12345678910:certificate/111111111-2222-3333-4444-555555555555",
 			},
 		},
 		Region: "us-east-1",
-	})
+	}, "12345678910")
 
 	if _, err := e.DefaultWebsiteDistributionConfig(""); err == nil {
 		t.Error("expected empty website to result in error, got nil")

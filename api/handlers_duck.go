@@ -6,23 +6,41 @@ import (
 
 	"github.com/YaleSpinup/apierror"
 	"github.com/YaleSpinup/s3-api/duck"
+	s3api "github.com/YaleSpinup/s3-api/s3"
 	"github.com/gorilla/mux"
+	log "github.com/sirupsen/logrus"
 )
 
 // BucketDuck returns a cyberduck bookmark file for the bucket or website
 func (s *server) BucketDuck(w http.ResponseWriter, r *http.Request) {
 	w = LogWriter{w}
 	vars := mux.Vars(r)
-	account := vars["account"]
+	accountId := s.mapAccountNumber(vars["account"])
 	bucket := vars["bucket"]
 	website := vars["website"]
 
-	_, ok := s.s3Services[account]
-	if !ok {
-		msg := fmt.Sprintf("s3 service not found for account: %s", account)
-		handleError(w, apierror.New(apierror.ErrNotFound, msg, nil))
+	role := fmt.Sprintf("arn:aws:iam::%s:role/%s", accountId, s.session.RoleName)
+	policy, err := generatePolicy("s3:ListBucket")
+	if err != nil {
+		log.Errorf("cannot generate policy: %s", err)
+		w.WriteHeader(http.StatusInternalServerError)
 		return
 	}
+
+	session, err := s.assumeRole(
+		r.Context(),
+		s.session.ExternalID,
+		role,
+		policy,
+		"arn:aws:iam::aws:policy/AmazonS3ReadOnlyAccess",
+	)
+	if err != nil {
+		log.Errorf("failed to assume role in account: %s", accountId)
+		w.WriteHeader(http.StatusInternalServerError)
+		return
+	}
+
+	_ = s3api.NewSession(session.Session, s.account, s.mapToAccountName(accountId))
 
 	if bucket == "" {
 		bucket = website

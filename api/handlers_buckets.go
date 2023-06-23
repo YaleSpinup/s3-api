@@ -9,7 +9,7 @@ import (
 	"time"
 
 	"github.com/YaleSpinup/apierror"
-	"github.com/YaleSpinup/s3-api/common"
+	iamapi "github.com/YaleSpinup/s3-api/iam"
 	s3api "github.com/YaleSpinup/s3-api/s3"
 	"github.com/aws/aws-sdk-go/aws"
 	"github.com/aws/aws-sdk-go/service/iam"
@@ -31,20 +31,29 @@ import (
 func (s *server) BucketCreateHandler(w http.ResponseWriter, r *http.Request) {
 	w = LogWriter{w}
 	vars := mux.Vars(r)
-	account := vars["account"]
-	s3Service, ok := s.s3Services[account]
-	if !ok {
-		msg := fmt.Sprintf("s3 service not found for account: %s", account)
-		handleError(w, apierror.New(apierror.ErrNotFound, msg, nil))
+	accountId := s.mapAccountNumber(vars["account"])
+	role := fmt.Sprintf("arn:aws:iam::%s:role/%s", accountId, s.session.RoleName)
+	policy, err := generatePolicy("s3:*", "iam:*")
+	if err != nil {
+		log.Errorf("cannot generate policy: %s", err)
+		w.WriteHeader(http.StatusInternalServerError)
 		return
 	}
 
-	iamService, ok := s.iamServices[account]
-	if !ok {
-		msg := fmt.Sprintf("IAM service not found for account: %s", account)
-		handleError(w, apierror.New(apierror.ErrNotFound, msg, nil))
+	session, err := s.assumeRole(
+		r.Context(),
+		s.session.ExternalID,
+		role,
+		policy,
+	)
+	if err != nil {
+		log.Errorf("failed to assume role in account: %s", accountId)
+		w.WriteHeader(http.StatusInternalServerError)
 		return
 	}
+
+	s3Service := s3api.NewSession(session.Session, s.account, s.mapToAccountName(accountId))
+	iamService := iamapi.NewSession(session.Session, s.account)
 
 	var req struct {
 		Tags        []*s3.Tag
@@ -63,7 +72,7 @@ func (s *server) BucketCreateHandler(w http.ResponseWriter, r *http.Request) {
 	})
 
 	// setup err var, rollback function list and defer execution
-	var err error
+	// var err error
 	var rollBackTasks []rollbackFunc
 	defer func() {
 		if err != nil {
@@ -142,6 +151,7 @@ func (s *server) BucketCreateHandler(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// enable logging access for the bucket to a central repo if the target bucket is set
+	fmt.Println("Bucket name ::::::::::::::::::::::::, ", s3Service.LoggingBucket)
 	if s3Service.LoggingBucket != "" {
 		if err = s3Service.UpdateBucketLogging(r.Context(), bucketName, s3Service.LoggingBucket, s3Service.LoggingBucketPrefix); err != nil {
 			msg := fmt.Sprintf("failed to enable logging for bucket %s: %s", bucketName, err.Error())
@@ -158,8 +168,8 @@ func (s *server) BucketCreateHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	var policy *iam.Policy
-	if policy, err = iamService.CreatePolicy(r.Context(), &iam.CreatePolicyInput{
+	var iamPolicy *iam.Policy
+	if iamPolicy, err = iamService.CreatePolicy(r.Context(), &iam.CreatePolicyInput{
 		Description:    aws.String(fmt.Sprintf("Admin policy for %s bucket", bucketName)),
 		PolicyDocument: aws.String(string(defaultPolicy)),
 		PolicyName:     aws.String(fmt.Sprintf("%s-BktAdmPlc", bucketName)),
@@ -171,7 +181,7 @@ func (s *server) BucketCreateHandler(w http.ResponseWriter, r *http.Request) {
 
 	// append policy delete to rollback tasks
 	rbfunc = func(ctx context.Context) error {
-		if err := iamService.DeletePolicy(ctx, &iam.DeletePolicyInput{PolicyArn: policy.Arn}); err != nil {
+		if err := iamService.DeletePolicy(ctx, &iam.DeletePolicyInput{PolicyArn: iamPolicy.Arn}); err != nil {
 			return err
 		}
 		return nil
@@ -200,7 +210,7 @@ func (s *server) BucketCreateHandler(w http.ResponseWriter, r *http.Request) {
 
 	if err = iamService.AttachGroupPolicy(r.Context(), &iam.AttachGroupPolicyInput{
 		GroupName: aws.String(groupName),
-		PolicyArn: policy.Arn,
+		PolicyArn: iamPolicy.Arn,
 	}); err != nil {
 		msg := fmt.Sprintf("failed to create group: %s", err.Error())
 		handleError(w, errors.Wrap(err, msg))
@@ -213,7 +223,7 @@ func (s *server) BucketCreateHandler(w http.ResponseWriter, r *http.Request) {
 		Group  *iam.Group
 	}{
 		bucketOutput.Location,
-		policy,
+		iamPolicy,
 		group,
 	}
 
@@ -235,7 +245,7 @@ func (s *server) BucketListHandler(w http.ResponseWriter, r *http.Request) {
 	vars := mux.Vars(r)
 	accountId := s.mapAccountNumber(vars["account"])
 	role := fmt.Sprintf("arn:aws:iam::%s:role/%s", accountId, s.session.RoleName)
-	policy, err := generatePolicy("rds:ListBucket")
+	policy, err := generatePolicy("s3:ListBucket")
 	if err != nil {
 		log.Errorf("cannot generate policy: %s", err)
 		w.WriteHeader(http.StatusInternalServerError)
@@ -255,7 +265,7 @@ func (s *server) BucketListHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	s3Client := s3api.NewSession(session.Session, common.Account{})
+	s3Client := s3api.NewSession(session.Session, s.account, s.mapToAccountName(accountId))
 	output, err := s3Client.ListBuckets(r.Context(), &s3.ListBucketsInput{})
 	if err != nil {
 		handleError(w, err)
@@ -283,17 +293,33 @@ func (s *server) BucketListHandler(w http.ResponseWriter, r *http.Request) {
 func (s *server) BucketHeadHandler(w http.ResponseWriter, r *http.Request) {
 	w = LogWriter{w}
 	vars := mux.Vars(r)
-	account := vars["account"]
+	accountId := s.mapAccountNumber(vars["account"])
 	bucket := vars["bucket"]
-	s3Service, ok := s.s3Services[account]
-	if !ok {
-		log.Errorf("account not found: %s", account)
-		w.WriteHeader(http.StatusNotFound)
+	role := fmt.Sprintf("arn:aws:iam::%s:role/%s", accountId, s.session.RoleName)
+	policy, err := generatePolicy("s3:ListAllMyBuckets")
+	if err != nil {
+		log.Errorf("cannot generate policy: %s", err)
+		w.WriteHeader(http.StatusInternalServerError)
 		return
 	}
 
+	session, err := s.assumeRole(
+		r.Context(),
+		s.session.ExternalID,
+		role,
+		policy,
+		"arn:aws:iam::aws:policy/AmazonS3ReadOnlyAccess",
+	)
+	if err != nil {
+		log.Errorf("failed to assume role in account: %s", accountId)
+		w.WriteHeader(http.StatusInternalServerError)
+		return
+	}
+
+	s3Client := s3api.NewSession(session.Session, s.account, s.mapToAccountName(accountId))
+
 	log.Infof("checking if bucket exists: %s", bucket)
-	exists, err := s3Service.BucketExists(r.Context(), bucket)
+	exists, err := s3Client.BucketExists(r.Context(), bucket)
 	if err != nil {
 		handleError(w, err)
 		return
@@ -316,24 +342,33 @@ func (s *server) BucketHeadHandler(w http.ResponseWriter, r *http.Request) {
 func (s *server) BucketDeleteHandler(w http.ResponseWriter, r *http.Request) {
 	w = LogWriter{w}
 	vars := mux.Vars(r)
-	account := vars["account"]
+	accountId := s.mapAccountNumber(vars["account"])
 	bucket := vars["bucket"]
 
-	s3Service, ok := s.s3Services[account]
-	if !ok {
-		log.Errorf("account not found: %s", account)
-		w.WriteHeader(http.StatusNotFound)
+	role := fmt.Sprintf("arn:aws:iam::%s:role/%s", accountId, s.session.RoleName)
+	policy, err := generatePolicy("s3:*", "iam:*")
+	if err != nil {
+		log.Errorf("cannot generate policy: %s", err)
+		w.WriteHeader(http.StatusInternalServerError)
 		return
 	}
 
-	iamService, ok := s.iamServices[account]
-	if !ok {
-		msg := fmt.Sprintf("IAM service not found for account: %s", account)
-		handleError(w, apierror.New(apierror.ErrNotFound, msg, nil))
+	session, err := s.assumeRole(
+		r.Context(),
+		s.session.ExternalID,
+		role,
+		policy,
+	)
+	if err != nil {
+		log.Errorf("failed to assume role in account: %s", accountId)
+		w.WriteHeader(http.StatusInternalServerError)
 		return
 	}
 
-	err := s3Service.DeleteEmptyBucket(r.Context(), &s3.DeleteBucketInput{Bucket: aws.String(bucket)})
+	s3Service := s3api.NewSession(session.Session, s.account, s.mapToAccountName(accountId))
+	iamService := iamapi.NewSession(session.Session, s.account)
+
+	err = s3Service.DeleteEmptyBucket(r.Context(), &s3.DeleteBucketInput{Bucket: aws.String(bucket)})
 	if err != nil {
 		handleError(w, err)
 		return
@@ -391,29 +426,45 @@ func (s *server) BucketDeleteHandler(w http.ResponseWriter, r *http.Request) {
 func (s *server) BucketShowHandler(w http.ResponseWriter, r *http.Request) {
 	w = LogWriter{w}
 	vars := mux.Vars(r)
-	account := vars["account"]
+	accountId := s.mapAccountNumber(vars["account"])
 	bucket := vars["bucket"]
 
-	s3Service, ok := s.s3Services[account]
-	if !ok {
-		log.Errorf("account not found: %s", account)
-		w.WriteHeader(http.StatusNotFound)
+	role := fmt.Sprintf("arn:aws:iam::%s:role/%s", accountId, s.session.RoleName)
+	policy, err := generatePolicy("s3:ListBucket")
+	if err != nil {
+		log.Errorf("cannot generate policy: %s", err)
+		w.WriteHeader(http.StatusInternalServerError)
 		return
 	}
 
-	tags, err := s3Service.GetBucketTags(r.Context(), bucket)
+	session, err := s.assumeRole(
+		r.Context(),
+		s.session.ExternalID,
+		role,
+		policy,
+		"arn:aws:iam::aws:policy/AmazonS3ReadOnlyAccess",
+	)
+	if err != nil {
+		log.Errorf("failed to assume role in account: %s", accountId)
+		w.WriteHeader(http.StatusInternalServerError)
+		return
+	}
+
+	s3Client := s3api.NewSession(session.Session, s.account, s.mapToAccountName(accountId))
+
+	tags, err := s3Client.GetBucketTags(r.Context(), bucket)
 	if err != nil {
 		handleError(w, err)
 		return
 	}
 
-	empty, err := s3Service.BucketEmpty(r.Context(), bucket)
+	empty, err := s3Client.BucketEmpty(r.Context(), bucket)
 	if err != nil {
 		handleError(w, err)
 		return
 	}
 
-	logging, err := s3Service.GetBucketLogging(r.Context(), bucket)
+	logging, err := s3Client.GetBucketLogging(r.Context(), bucket)
 	if err != nil {
 		handleError(w, err)
 		return
@@ -447,19 +498,35 @@ func (s *server) BucketShowHandler(w http.ResponseWriter, r *http.Request) {
 func (s *server) BucketUpdateHandler(w http.ResponseWriter, r *http.Request) {
 	w = LogWriter{w}
 	vars := mux.Vars(r)
-	account := vars["account"]
+	accountId := s.mapAccountNumber(vars["account"])
 	bucket := vars["bucket"]
-	s3Service, ok := s.s3Services[account]
-	if !ok {
-		msg := fmt.Sprintf("s3 service not found for account: %s", account)
-		handleError(w, apierror.New(apierror.ErrNotFound, msg, nil))
+	role := fmt.Sprintf("arn:aws:iam::%s:role/%s", accountId, s.session.RoleName)
+	policy, err := generatePolicy("s3:PutBucketTagging")
+	if err != nil {
+		log.Errorf("cannot generate policy: %s", err)
+		w.WriteHeader(http.StatusInternalServerError)
 		return
 	}
+
+	session, err := s.assumeRole(
+		r.Context(),
+		s.session.ExternalID,
+		role,
+		policy,
+		"arn:aws:iam::aws:policy/AmazonS3FullAccess",
+	)
+	if err != nil {
+		log.Errorf("failed to assume role in account: %s", accountId)
+		w.WriteHeader(http.StatusInternalServerError)
+		return
+	}
+
+	s3Client := s3api.NewSession(session.Session, s.account, s.mapToAccountName(accountId))
 
 	var req struct {
 		Tags []*s3.Tag
 	}
-	err := json.NewDecoder(r.Body).Decode(&req)
+	err = json.NewDecoder(r.Body).Decode(&req)
 	if err != nil {
 		msg := fmt.Sprintf("cannot decode body into update bucket input: %s", err)
 		handleError(w, apierror.New(apierror.ErrBadRequest, msg, err))
@@ -473,7 +540,7 @@ func (s *server) BucketUpdateHandler(w http.ResponseWriter, r *http.Request) {
 	})
 
 	if len(req.Tags) > 0 {
-		err = s3Service.TagBucket(r.Context(), bucket, req.Tags)
+		err = s3Client.TagBucket(r.Context(), bucket, req.Tags)
 		if err != nil {
 			msg := fmt.Sprintf("failed to tag bucket %s: %s", bucket, err.Error())
 			handleError(w, apierror.New(apierror.ErrInternalError, msg, err))
