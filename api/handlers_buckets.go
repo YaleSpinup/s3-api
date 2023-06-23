@@ -31,7 +31,6 @@ import (
 func (s *server) BucketCreateHandler(w http.ResponseWriter, r *http.Request) {
 	w = LogWriter{w}
 	vars := mux.Vars(r)
-	account := vars["account"]
 	accountId := s.mapAccountNumber(vars["account"])
 	role := fmt.Sprintf("arn:aws:iam::%s:role/%s", accountId, s.session.RoleName)
 	policy, err := generatePolicy("s3:*", "iam:*")
@@ -53,7 +52,7 @@ func (s *server) BucketCreateHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	s3Service := s3api.NewSession(session.Session, s.account)
+	s3Service := s3api.NewSession(session.Session, s.account, s.mapToAccountName(accountId))
 	iamService := iamapi.NewSession(session.Session, s.account)
 
 	var req struct {
@@ -152,9 +151,9 @@ func (s *server) BucketCreateHandler(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// enable logging access for the bucket to a central repo if the target bucket is set
-	fmt.Println("Bucket name ::::::::::::::::::::::::, ", s3Service.LoggingBucket[account])
-	if s3Service.LoggingBucket[account] != "" {
-		if err = s3Service.UpdateBucketLogging(r.Context(), bucketName, s3Service.LoggingBucket[account], s3Service.LoggingBucketPrefix[account]); err != nil {
+	fmt.Println("Bucket name ::::::::::::::::::::::::, ", s3Service.LoggingBucket)
+	if s3Service.LoggingBucket != "" {
+		if err = s3Service.UpdateBucketLogging(r.Context(), bucketName, s3Service.LoggingBucket, s3Service.LoggingBucketPrefix); err != nil {
 			msg := fmt.Sprintf("failed to enable logging for bucket %s: %s", bucketName, err.Error())
 			handleError(w, errors.Wrap(err, msg))
 			return
@@ -266,7 +265,7 @@ func (s *server) BucketListHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	s3Client := s3api.NewSession(session.Session, s.account)
+	s3Client := s3api.NewSession(session.Session, s.account, s.mapToAccountName(accountId))
 	output, err := s3Client.ListBuckets(r.Context(), &s3.ListBucketsInput{})
 	if err != nil {
 		handleError(w, err)
@@ -317,7 +316,7 @@ func (s *server) BucketHeadHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	s3Client := s3api.NewSession(session.Session, s.account)
+	s3Client := s3api.NewSession(session.Session, s.account, s.mapToAccountName(accountId))
 
 	log.Infof("checking if bucket exists: %s", bucket)
 	exists, err := s3Client.BucketExists(r.Context(), bucket)
@@ -366,7 +365,7 @@ func (s *server) BucketDeleteHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	s3Service := s3api.NewSession(session.Session, s.account)
+	s3Service := s3api.NewSession(session.Session, s.account, s.mapToAccountName(accountId))
 	iamService := iamapi.NewSession(session.Session, s.account)
 
 	err = s3Service.DeleteEmptyBucket(r.Context(), &s3.DeleteBucketInput{Bucket: aws.String(bucket)})
@@ -451,7 +450,7 @@ func (s *server) BucketShowHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	s3Client := s3api.NewSession(session.Session, s.account)
+	s3Client := s3api.NewSession(session.Session, s.account, s.mapToAccountName(accountId))
 
 	tags, err := s3Client.GetBucketTags(r.Context(), bucket)
 	if err != nil {
@@ -522,7 +521,7 @@ func (s *server) BucketUpdateHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	s3Client := s3api.NewSession(session.Session, s.account)
+	s3Client := s3api.NewSession(session.Session, s.account, s.mapToAccountName(accountId))
 
 	var req struct {
 		Tags []*s3.Tag
