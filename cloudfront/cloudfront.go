@@ -26,6 +26,7 @@ type CloudFront struct {
 // NewSession creates a new cloudfront session
 func NewSession(sess *session.Session, account common.Account, accountId string) CloudFront {
 	c := CloudFront{}
+	cnf := aws.Config{}
 
 	if sess == nil {
 		log.Infof("creating new aws session for cloudfront in account %s with key id %s in region %s", accountId, account.Akid, account.Region)
@@ -33,19 +34,19 @@ func NewSession(sess *session.Session, account common.Account, accountId string)
 			Credentials: credentials.NewStaticCredentials(account.Akid, account.Secret, ""),
 			Region:      aws.String(account.Region),
 		}))
+
+		cnf = aws.Config{
+			Credentials: stscreds.NewCredentials(
+				sess,
+				fmt.Sprintf("arn:aws:iam::%s:role/%s", accountId, account.Role),
+				func(p *stscreds.AssumeRoleProvider) {
+					p.ExternalID = aws.String(account.ExternalId)
+				},
+			),
+		}
 	}
 
-	cnf := &aws.Config{
-		Credentials: stscreds.NewCredentials(
-			sess,
-			fmt.Sprintf("arn:aws:iam::%s:role/%s", accountId, account.Role),
-			func(p *stscreds.AssumeRoleProvider) {
-				p.ExternalID = aws.String(account.ExternalId)
-			},
-		),
-	}
-
-	c.Service = cloudfront.New(sess, cnf)
+	c.Service = cloudfront.New(sess, &cnf)
 	c.Domains = account.Domains
 	c.WebsiteEndpoint = "s3-website-" + account.Region + ".amazonaws.com"
 
