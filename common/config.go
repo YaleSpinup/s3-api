@@ -26,7 +26,7 @@ type Account struct {
 	Region                               string
 	Akid                                 string
 	Secret                               string
-	ExternalID                           string
+	ExternalId                           string
 	Role                                 string
 	DefaultS3BucketActions               []string
 	DefaultS3ObjectActions               []string

@@ -65,7 +65,7 @@ func (s *server) CreateWebsiteHandler(w http.ResponseWriter, r *http.Request) {
 
 	s3Service := s3api.NewSession(session.Session, s.account, s.mapToAccountName(accountId))
 	iamService := iamapi.NewSession(session.Session, s.account)
-	cloudFrontService := cfapi.NewSession(session.Session, s.account)
+	cloudFrontService := cfapi.NewSession(session.Session, s.account, accountId)
 	route53Service := route53api.NewSession(session.Session, s.account)
 
 	var req struct {
@@ -451,7 +451,7 @@ func (s *server) WebsiteShowHandler(w http.ResponseWriter, r *http.Request) {
 	}
 
 	s3Service := s3api.NewSession(session.Session, s.account, s.mapToAccountName(accountId))
-	cloudFrontService := cfapi.NewSession(session.Session, s.account)
+	cloudFrontService := cfapi.NewSession(session.Session, s.account, accountId)
 	route53Service := route53api.NewSession(session.Session, s.account)
 
 	// get the tags on the bucket backing the website
@@ -583,7 +583,7 @@ func (s *server) WebsiteDeleteHandler(w http.ResponseWriter, r *http.Request) {
 
 	s3Service := s3api.NewSession(session.Session, s.account, s.mapToAccountName(accountId))
 	iamService := iamapi.NewSession(session.Session, s.account)
-	cloudFrontService := cfapi.NewSession(session.Session, s.account)
+	cloudFrontService := cfapi.NewSession(session.Session, s.account, accountId)
 	route53Service := route53api.NewSession(session.Session, s.account)
 
 	domain, err := cloudFrontService.WebsiteDomain(website)
@@ -783,7 +783,7 @@ func (s *server) WebsitePartialUpdateHandler(w http.ResponseWriter, r *http.Requ
 		return
 	}
 
-	cloudFrontService := cfapi.NewSession(session.Session, s.account)
+	cloudFrontService := cfapi.NewSession(session.Session, s.account, accountId)
 
 	var req struct {
 		CacheInvalidation []string
@@ -849,7 +849,7 @@ func (s *server) WebsiteUpdateHandler(w http.ResponseWriter, r *http.Request) {
 	}
 
 	s3Service := s3api.NewSession(session.Session, s.account, s.mapToAccountName(accountId))
-	cloudFrontService := cfapi.NewSession(session.Session, s.account)
+	cloudFrontService := cfapi.NewSession(session.Session, s.account, accountId)
 
 	var req struct {
 		Tags []*s3.Tag

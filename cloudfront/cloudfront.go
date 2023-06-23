@@ -2,6 +2,8 @@ package cloudfront
 
 import (
 	"errors"
+	"fmt"
+	"github.com/aws/aws-sdk-go/aws/credentials/stscreds"
 	"strings"
 
 	"github.com/YaleSpinup/s3-api/common"
@@ -22,18 +24,31 @@ type CloudFront struct {
 }
 
 // NewSession creates a new cloudfront session
-func NewSession(sess *session.Session, account common.Account) CloudFront {
+func NewSession(sess *session.Session, account common.Account, accountId string) CloudFront {
 	c := CloudFront{}
+
 	if sess == nil {
-		log.Infof("creating new aws session for cloudfront with key id %s in region %s", account.Akid, account.Region)
+		log.Infof("creating new aws session for cloudfront in account %s with key id %s in region %s", accountId, account.Akid, account.Region)
 		sess = session.Must(session.NewSession(&aws.Config{
 			Credentials: credentials.NewStaticCredentials(account.Akid, account.Secret, ""),
 			Region:      aws.String(account.Region),
 		}))
 	}
-	c.Service = cloudfront.New(sess)
+
+	cnf := &aws.Config{
+		Credentials: stscreds.NewCredentials(
+			sess,
+			fmt.Sprintf("arn:aws:iam::%s:role/%s", accountId, account.Role),
+			func(p *stscreds.AssumeRoleProvider) {
+				p.ExternalID = aws.String(account.ExternalId)
+			},
+		),
+	}
+
+	c.Service = cloudfront.New(sess, cnf)
 	c.Domains = account.Domains
 	c.WebsiteEndpoint = "s3-website-" + account.Region + ".amazonaws.com"
+
 	return c
 }
 
