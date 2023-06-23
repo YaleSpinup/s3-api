@@ -42,7 +42,6 @@ import (
 func (s *server) CreateWebsiteHandler(w http.ResponseWriter, r *http.Request) {
 	w = LogWriter{w}
 	vars := mux.Vars(r)
-	account := vars["account"]
 	accountId := s.mapAccountNumber(vars["account"])
 	role := fmt.Sprintf("arn:aws:iam::%s:role/%s", accountId, s.session.RoleName)
 	policy, err := generatePolicy("s3:*", "iam:*", "cloudfront:*", "route53:*")
@@ -64,9 +63,9 @@ func (s *server) CreateWebsiteHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	s3Service := s3api.NewSession(session.Session, s.account)
+	s3Service := s3api.NewSession(session.Session, s.account, s.mapToAccountName(accountId))
 	iamService := iamapi.NewSession(session.Session, s.account)
-	cloudFrontService := cfapi.NewSession(session.Session, s.account)
+	cloudFrontService := cfapi.NewSession(session.Session, s.account, accountId)
 	route53Service := route53api.NewSession(session.Session, s.account)
 
 	var req struct {
@@ -180,8 +179,8 @@ func (s *server) CreateWebsiteHandler(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// enable logging access for the website/bucket to a central repo
-	if s3Service.LoggingBucket[account] != "" {
-		if err = s3Service.UpdateBucketLogging(r.Context(), bucketName, s3Service.LoggingBucket[account], s3Service.LoggingBucketPrefix[account]); err != nil {
+	if s3Service.LoggingBucket != "" {
+		if err = s3Service.UpdateBucketLogging(r.Context(), bucketName, s3Service.LoggingBucket, s3Service.LoggingBucketPrefix); err != nil {
 			msg := fmt.Sprintf("failed to enable logging for bucket %s: %s", bucketName, err.Error())
 			handleError(w, errors.Wrap(err, msg))
 			return
@@ -451,8 +450,8 @@ func (s *server) WebsiteShowHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	s3Service := s3api.NewSession(session.Session, s.account)
-	cloudFrontService := cfapi.NewSession(session.Session, s.account)
+	s3Service := s3api.NewSession(session.Session, s.account, s.mapToAccountName(accountId))
+	cloudFrontService := cfapi.NewSession(session.Session, s.account, accountId)
 	route53Service := route53api.NewSession(session.Session, s.account)
 
 	// get the tags on the bucket backing the website
@@ -582,9 +581,9 @@ func (s *server) WebsiteDeleteHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	s3Service := s3api.NewSession(session.Session, s.account)
+	s3Service := s3api.NewSession(session.Session, s.account, s.mapToAccountName(accountId))
 	iamService := iamapi.NewSession(session.Session, s.account)
-	cloudFrontService := cfapi.NewSession(session.Session, s.account)
+	cloudFrontService := cfapi.NewSession(session.Session, s.account, accountId)
 	route53Service := route53api.NewSession(session.Session, s.account)
 
 	domain, err := cloudFrontService.WebsiteDomain(website)
@@ -784,7 +783,7 @@ func (s *server) WebsitePartialUpdateHandler(w http.ResponseWriter, r *http.Requ
 		return
 	}
 
-	cloudFrontService := cfapi.NewSession(session.Session, s.account)
+	cloudFrontService := cfapi.NewSession(session.Session, s.account, accountId)
 
 	var req struct {
 		CacheInvalidation []string
@@ -849,8 +848,8 @@ func (s *server) WebsiteUpdateHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	s3Service := s3api.NewSession(session.Session, s.account)
-	cloudFrontService := cfapi.NewSession(session.Session, s.account)
+	s3Service := s3api.NewSession(session.Session, s.account, s.mapToAccountName(accountId))
+	cloudFrontService := cfapi.NewSession(session.Session, s.account, accountId)
 
 	var req struct {
 		Tags []*s3.Tag

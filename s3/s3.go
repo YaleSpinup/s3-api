@@ -13,12 +13,12 @@ import (
 // S3 is a wrapper around the aws S3 service with some default config info
 type S3 struct {
 	Service             s3iface.S3API
-	LoggingBucket       map[string]string
-	LoggingBucketPrefix map[string]string
+	LoggingBucket       string
+	LoggingBucketPrefix string
 }
 
 // NewSession creates a new S3 session
-func NewSession(sess *session.Session, account common.Account) S3 {
+func NewSession(sess *session.Session, account common.Account, accountId string) S3 {
 	if sess == nil {
 		config := aws.Config{
 			Credentials: credentials.NewStaticCredentials(account.Akid, account.Secret, ""),
@@ -34,14 +34,11 @@ func NewSession(sess *session.Session, account common.Account) S3 {
 
 	s := S3{}
 	s.Service = s3.New(sess)
-	if len(account.AccessLog) != 0 {
-		s.LoggingBucket = make(map[string]string)
-		s.LoggingBucketPrefix = make(map[string]string)
-		for account, accesslog := range account.AccessLog {
-			s.LoggingBucket[account] = accesslog.Bucket
-			s.LoggingBucketPrefix[account] = accesslog.Prefix
 
-		}
+	if account.AccessLog != (common.AccessLog{}) {
+		s.LoggingBucket = account.AccessLog.GetBucket(accountId)
+		s.LoggingBucketPrefix = account.AccessLog.Prefix
 	}
+
 	return s
 }

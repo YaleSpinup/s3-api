@@ -134,7 +134,6 @@ func NewSession(sess *session.Session, account common.Account) IAM {
 
 	i := IAM{}
 	i.Service = iam.New(sess)
-	fmt.Println("heloooooooooo", account.DefaultS3BucketActions)
 	i.DefaultS3BucketActions = account.DefaultS3BucketActions
 	i.DefaultS3ObjectActions = account.DefaultS3ObjectActions
 	i.DefaultCloudfrontDistributionActions = account.DefaultCloudfrontDistributionActions
@@ -304,16 +303,17 @@ func (i *IAM) DefaultWebAdminPolicy(distributionArn *string) ([]byte, error) {
 }
 
 // DefaultWebsiteAccessPolicy generated the default website access policy statement for s3 websites
-//   {
-//     "Version":"2012-10-17",
-//     "Statement":[{
-// 	     "Sid":"PublicReadGetObject",
-// 		 "Effect":"Allow",
-// 	     "Principal": "*",
-// 	     "Action":["s3:GetObject"],
-// 	     "Resource":["arn:aws:s3:::example-bucket/*"]
-//     }]
-//   }
+//
+//	  {
+//	    "Version":"2012-10-17",
+//	    "Statement":[{
+//		     "Sid":"PublicReadGetObject",
+//			 "Effect":"Allow",
+//		     "Principal": "*",
+//		     "Action":["s3:GetObject"],
+//		     "Resource":["arn:aws:s3:::example-bucket/*"]
+//	    }]
+//	  }
 func (i *IAM) DefaultWebsiteAccessPolicy(bucket *string) ([]byte, error) {
 	b := aws.StringValue(bucket)
 	log.Debugf("generating default bucket website policy for %s", b)

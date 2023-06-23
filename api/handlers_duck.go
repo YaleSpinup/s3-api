@@ -40,7 +40,7 @@ func (s *server) BucketDuck(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	_ = s3api.NewSession(session.Session, s.account)
+	_ = s3api.NewSession(session.Session, s.account, s.mapToAccountName(accountId))
 
 	if bucket == "" {
 		bucket = website
