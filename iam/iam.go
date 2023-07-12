@@ -101,7 +101,10 @@ type PolicyStatement struct {
 	Principal string `json:",omitempty"`
 	Action    []string
 	Resource  []string
+	Condition map[string]PolicyCondition
 }
+
+type PolicyCondition map[string]string
 
 // PolicyDoc collects the policy statements
 type PolicyDoc struct {
@@ -141,27 +144,49 @@ func NewSession(sess *session.Session, account common.Account) IAM {
 	return i
 }
 
+func (i *IAM) GetPathPolicyCondition(path string) map[string]PolicyCondition {
+	return map[string]PolicyCondition{
+		"StringLike": {
+			"s3:prefix": fmt.Sprintf("%s/*", path),
+		},
+	}
+}
+
 // ReadOnlyBucketPolicy generates the read-only bucket policy
-func (i *IAM) ReadOnlyBucketPolicy(bucket string) ([]byte, error) {
+func (i *IAM) ReadOnlyBucketPolicy(bucket string, path string) ([]byte, error) {
 
 	log.Infof("generating read-only bucket policy document for %s", bucket)
 
-	policyDoc, err := json.Marshal(PolicyDoc{
-		Version: "2012-10-17",
-		Statement: []PolicyStatement{
-			{
-				Effect:   "Allow",
-				Action:   BucketReadPolicy,
-				Resource: []string{fmt.Sprintf("arn:aws:s3:::%s", bucket)},
-			},
-			{
-				Effect:   "Allow",
-				Action:   ObjectReadPolicy,
-				Resource: []string{fmt.Sprintf("arn:aws:s3:::%s/*", bucket)},
-			},
+	bucketStatements := []PolicyStatement{
+		{
+			Effect:   "Allow",
+			Action:   BucketReadPolicy,
+			Resource: []string{fmt.Sprintf("arn:aws:s3:::%s", bucket)},
 		},
-	})
+	}
 
+	objectResource := []string{fmt.Sprintf("arn:aws:s3:::%s/*", bucket)}
+
+	if path != "" {
+		for _, bucketStatement := range bucketStatements {
+			bucketStatement.Condition = i.GetPathPolicyCondition(path)
+
+			objectResource = []string{fmt.Sprintf("arn:aws:s3:::%s/%s/*", bucket, path)}
+		}
+	}
+
+	objectStatements := []PolicyStatement{
+		{
+			Effect:   "Allow",
+			Action:   ObjectReadPolicy,
+			Resource: objectResource,
+		},
+	}
+
+	policyDoc, err := json.Marshal(PolicyDoc{
+		Version:   "2012-10-17",
+		Statement: append(bucketStatements, objectStatements...),
+	})
 	if err != nil {
 		log.Errorf("failed to generate read-only bucket policy for %s: %s", bucket, err)
 		return []byte{}, err
@@ -173,31 +198,45 @@ func (i *IAM) ReadOnlyBucketPolicy(bucket string) ([]byte, error) {
 }
 
 // ReadWriteBucketPolicy generates the read-write bucket policy
-func (i *IAM) ReadWriteBucketPolicy(bucket string) ([]byte, error) {
+func (i *IAM) ReadWriteBucketPolicy(bucket string, path string) ([]byte, error) {
 
 	log.Infof("generating read-write bucket policy document for %s", bucket)
 
-	policyDoc, err := json.Marshal(PolicyDoc{
-		Version: "2012-10-17",
-		Statement: []PolicyStatement{
-			{
-				Effect:   "Allow",
-				Action:   BucketReadPolicy,
-				Resource: []string{fmt.Sprintf("arn:aws:s3:::%s", bucket)},
-			},
-			{
-				Effect:   "Allow",
-				Action:   ObjectReadPolicy,
-				Resource: []string{fmt.Sprintf("arn:aws:s3:::%s/*", bucket)},
-			},
-			{
-				Effect:   "Allow",
-				Action:   ObjectWritePolicy,
-				Resource: []string{fmt.Sprintf("arn:aws:s3:::%s/*", bucket)},
-			},
+	bucketStatements := []PolicyStatement{
+		{
+			Effect:   "Allow",
+			Action:   BucketReadPolicy,
+			Resource: []string{fmt.Sprintf("arn:aws:s3:::%s", bucket)},
 		},
-	})
+	}
 
+	objectResource := []string{fmt.Sprintf("arn:aws:s3:::%s/*", bucket)}
+
+	if path != "" {
+		for _, bucketStatement := range bucketStatements {
+			bucketStatement.Condition = i.GetPathPolicyCondition(path)
+		}
+
+		objectResource = []string{fmt.Sprintf("arn:aws:s3:::%s/%s/*", bucket, path)}
+	}
+
+	objectStatements := []PolicyStatement{
+		{
+			Effect:   "Allow",
+			Action:   ObjectReadPolicy,
+			Resource: objectResource,
+		},
+		{
+			Effect:   "Allow",
+			Action:   ObjectWritePolicy,
+			Resource: objectResource,
+		},
+	}
+
+	policyDoc, err := json.Marshal(PolicyDoc{
+		Version:   "2012-10-17",
+		Statement: append(bucketStatements, objectStatements...),
+	})
 	if err != nil {
 		log.Errorf("failed to generate read-write bucket policy for %s: %s", bucket, err)
 		return []byte{}, err
@@ -209,36 +248,50 @@ func (i *IAM) ReadWriteBucketPolicy(bucket string) ([]byte, error) {
 }
 
 // AdminBucketPolicy generates the administrative bucket policy
-func (i *IAM) AdminBucketPolicy(bucket string) ([]byte, error) {
+func (i *IAM) AdminBucketPolicy(bucket string, path string) ([]byte, error) {
 
 	log.Infof("generating administrative bucket policy document for %s", bucket)
 
-	policyDoc, err := json.Marshal(PolicyDoc{
-		Version: "2012-10-17",
-		Statement: []PolicyStatement{
-			{
-				Effect:   "Allow",
-				Action:   BucketAdminPolicy,
-				Resource: []string{fmt.Sprintf("arn:aws:s3:::%s", bucket)},
-			},
-			{
-				Effect:   "Allow",
-				Action:   BucketReadPolicy,
-				Resource: []string{fmt.Sprintf("arn:aws:s3:::%s", bucket)},
-			},
-			{
-				Effect:   "Allow",
-				Action:   ObjectReadPolicy,
-				Resource: []string{fmt.Sprintf("arn:aws:s3:::%s/*", bucket)},
-			},
-			{
-				Effect:   "Allow",
-				Action:   ObjectWritePolicy,
-				Resource: []string{fmt.Sprintf("arn:aws:s3:::%s/*", bucket)},
-			},
+	bucketStatements := []PolicyStatement{
+		{
+			Effect:   "Allow",
+			Action:   BucketAdminPolicy,
+			Resource: []string{fmt.Sprintf("arn:aws:s3:::%s", bucket)},
 		},
-	})
+		{
+			Effect:   "Allow",
+			Action:   BucketReadPolicy,
+			Resource: []string{fmt.Sprintf("arn:aws:s3:::%s", bucket)},
+		},
+	}
 
+	objectResource := []string{fmt.Sprintf("arn:aws:s3:::%s/*", bucket)}
+
+	if path != "" {
+		for _, bucketStatement := range bucketStatements {
+			bucketStatement.Condition = i.GetPathPolicyCondition(path)
+		}
+
+		objectResource = []string{fmt.Sprintf("arn:aws:s3:::%s/%s/*", bucket, path)}
+	}
+
+	objectStatements := []PolicyStatement{
+		{
+			Effect:   "Allow",
+			Action:   ObjectReadPolicy,
+			Resource: objectResource,
+		},
+		{
+			Effect:   "Allow",
+			Action:   ObjectWritePolicy,
+			Resource: objectResource,
+		},
+	}
+
+	policyDoc, err := json.Marshal(PolicyDoc{
+		Version:   "2012-10-17",
+		Statement: append(bucketStatements, objectStatements...),
+	})
 	if err != nil {
 		log.Errorf("failed to generate read-write bucket policy for %s: %s", bucket, err)
 		return []byte{}, err

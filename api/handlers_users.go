@@ -50,6 +50,7 @@ func (s *server) UserCreateHandler(w http.ResponseWriter, r *http.Request) {
 
 	var req struct {
 		User   *iam.CreateUserInput
+		Path   string
 		Groups []string
 	}
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
@@ -108,12 +109,19 @@ func (s *server) UserCreateHandler(w http.ResponseWriter, r *http.Request) {
 	rollBackTasks = append(rollBackTasks, rbfunc)
 
 	for _, group := range req.Groups {
-		groupName := fmt.Sprintf("%s-%s", bucket, group)
+		namePath := "root"
+
+		if req.Path != "" {
+			namePath = req.Path
+		}
+
+		groupName := fmt.Sprintf("%s-%s-%s", bucket, namePath, group)
+
 		_, err = iamService.GetGroup(r.Context(), groupName)
 		if err != nil {
 			if aerr, ok := err.(apierror.Error); ok && aerr.Code == apierror.ErrNotFound {
 				var rbTasks []rollbackFunc
-				rbTasks, err = s.CreateBucketGroupPolicy(r.Context(), iamService, bucket, group)
+				rbTasks, err = s.CreateBucketGroupPolicy(r.Context(), iamService, bucket, group, req.Path)
 				if err != nil {
 					handleError(w, err)
 					return

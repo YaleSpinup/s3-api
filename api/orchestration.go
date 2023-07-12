@@ -13,7 +13,7 @@ import (
 // CreateBucketGroupPolicy expects an acount, bucket name and the group name (without the bucket prefix).  It verifies the group
 // is one of our supported types and then generates a policy doc for the group and bucket.  Finally, it creates the group
 // and attaches the policy.  It returns a rollback function and will rollback itself if it encounters an error.
-func (s *server) CreateBucketGroupPolicy(ctx context.Context, iamService iamapi.IAM, bucket, group string) ([]rollbackFunc, error) {
+func (s *server) CreateBucketGroupPolicy(ctx context.Context, iamService iamapi.IAM, bucket, group string, path string) ([]rollbackFunc, error) {
 	var err error
 	var rollBackTasks []rollbackFunc
 	defer func() {
@@ -30,19 +30,19 @@ func (s *server) CreateBucketGroupPolicy(ctx context.Context, iamService iamapi.
 	case "BktAdmGrp":
 		policyName = fmt.Sprintf("%s-BktAdmPlc", bucket)
 		policyDescription = fmt.Sprintf("Admin policy for %s bucket", bucket)
-		if policyDocument, err = iamService.AdminBucketPolicy(bucket); err != nil {
+		if policyDocument, err = iamService.AdminBucketPolicy(bucket, path); err != nil {
 			return rollBackTasks, err
 		}
 	case "BktRWGrp":
 		policyName = fmt.Sprintf("%s-BktRWPlc", bucket)
 		policyDescription = fmt.Sprintf("Read-Write policy for %s bucket", bucket)
-		if policyDocument, err = iamService.ReadWriteBucketPolicy(bucket); err != nil {
+		if policyDocument, err = iamService.ReadWriteBucketPolicy(bucket, path); err != nil {
 			return rollBackTasks, err
 		}
 	case "BktROGrp":
 		policyName = fmt.Sprintf("%s-BktROPlc", bucket)
 		policyDescription = fmt.Sprintf("Read-Only policy for %s bucket", bucket)
-		if policyDocument, err = iamService.ReadOnlyBucketPolicy(bucket); err != nil {
+		if policyDocument, err = iamService.ReadOnlyBucketPolicy(bucket, path); err != nil {
 			return rollBackTasks, err
 		}
 	default:
