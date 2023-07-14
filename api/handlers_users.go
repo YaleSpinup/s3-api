@@ -24,7 +24,6 @@ func (s *server) UserCreateHandler(w http.ResponseWriter, r *http.Request) {
 	w = LogWriter{w}
 	vars := mux.Vars(r)
 	bucket := vars["bucket"]
-
 	accountId := s.mapAccountNumber(vars["account"])
 
 	role := fmt.Sprintf("arn:aws:iam::%s:role/%s", accountId, s.session.RoleName)
@@ -108,26 +107,6 @@ func (s *server) UserCreateHandler(w http.ResponseWriter, r *http.Request) {
 	}
 	rollBackTasks = append(rollBackTasks, rbfunc)
 
-	var keyOutput *iam.CreateAccessKeyOutput
-	keyOutput, err = iamService.CreateAccessKey(r.Context(), &iam.CreateAccessKeyInput{UserName: userOutput.User.UserName})
-	if err != nil {
-		msg := fmt.Sprintf("failed to create access key for user: %s, bucket %s", aws.StringValue(userOutput.User.UserName), bucket)
-		handleError(w, errors.Wrap(err, msg))
-		return
-	}
-
-	// append access key delete to rollback tasks
-	rbfunc = func(ctx context.Context) error {
-		if err := iamService.DeleteAccessKey(ctx, &iam.DeleteAccessKeyInput{
-			UserName:    keyOutput.AccessKey.UserName,
-			AccessKeyId: keyOutput.AccessKey.AccessKeyId,
-		}); err != nil {
-			return err
-		}
-		return nil
-	}
-	rollBackTasks = append(rollBackTasks, rbfunc)
-
 	for _, group := range req.Groups {
 		groupName := fmt.Sprintf("%s-%s", bucket, group)
 		_, err = iamService.GetGroup(r.Context(), groupName)
@@ -158,7 +137,7 @@ func (s *server) UserCreateHandler(w http.ResponseWriter, r *http.Request) {
 		// append detach group to rollback funciton
 		rbfunc = func(ctx context.Context) error {
 			if err := iamService.RemoveUserFromGroup(ctx, &iam.RemoveUserFromGroupInput{
-				UserName:  keyOutput.AccessKey.UserName,
+				UserName:  userOutput.User.UserName,
 				GroupName: aws.String(groupName),
 			}); err != nil {
 				return err
@@ -169,11 +148,9 @@ func (s *server) UserCreateHandler(w http.ResponseWriter, r *http.Request) {
 	}
 
 	output := struct {
-		User      *iam.User
-		AccessKey *iam.AccessKey
+		User *iam.User
 	}{
 		userOutput.User,
-		keyOutput.AccessKey,
 	}
 
 	j, err := json.Marshal(output)
