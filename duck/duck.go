@@ -2,6 +2,7 @@ package duck
 
 import (
 	"fmt"
+	"github.com/YaleSpinup/s3-api/iam"
 
 	"github.com/groob/plist"
 	log "github.com/sirupsen/logrus"
@@ -17,14 +18,23 @@ type DotDuck struct {
 	WebURL   string `plist:"Web URL"`
 }
 
-func DefaultDuck(name string) *DotDuck {
+func DefaultDuck(name string, path string) *DotDuck {
+	fmtPath := fmt.Sprintf("/%s", name)
+	fmtNickname := fmt.Sprintf("Spinup - %s", name)
+
+	if path != "/" {
+		path = iam.RemoveCappingSlashes(path)
+		fmtPath = fmt.Sprintf("/%s/%s", name, path)
+		fmtNickname = fmt.Sprintf("Spinup - %s/%s", name, path)
+	}
+
 	return &DotDuck{
 		Protocol: "s3",
 		Provider: "iterate GmbH",
-		Nickname: fmt.Sprintf("Spinup - %s", name),
+		Nickname: fmtNickname,
 		Hostname: "s3.amazonaws.com",
 		Port:     "443",
-		Path:     fmt.Sprintf("/%s", name),
+		Path:     fmtPath,
 		WebURL:   fmt.Sprintf("s3://%s/", name),
 	}
 }

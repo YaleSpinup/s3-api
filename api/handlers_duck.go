@@ -18,6 +18,12 @@ func (s *server) BucketDuck(w http.ResponseWriter, r *http.Request) {
 	accountId := s.mapAccountNumber(vars["account"])
 	bucket := vars["bucket"]
 	website := vars["website"]
+	path := r.URL.Query().Get("path")
+
+	log.Debugf("bucket duck path: %s", path)
+	if path == "" {
+		path = "/"
+	}
 
 	role := fmt.Sprintf("arn:aws:iam::%s:role/%s", accountId, s.session.RoleName)
 	policy, err := generatePolicy("s3:ListBucket")
@@ -46,7 +52,7 @@ func (s *server) BucketDuck(w http.ResponseWriter, r *http.Request) {
 		bucket = website
 	}
 
-	doc, err := duck.DefaultDuck(bucket).Generate()
+	doc, err := duck.DefaultDuck(bucket, path).Generate()
 	if err != nil {
 		handleError(w, apierror.New(apierror.ErrInternalError, "duck! failed to generate", err))
 	}
