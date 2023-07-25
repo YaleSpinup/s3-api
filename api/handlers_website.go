@@ -653,7 +653,6 @@ func (s *server) WebsiteDeleteHandler(w http.ResponseWriter, r *http.Request) {
 	for _, foundGroup := range foundGroups {
 		groupName := aws.StringValue(foundGroup.GroupName)
 		groupNames = append(groupNames, groupName)
-		log.Infof("found group name: %s", aws.StringValue(foundGroup.GroupName))
 
 		policies, err := iamService.ListGroupPolicies(r.Context(), &iam.ListAttachedGroupPoliciesInput{GroupName: aws.String(groupName)})
 		if err != nil {

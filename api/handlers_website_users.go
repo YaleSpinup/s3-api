@@ -143,7 +143,7 @@ func (s *server) WebsiteUserCreateHandler(w http.ResponseWriter, r *http.Request
 
 		if path == "/" && group == "BktAdmGrp" {
 			webGroupName := iamapi.FormatGroupName(website, path, "WebAdmGrp")
-			log.Infof("web group name: %s", webGroupName)
+
 			if err = iamService.AddUserToGroup(r.Context(), &iam.AddUserToGroupInput{
 				UserName:  userOutput.User.UserName,
 				GroupName: aws.String(webGroupName),

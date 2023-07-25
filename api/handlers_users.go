@@ -399,7 +399,6 @@ func (s *server) UserListHandler(w http.ResponseWriter, r *http.Request) {
 
 	for _, foundGroup := range foundGroups {
 		u, err := iamService.ListGroupUsers(r.Context(), &iam.GetGroupInput{GroupName: foundGroup.GroupName})
-		log.Infof("%v+", u)
 		if err != nil {
 			log.Warnf("error listing bucket %s group %s users %s", bucket, aws.StringValue(foundGroup.GroupName), err)
 			continue

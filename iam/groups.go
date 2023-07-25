@@ -133,11 +133,11 @@ func (i *IAM) ListGroups(ctx context.Context, input *iam.ListGroupsInput, bucket
 		return []*iam.Group{}, apierror.New(apierror.ErrInternalError, "unknown error", err)
 	}
 
-	log.Infof("listing iam groups for account %+v", groups)
+	log.Debugf("listing iam groups for account %+v", groups)
 	var outGroups []*iam.Group
 
 	for _, group := range groups.Groups {
-		log.Infof("checking if %s contains %s", aws.StringValue(group.GroupName), bucket)
+		log.Debugf("checking if %s contains %s", aws.StringValue(group.GroupName), bucket)
 		if strings.Contains(aws.StringValue(group.GroupName), bucket) {
 			outGroups = append(outGroups, group)
 		}
