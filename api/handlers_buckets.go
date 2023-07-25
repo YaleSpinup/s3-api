@@ -406,6 +406,22 @@ func (s *server) BucketDeleteHandler(w http.ResponseWriter, r *http.Request) {
 		}
 
 		for _, u := range users {
+			// get a users access keys
+			keys, err := iamService.ListAccessKeys(r.Context(), &iam.ListAccessKeysInput{UserName: u.UserName})
+			if err != nil {
+				handleError(w, err)
+				return
+			}
+
+			// delete the access keys
+			for _, k := range keys {
+				err = iamService.DeleteAccessKey(r.Context(), &iam.DeleteAccessKeyInput{UserName: u.UserName, AccessKeyId: k.AccessKeyId})
+				if err != nil {
+					handleError(w, err)
+					return
+				}
+			}
+
 			if err := iamService.RemoveUserFromGroup(r.Context(), &iam.RemoveUserFromGroupInput{UserName: u.UserName, GroupName: aws.String(groupName)}); err != nil {
 				log.Warnf("failed to remove user %s from group %s when deleting bucket %s: %s", aws.StringValue(u.UserName), groupName, bucket, err)
 			}
@@ -414,6 +430,18 @@ func (s *server) BucketDeleteHandler(w http.ResponseWriter, r *http.Request) {
 		if err := iamService.DeleteGroup(r.Context(), &iam.DeleteGroupInput{GroupName: aws.String(groupName)}); err != nil {
 			log.Warnf("failed to delete group %s when deleting bucket %s: %s", groupName, bucket, err)
 			continue
+		}
+
+		for _, u := range users {
+			_, err := iamService.GetUser(r.Context(), &iam.GetUserInput{
+				UserName: u.UserName,
+			})
+			if err == nil {
+				err = iamService.DeleteUser(r.Context(), &iam.DeleteUserInput{UserName: u.UserName})
+				if err != nil {
+					log.Warnf("failed to delete user: %s, %s", aws.StringValue(u.UserName), err)
+				}
+			}
 		}
 	}
 

@@ -364,10 +364,9 @@ func (s *server) UserUpdateKeyHandler(w http.ResponseWriter, r *http.Request) {
 func (s *server) UserListHandler(w http.ResponseWriter, r *http.Request) {
 	w = LogWriter{w}
 	vars := mux.Vars(r)
-	//account := vars["account"]
 	bucket := vars["bucket"]
 	accountId := s.mapAccountNumber(vars["account"])
-	print("acccccccccc", accountId)
+
 	role := fmt.Sprintf("arn:aws:iam::%s:role/%s", accountId, s.session.RoleName)
 	policy, err := generatePolicy("s3:Get*", "iam:*")
 	if err != nil {
@@ -392,13 +391,17 @@ func (s *server) UserListHandler(w http.ResponseWriter, r *http.Request) {
 	// iamService, _ = s.iamServices[vars["account"]]
 
 	// TODO check if bucket exists and fail if it doesn't?
-
 	users := []*iam.User{}
-	for _, g := range []string{"BktAdmGrp", "BktRWGrp", "BktROGrp"} {
-		groupName := fmt.Sprintf("%s-%s", bucket, g)
-		u, err := iamService.ListGroupUsers(r.Context(), &iam.GetGroupInput{GroupName: aws.String(groupName)})
+	foundGroups, err := iamService.ListGroups(r.Context(), &iam.ListGroupsInput{MaxItems: aws.Int64(1000)}, bucket)
+	if err != nil {
+		log.Errorf("there was an error listing groups %s", err)
+	}
+
+	for _, foundGroup := range foundGroups {
+		u, err := iamService.ListGroupUsers(r.Context(), &iam.GetGroupInput{GroupName: foundGroup.GroupName})
+		log.Infof("%v+", u)
 		if err != nil {
-			log.Warnf("error listing bucket %s group %s users %s", bucket, groupName, err)
+			log.Warnf("error listing bucket %s group %s users %s", bucket, aws.StringValue(foundGroup.GroupName), err)
 			continue
 		}
 		users = append(users, u...)

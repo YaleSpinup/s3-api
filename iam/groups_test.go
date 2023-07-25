@@ -38,6 +38,100 @@ var testGroupPolicy3 = iam.AttachedPolicy{
 
 var testGroupPolicies1 = []*iam.AttachedPolicy{&testGroupPolicy1, &testGroupPolicy2, &testGroupPolicy3}
 
+type TestFormatGroupNameInput struct {
+	Base  string
+	Path  string
+	Group string
+}
+
+type TestFormatGroupNameExpected string
+type TestFormatGroupNameSet struct {
+	Input    TestFormatGroupNameInput
+	Expected TestFormatGroupNameExpected
+}
+
+var testFormatGroupNameInputs = []TestFormatGroupNameSet{
+	{
+		Input: TestFormatGroupNameInput{
+			Base:  "testwebsite.yalepages.org",
+			Path:  "/",
+			Group: "BktAdmGrp",
+		},
+		Expected: "testwebsite.yalepages.org-BktAdmGrp",
+	},
+	{
+		Input: TestFormatGroupNameInput{
+			Base:  "thesite.yalepages.org",
+			Path:  "/spinup",
+			Group: "BktAdmGrp",
+		},
+		Expected: "thesite.yalepages.org-spinup-BktAdmGrp",
+	},
+	{
+		Input: TestFormatGroupNameInput{
+			Base:  "thesite.yalepages.org",
+			Path:  "/one/two/three",
+			Group: "BktAdmGrp",
+		},
+		Expected: "thesite.yalepages.org-one_two_three-BktAdmGrp",
+	},
+}
+
+var testListGroupsData = []*iam.Group{
+	{
+		Arn:        aws.String("arn:aws:iam::12345678910:group/testsite.yalepages.org-spinup-BktAdmGrp"),
+		CreateDate: &testTime,
+		GroupId:    aws.String("1234"),
+		GroupName:  aws.String("testsite.yalepages.org-spinup-BktAdmGrp"),
+		Path:       aws.String("/spinup/"),
+	},
+	{
+		Arn:        aws.String("arn:aws:iam::12345678910:group/testsite.yalepages.org-BktAdmGrp"),
+		CreateDate: &testTime,
+		GroupId:    aws.String("1234"),
+		GroupName:  aws.String("testsite.yalepages.org-BktAdmGrp"),
+		Path:       aws.String("/"),
+	},
+	{
+		Arn:        aws.String("arn:aws:iam::12345678910:group/anothersite.yalepages.org-BktAdmGrp"),
+		CreateDate: &testTime,
+		GroupId:    aws.String("1234"),
+		GroupName:  aws.String("anothersite.yalepages.org-BktAdmGrp"),
+		Path:       aws.String("/"),
+	},
+}
+
+var testListGroupsExpected = []*iam.Group{
+	{
+		Arn:        aws.String("arn:aws:iam::12345678910:group/testsite.yalepages.org-spinup-BktAdmGrp"),
+		CreateDate: &testTime,
+		GroupId:    aws.String("1234"),
+		GroupName:  aws.String("testsite.yalepages.org-spinup-BktAdmGrp"),
+		Path:       aws.String("/spinup/"),
+	},
+	{
+		Arn:        aws.String("arn:aws:iam::12345678910:group/testsite.yalepages.org-BktAdmGrp"),
+		CreateDate: &testTime,
+		GroupId:    aws.String("1234"),
+		GroupName:  aws.String("testsite.yalepages.org-BktAdmGrp"),
+		Path:       aws.String("/"),
+	},
+}
+
+var testListGroupsExpected2 = []*iam.Group{
+	{
+		Arn:        aws.String("arn:aws:iam::12345678910:group/anothersite.yalepages.org-BktAdmGrp"),
+		CreateDate: &testTime,
+		GroupId:    aws.String("1234"),
+		GroupName:  aws.String("anothersite.yalepages.org-BktAdmGrp"),
+		Path:       aws.String("/"),
+	},
+}
+
+var testListGroupsExpected3 []*iam.Group
+
+var testListGroupsInput = &iam.ListGroupsInput{}
+
 var testUser1 = iam.User{
 	Arn:        aws.String("arn:aws:iam::12345678910:user/testuser1"),
 	CreateDate: &testTime,
@@ -66,6 +160,14 @@ var testUser3 = iam.User{
 }
 
 var testUsers1 = []*iam.User{&testUser1, &testUser2, &testUser3}
+
+func (m *mockIAMClient) ListGroupsWithContext(ctx context.Context, input *iam.ListGroupsInput, opts ...request.Option) (*iam.ListGroupsOutput, error) {
+	if m.err != nil {
+		return nil, m.err
+	}
+
+	return &iam.ListGroupsOutput{Groups: testListGroupsData}, nil
+}
 
 func (m *mockIAMClient) CreateGroupWithContext(ctx context.Context, input *iam.CreateGroupInput, opts ...request.Option) (*iam.CreateGroupOutput, error) {
 	if m.err != nil {
@@ -107,6 +209,52 @@ func (m *mockIAMClient) GetGroupWithContext(ctx context.Context, input *iam.GetG
 		return nil, m.err
 	}
 	return &iam.GetGroupOutput{Group: &testGroup, Users: testUsers1}, nil
+}
+
+func TestFormatGroupName(t *testing.T) {
+	for _, set := range testFormatGroupNameInputs {
+		actual := FormatGroupName(set.Input.Base, set.Input.Path, set.Input.Group)
+		expected := string(set.Expected)
+
+		if actual != expected {
+			t.Errorf("actual %s did not match expected %s", actual, expected)
+		}
+	}
+}
+
+func TestListGroups(t *testing.T) {
+	i := IAM{
+		Service:                newMockIAMClient(t, nil),
+		DefaultS3BucketActions: []string{"gti", "golfr", "jetta", "passat"},
+		DefaultS3ObjectActions: []string{"blue", "green", "yellow", "red"},
+	}
+
+	listResult, err := i.ListGroups(context.TODO(), &iam.ListGroupsInput{}, "testsite.yalepages.org")
+	if err != nil {
+		t.Errorf("expected nil error, got %s", err)
+	}
+
+	if !reflect.DeepEqual(listResult, testListGroupsExpected) {
+		t.Errorf("expected %+v, got %+v", testListGroupsExpected, listResult)
+	}
+
+	listResult, err = i.ListGroups(context.TODO(), &iam.ListGroupsInput{}, "anothersite.yalepages.org")
+	if err != nil {
+		t.Errorf("expected nil error, got %s", err)
+	}
+
+	if !reflect.DeepEqual(listResult, testListGroupsExpected2) {
+		t.Errorf("expected %+v, got %+v", testListGroupsExpected2, listResult)
+	}
+
+	listResult, err = i.ListGroups(context.TODO(), &iam.ListGroupsInput{}, "foo.yalepages.org")
+	if err != nil {
+		t.Errorf("expected nil error, got %s", err)
+	}
+
+	if !reflect.DeepEqual(listResult, testListGroupsExpected3) {
+		t.Errorf("expected %+v, got %+v", testListGroupsExpected3, listResult)
+	}
 }
 
 func TestCreateGroup(t *testing.T) {
