@@ -1,9 +1,12 @@
 package api
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
+	s3api "github.com/YaleSpinup/s3-api/s3"
+	"github.com/aws/aws-sdk-go/service/s3"
 	"net/http"
 	"time"
 
@@ -25,7 +28,7 @@ func (s *server) WebsiteUserCreateHandler(w http.ResponseWriter, r *http.Request
 	website := vars["website"]
 
 	role := fmt.Sprintf("arn:aws:iam::%s:role/%s", accountId, s.session.RoleName)
-	policy, err := generatePolicy("iam:*")
+	policy, err := generatePolicy("iam:*", "s3:*")
 	if err != nil {
 		log.Errorf("cannot generate policy: %s", err)
 		w.WriteHeader(http.StatusInternalServerError)
@@ -45,6 +48,7 @@ func (s *server) WebsiteUserCreateHandler(w http.ResponseWriter, r *http.Request
 	}
 
 	iamService := iamapi.NewSession(session.Session, s.account)
+	s3Service := s3api.NewSession(session.Session, s.account, s.mapToAccountName(accountId))
 
 	// REQUEST
 	var req struct {
@@ -165,6 +169,28 @@ func (s *server) WebsiteUserCreateHandler(w http.ResponseWriter, r *http.Request
 			return nil
 		}
 		rollBackTasks = append(rollBackTasks, rbfunc)
+	}
+
+	if path != "/" {
+		hasIndexFile, err := s3Service.HasObject(r.Context(), &s3.GetObjectInput{
+			Bucket: aws.String(website),
+			Key:    aws.String(path + "index.html"),
+		})
+		if !hasIndexFile || err != nil {
+			indexMessage := "Hello, " + website + path + "!"
+			if _, err = s3Service.CreateObject(r.Context(), &s3.PutObjectInput{
+				Bucket:      aws.String(website),
+				Body:        bytes.NewReader([]byte(indexMessage)),
+				ContentType: aws.String("text/html"),
+				Key:         aws.String(path + "index.html"),
+				Tagging:     aws.String("yale:spinup=true"),
+			}); err != nil {
+				msg := fmt.Sprintf("failed to create default index file for website %s: %s", website, err.Error())
+				handleError(w, errors.Wrap(err, msg))
+				return
+			}
+		}
+		// write index file
 	}
 
 	output := struct {

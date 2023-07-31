@@ -35,6 +35,30 @@ func (s *S3) CreateObject(ctx context.Context, input *s3.PutObjectInput) (*s3.Pu
 	return out, nil
 }
 
+// HasObject checks for the existence of an object in a given bucket
+func (s *S3) HasObject(ctx context.Context, input *s3.GetObjectInput) (bool, error) {
+	if input == nil {
+		return false, apierror.New(apierror.ErrBadRequest, "invalid input", errors.New("empty input"))
+	}
+
+	if input.Bucket == nil {
+		return false, apierror.New(apierror.ErrBadRequest, "invalid input", errors.New("missing bucket name"))
+	}
+
+	if input.Key == nil {
+		return false, apierror.New(apierror.ErrBadRequest, "invalid input", errors.New("missing key name"))
+	}
+
+	log.Infof("checking for object: %s in bucket: %s", aws.StringValue(input.Bucket), aws.StringValue(input.Key))
+
+	_, err := s.Service.GetObjectWithContext(ctx, input)
+	if err == nil {
+		return true, nil
+	}
+
+	return false, nil
+}
+
 // GetObjectTagging gets the tagging data from an object is S3
 func (s *S3) GetObjectTagging(ctx context.Context, input *s3.GetObjectTaggingInput) ([]*s3.Tag, error) {
 	if input == nil {
