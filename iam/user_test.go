@@ -24,6 +24,39 @@ var testUser = iam.User{
 	UserName:            aws.String("testuser"),
 }
 
+var testUsers = []*iam.User{
+	{
+		Arn:                 aws.String("arn:aws:iam::12345678910:user/testuser"),
+		CreateDate:          &testTime,
+		PasswordLastUsed:    nil,
+		Path:                aws.String("/"),
+		PermissionsBoundary: nil,
+		Tags:                []*iam.Tag{},
+		UserId:              aws.String("TESTUSERID123"),
+		UserName:            aws.String("testuser"),
+	},
+	{
+		Arn:                 aws.String("arn:aws:iam::12345678910:user/testuser"),
+		CreateDate:          &testTime,
+		PasswordLastUsed:    nil,
+		Path:                aws.String("/"),
+		PermissionsBoundary: nil,
+		Tags:                []*iam.Tag{},
+		UserId:              aws.String("TESTUSERID123"),
+		UserName:            aws.String("testuser"),
+	},
+	{
+		Arn:                 aws.String("arn:aws:iam::12345678910:user/testuser2"),
+		CreateDate:          &testTime,
+		PasswordLastUsed:    nil,
+		Path:                aws.String("/"),
+		PermissionsBoundary: nil,
+		Tags:                []*iam.Tag{},
+		UserId:              aws.String("TESTUSER2ID"),
+		UserName:            aws.String("testuser2"),
+	},
+}
+
 var testAccessKey = iam.AccessKey{
 	CreateDate:      &testTime,
 	AccessKeyId:     aws.String("SOMEACCESSKEYID"),
@@ -97,6 +130,57 @@ var testUserUserPolicy3 = iam.AttachedPolicy{
 }
 
 var testUserPolicies1 = []*iam.AttachedPolicy{&testUserUserPolicy1, &testUserUserPolicy2, &testUserUserPolicy3}
+
+var testBucketUserData = []map[string]string{
+	{
+		"bucket":   "foo.bar.com",
+		"user":     "foo.bar.com-admin",
+		"expected": "admin",
+	},
+	{
+		"bucket":   "foo.bar.com",
+		"user":     "foo.bar.com-foo-admin",
+		"expected": "foo-admin",
+	},
+	{
+		"bucket":   "foo.bar.com",
+		"user":     "foo.bar.com-foo-baz-admin",
+		"expected": "foo-baz-admin",
+	},
+	{
+		"bucket":   "nah-admin",
+		"user":     "foo.bar.com-admin",
+		"expected": "",
+	},
+	{
+		"bucket":   "foo.bar.com",
+		"user":     "foo.bar.com",
+		"expected": "",
+	},
+}
+
+var testBucketUserPathData = []map[string]string{
+	{
+		"bucket":   "foo.bar.com",
+		"user":     "foo.bar.com-admin",
+		"expected": "/",
+	},
+	{
+		"bucket":   "foo.bar.com",
+		"user":     "foo.bar.com-foo-admin",
+		"expected": "/foo/",
+	},
+	{
+		"bucket":   "foo.bar.com",
+		"user":     "foo.bar.com-foo-gah-admin",
+		"expected": "/foo/",
+	},
+	{
+		"bucket":   "nah-admin",
+		"user":     "foo.bar.com-admin",
+		"expected": "/",
+	},
+}
 
 func (m *mockIAMClient) CreateUserWithContext(ctx context.Context, input *iam.CreateUserInput, opts ...request.Option) (*iam.CreateUserOutput, error) {
 	if m.err != nil {
@@ -174,6 +258,34 @@ func (m *mockIAMClient) DetachUserPolicyWithContext(ctx context.Context, input *
 		return nil, m.err
 	}
 	return &iam.DetachUserPolicyOutput{}, nil
+}
+
+func TestGetUsernameFromBucket(t *testing.T) {
+	for _, set := range testBucketUserData {
+		bucket := set["bucket"]
+		user := set["user"]
+		expected := set["expected"]
+
+		actual := GetUsernameFromBucket(bucket, user)
+
+		if !reflect.DeepEqual(actual, expected) {
+			t.Errorf("expected %+v, got %+v", expected, actual)
+		}
+	}
+}
+
+func TestGetUsernamePath(t *testing.T) {
+	for _, set := range testBucketUserPathData {
+		bucket := set["bucket"]
+		user := set["user"]
+		expected := set["expected"]
+
+		actual := GetUsernamePath(bucket, user)
+
+		if !reflect.DeepEqual(actual, expected) {
+			t.Errorf("expected %+v, got %+v", expected, actual)
+		}
+	}
 }
 
 func TestCreateUser(t *testing.T) {
@@ -482,6 +594,43 @@ func TestGetUser(t *testing.T) {
 		}
 	} else {
 		t.Errorf("expected apierror.Error, got: %s", reflect.TypeOf(err).String())
+	}
+}
+
+func TestFilterDuplicateUsers(t *testing.T) {
+	expected := []*iam.User{
+		{
+			Arn:                 aws.String("arn:aws:iam::12345678910:user/testuser"),
+			CreateDate:          &testTime,
+			PasswordLastUsed:    nil,
+			Path:                aws.String("/"),
+			PermissionsBoundary: nil,
+			Tags:                []*iam.Tag{},
+			UserId:              aws.String("TESTUSERID123"),
+			UserName:            aws.String("testuser"),
+		},
+		{
+			Arn:                 aws.String("arn:aws:iam::12345678910:user/testuser2"),
+			CreateDate:          &testTime,
+			PasswordLastUsed:    nil,
+			Path:                aws.String("/"),
+			PermissionsBoundary: nil,
+			Tags:                []*iam.Tag{},
+			UserId:              aws.String("TESTUSER2ID"),
+			UserName:            aws.String("testuser2"),
+		},
+	}
+
+	// list without duplicates remains same
+	actual := FilterDuplicateUsers(expected)
+	if !reflect.DeepEqual(expected, actual) {
+		t.Errorf("expected %+v, got %+v", expected, actual)
+	}
+
+	// list with duplicates has duplicates removed
+	actual = FilterDuplicateUsers(testUsers)
+	if !reflect.DeepEqual(expected, actual) {
+		t.Errorf("expected %+v, got %+v", expected, actual)
 	}
 }
 

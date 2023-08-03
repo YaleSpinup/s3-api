@@ -411,10 +411,10 @@ func (s *server) UserListHandler(w http.ResponseWriter, r *http.Request) {
 	fmt.Println(err)
 	if err == nil {
 		users = append(users, user.User)
-		//users = []*iam.User{user.User}
 	}
 
-	log.Debugf("%+v", users)
+	// remove potential duplicate users
+	users = iamapi.FilterDuplicateUsers(users)
 
 	j, err := json.Marshal(users)
 	if err != nil {
@@ -438,6 +438,7 @@ func (s *server) UserShowHandler(w http.ResponseWriter, r *http.Request) {
 	accountId := s.mapAccountNumber(vars["account"])
 	bucket := vars["bucket"]
 	user := vars["user"]
+	path := iamapi.GetUsernamePath(bucket, user)
 
 	role := fmt.Sprintf("arn:aws:iam::%s:role/%s", accountId, s.session.RoleName)
 	policy, err := generatePolicy("iam:*")
@@ -464,7 +465,9 @@ func (s *server) UserShowHandler(w http.ResponseWriter, r *http.Request) {
 	// collect the list of users in the various management groups
 	users := []*iam.User{}
 	for _, g := range []string{"BktAdmGrp", "BktRWGrp", "BktROGrp"} {
-		groupName := fmt.Sprintf("%s-%s", bucket, g)
+		log.Debugf("formatting group name with parts | bucket: %s, path: %s, group: %s", bucket, path, g)
+		groupName := iamapi.FormatGroupName(bucket, path, g)
+		log.Debugf("list group users for group name: %s", groupName)
 		grpUsers, err := iamService.ListGroupUsers(r.Context(), &iam.GetGroupInput{GroupName: aws.String(groupName)})
 		if err != nil {
 			log.Warnf("error getting users for the %s goup", groupName)
