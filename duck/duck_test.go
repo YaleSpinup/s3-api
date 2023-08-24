@@ -8,6 +8,7 @@ import (
 func TestDefaultDuck(t *testing.T) {
 	type args struct {
 		name string
+		path string
 	}
 	tests := []struct {
 		name string
@@ -18,6 +19,7 @@ func TestDefaultDuck(t *testing.T) {
 			name: "test name",
 			args: args{
 				name: "test",
+				path: "/",
 			},
 			want: &DotDuck{
 				Protocol: "s3",
@@ -29,10 +31,26 @@ func TestDefaultDuck(t *testing.T) {
 				WebURL:   "s3://test/",
 			},
 		},
+		{
+			name: "test path",
+			args: args{
+				name: "foobar",
+				path: "/test/",
+			},
+			want: &DotDuck{
+				Protocol: "s3",
+				Provider: "iterate GmbH",
+				Nickname: "Spinup - foobar/test",
+				Hostname: "s3.amazonaws.com",
+				Port:     "443",
+				Path:     "/foobar/test",
+				WebURL:   "s3://foobar/",
+			},
+		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			if got := DefaultDuck(tt.args.name); !reflect.DeepEqual(got, tt.want) {
+			if got := DefaultDuck(tt.args.name, tt.args.path); !reflect.DeepEqual(got, tt.want) {
 				t.Errorf("DefaultDuck() = %v, want %v", got, tt.want)
 			}
 		})
@@ -49,13 +67,11 @@ func TestDotDuck_Generate(t *testing.T) {
 		Path     string
 		WebURL   string
 	}
-	tests := []struct {
+	var tests []struct {
 		name    string
 		fields  fields
 		want    []byte
 		wantErr bool
-	}{
-		// TODO
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {

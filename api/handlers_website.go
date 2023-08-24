@@ -640,10 +640,20 @@ func (s *server) WebsiteDeleteHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	groupUsers := []*iam.User{}
-	deletedPolicies := []*string{}
-	groupNames := []string{fmt.Sprintf("%s-BktAdmGrp", website), fmt.Sprintf("%s-WebAdmGrp", website)}
-	for _, groupName := range groupNames {
+	var groupUsers []*iam.User
+	var groupNames []string
+	var deletedPolicies []*string
+	var users []*iam.User
+
+	foundGroups, err := iamService.ListGroups(r.Context(), &iam.ListGroupsInput{}, website)
+	if err != nil {
+		log.Errorf("there was an error listing groups %s", err)
+	}
+
+	for _, foundGroup := range foundGroups {
+		groupName := aws.StringValue(foundGroup.GroupName)
+		groupNames = append(groupNames, groupName)
+
 		policies, err := iamService.ListGroupPolicies(r.Context(), &iam.ListAttachedGroupPoliciesInput{GroupName: aws.String(groupName)})
 		if err != nil {
 			log.Warnf("failed to list group policies when deleting website %s: %s", website, err)
@@ -653,7 +663,7 @@ func (s *server) WebsiteDeleteHandler(w http.ResponseWriter, r *http.Request) {
 
 		for _, p := range policies {
 			if err := iamService.DetachGroupPolicy(r.Context(), &iam.DetachGroupPolicyInput{
-				GroupName: aws.String(groupName),
+				GroupName: foundGroup.GroupName,
 				PolicyArn: p.PolicyArn,
 			}); err != nil {
 				log.Warnf("failed to detach policy %s from group %s when deleting website %s: %s", aws.StringValue(p.PolicyArn), policies, website, err)
@@ -673,14 +683,32 @@ func (s *server) WebsiteDeleteHandler(w http.ResponseWriter, r *http.Request) {
 			}
 		}
 
-		users, err := iamService.ListGroupUsers(r.Context(), &iam.GetGroupInput{GroupName: aws.String(groupName)})
+		u, err := iamService.ListGroupUsers(r.Context(), &iam.GetGroupInput{GroupName: foundGroup.GroupName})
 		if err != nil {
 			log.Warnf("failed to list group's users when deleting website %s: %s", website, err)
 			j, _ := json.Marshal("failed to list group users: " + err.Error())
 			w.Write(j)
 		}
+		users = append(users, u...)
 
 		for _, u := range users {
+			// get a users access keys
+			keys, err := iamService.ListAccessKeys(r.Context(), &iam.ListAccessKeysInput{UserName: u.UserName})
+			if err != nil {
+				handleError(w, err)
+				return
+			}
+
+			// delete the access keys
+			for _, k := range keys {
+				err = iamService.DeleteAccessKey(r.Context(), &iam.DeleteAccessKeyInput{UserName: u.UserName, AccessKeyId: k.AccessKeyId})
+				if err != nil {
+					handleError(w, err)
+					return
+				}
+			}
+
+			log.Infof("removing user %s from group %s", aws.StringValue(u.UserName), groupName)
 			if err := iamService.RemoveUserFromGroup(r.Context(), &iam.RemoveUserFromGroupInput{UserName: u.UserName, GroupName: aws.String(groupName)}); err != nil {
 				log.Warnf("failed to remove user %s from group %s when deleting website %s: %s", aws.StringValue(u.UserName), groupName, website, err)
 				j, _ := json.Marshal("failed to remove user from bucket admin group: " + err.Error())
@@ -688,6 +716,7 @@ func (s *server) WebsiteDeleteHandler(w http.ResponseWriter, r *http.Request) {
 				return
 			}
 		}
+
 		groupUsers = append(groupUsers, users...)
 
 		if err := iamService.DeleteGroup(r.Context(), &iam.DeleteGroupInput{GroupName: aws.String(groupName)}); err != nil {
@@ -695,7 +724,18 @@ func (s *server) WebsiteDeleteHandler(w http.ResponseWriter, r *http.Request) {
 			j, _ := json.Marshal("failed to delete group: " + err.Error())
 			w.Write(j)
 		}
+	}
 
+	for _, groupUser := range groupUsers {
+		_, err := iamService.GetUser(r.Context(), &iam.GetUserInput{
+			UserName: groupUser.UserName,
+		})
+		if err == nil {
+			err = iamService.DeleteUser(r.Context(), &iam.DeleteUserInput{UserName: groupUser.UserName})
+			if err != nil {
+				log.Warnf("failed to delete user: %s, %s", aws.StringValue(groupUser.UserName), err)
+			}
+		}
 	}
 
 	// find the cloudfront distribution from the website name

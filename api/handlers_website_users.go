@@ -1,9 +1,12 @@
 package api
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
+	s3api "github.com/YaleSpinup/s3-api/s3"
+	"github.com/aws/aws-sdk-go/service/s3"
 	"net/http"
 	"time"
 
@@ -25,7 +28,7 @@ func (s *server) WebsiteUserCreateHandler(w http.ResponseWriter, r *http.Request
 	website := vars["website"]
 
 	role := fmt.Sprintf("arn:aws:iam::%s:role/%s", accountId, s.session.RoleName)
-	policy, err := generatePolicy("iam:*")
+	policy, err := generatePolicy("iam:*", "s3:*")
 	if err != nil {
 		log.Errorf("cannot generate policy: %s", err)
 		w.WriteHeader(http.StatusInternalServerError)
@@ -45,7 +48,9 @@ func (s *server) WebsiteUserCreateHandler(w http.ResponseWriter, r *http.Request
 	}
 
 	iamService := iamapi.NewSession(session.Session, s.account)
+	s3Service := s3api.NewSession(session.Session, s.account, s.mapToAccountName(accountId))
 
+	// REQUEST
 	var req struct {
 		User   *iam.CreateUserInput
 		Groups []string
@@ -102,32 +107,35 @@ func (s *server) WebsiteUserCreateHandler(w http.ResponseWriter, r *http.Request
 	}
 	rollBackTasks = append(rollBackTasks, rbfunc)
 
-	keyOutput, err := iamService.CreateAccessKey(r.Context(), &iam.CreateAccessKeyInput{UserName: userOutput.User.UserName})
-	if err != nil {
-		msg := fmt.Sprintf("failed to create access key for user: %s, website %s", aws.StringValue(userOutput.User.UserName), website)
-		handleError(w, errors.Wrap(err, msg))
-		return
-	}
-
-	// append access key delete to rollback tasks
-	rbfunc = func(ctx context.Context) error {
-		if err := iamService.DeleteAccessKey(r.Context(), &iam.DeleteAccessKeyInput{
-			UserName:    keyOutput.AccessKey.UserName,
-			AccessKeyId: keyOutput.AccessKey.AccessKeyId,
-		}); err != nil {
-			return err
-		}
-		return nil
-	}
-	rollBackTasks = append(rollBackTasks, rbfunc)
-
 	groupNames := req.Groups
 	if groupNames == nil {
 		groupNames = []string{"BktAdmGrp"}
 	}
 
+	path := "/"
+	if aws.StringValue(req.User.Path) != "" {
+		path = aws.StringValue(req.User.Path)
+	}
+
 	for _, group := range groupNames {
-		groupName := fmt.Sprintf("%s-%s", website, group)
+		groupName := iamapi.FormatGroupName(website, path, group)
+
+		_, err := iamService.GetGroup(r.Context(), groupName)
+		if err != nil {
+			if aerr, ok := err.(apierror.Error); ok && aerr.Code == apierror.ErrNotFound {
+				var rbTasks []rollbackFunc
+				rbTasks, err = s.CreateWebsiteBucketPolicy(r.Context(), iamService, website, path, group)
+				if err != nil {
+					handleError(w, err)
+					return
+				}
+				rollBackTasks = append(rollBackTasks, rbTasks...)
+			} else {
+				handleError(w, err)
+				return
+			}
+		}
+
 		if err = iamService.AddUserToGroup(r.Context(), &iam.AddUserToGroupInput{
 			UserName:  userOutput.User.UserName,
 			GroupName: aws.String(groupName),
@@ -137,10 +145,23 @@ func (s *server) WebsiteUserCreateHandler(w http.ResponseWriter, r *http.Request
 			return
 		}
 
+		if path == "/" && group == "BktAdmGrp" {
+			webGroupName := iamapi.FormatGroupName(website, path, "WebAdmGrp")
+
+			if err = iamService.AddUserToGroup(r.Context(), &iam.AddUserToGroupInput{
+				UserName:  userOutput.User.UserName,
+				GroupName: aws.String(webGroupName),
+			}); err != nil {
+				msg := fmt.Sprintf("failed to add user: %s to group %s for website %s", aws.StringValue(userOutput.User.UserName), "WebAdmGrp", website)
+				handleError(w, errors.Wrap(err, msg))
+				return
+			}
+		}
+
 		// append detach group to rollback funciton
 		rbfunc = func(ctx context.Context) error {
 			if err := iamService.RemoveUserFromGroup(r.Context(), &iam.RemoveUserFromGroupInput{
-				UserName:  keyOutput.AccessKey.UserName,
+				UserName:  userOutput.User.UserName,
 				GroupName: aws.String(groupName),
 			}); err != nil {
 				return err
@@ -150,12 +171,32 @@ func (s *server) WebsiteUserCreateHandler(w http.ResponseWriter, r *http.Request
 		rollBackTasks = append(rollBackTasks, rbfunc)
 	}
 
+	if path != "/" {
+		hasIndexFile, err := s3Service.HasObject(r.Context(), &s3.GetObjectInput{
+			Bucket: aws.String(website),
+			Key:    aws.String(path + "index.html"),
+		})
+		if !hasIndexFile || err != nil {
+			indexMessage := "Hello, " + website + path + "!"
+			if _, err = s3Service.CreateObject(r.Context(), &s3.PutObjectInput{
+				Bucket:      aws.String(website),
+				Body:        bytes.NewReader([]byte(indexMessage)),
+				ContentType: aws.String("text/html"),
+				Key:         aws.String(path + "index.html"),
+				Tagging:     aws.String("yale:spinup=true"),
+			}); err != nil {
+				msg := fmt.Sprintf("failed to create default index file for website %s: %s", website, err.Error())
+				handleError(w, errors.Wrap(err, msg))
+				return
+			}
+		}
+		// write index file
+	}
+
 	output := struct {
-		User      *iam.User
-		AccessKey *iam.AccessKey
+		User *iam.User
 	}{
 		userOutput.User,
-		keyOutput.AccessKey,
 	}
 
 	j, err := json.Marshal(output)

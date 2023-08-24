@@ -2,6 +2,7 @@ package iam
 
 import (
 	"context"
+	"strings"
 
 	"github.com/YaleSpinup/apierror"
 	"github.com/aws/aws-sdk-go/aws"
@@ -41,6 +42,33 @@ func (i *IAM) DeleteUser(ctx context.Context, input *iam.DeleteUserInput) error 
 	}
 
 	return nil
+}
+
+// GetUsernameFromBucket get the username seperated from the bucket/website name
+// Ex: GetUsernameFromBucket("foo.bar.com", "foo.bar.com-admin") -> admin
+func GetUsernameFromBucket(b string, u string) string {
+	if len(strings.Split(u, b)) >= 2 {
+		return strings.TrimLeft(strings.Split(u, b)[1], "-")
+	}
+
+	return ""
+}
+
+// GetUsernamePath get the path from a bucket username given a bucket and a bucket user (which includes the bucket name)
+// Ex: GetUsernamePath("foo.bar.com", "foo.bar.com-mypath-admin") -> "/mypath/"
+func GetUsernamePath(bucket string, user string) string {
+	// default path is /
+	path := "/"
+	// get the username without the bucket name
+	username := GetUsernameFromBucket(bucket, user)
+	// split the username by the separator "-"
+	split := strings.Split(username, "-")
+	// if the length of the split is 2 or more, return the first part surrounded by forward slashes
+	if len(split) >= 2 {
+		path = EnforcePathFormat(split[0])
+	}
+
+	return path
 }
 
 // GetUser gets the details for an IAM user
@@ -117,6 +145,27 @@ func (i *IAM) ListAccessKeys(ctx context.Context, input *iam.ListAccessKeysInput
 	log.Debugf("list access keys output: %s", awsutil.Prettify(keys))
 
 	return keys, nil
+}
+
+// FilterDuplicateUsers removes duplicate users from the slice
+func FilterDuplicateUsers(users []*iam.User) []*iam.User {
+	var filteredUsers []*iam.User
+
+	for _, user := range users {
+		userExists := false
+
+		for _, filteredUser := range filteredUsers {
+			if aws.StringValue(user.UserId) == aws.StringValue(filteredUser.UserId) {
+				userExists = true
+			}
+		}
+
+		if !userExists {
+			filteredUsers = append(filteredUsers, user)
+		}
+	}
+
+	return filteredUsers
 }
 
 // AddUserToGroup adds the existing user to an existing group

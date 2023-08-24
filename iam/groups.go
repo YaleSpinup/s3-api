@@ -2,12 +2,13 @@ package iam
 
 import (
 	"context"
-
+	"fmt"
 	"github.com/YaleSpinup/apierror"
 	"github.com/aws/aws-sdk-go/aws"
 	"github.com/aws/aws-sdk-go/aws/awsutil"
 	"github.com/aws/aws-sdk-go/service/iam"
 	log "github.com/sirupsen/logrus"
+	"strings"
 )
 
 // CreateGroup handles creating an IAM group
@@ -122,6 +123,29 @@ func (i *IAM) ListGroupPolicies(ctx context.Context, input *iam.ListAttachedGrou
 	return policies, nil
 }
 
+func (i *IAM) ListGroups(ctx context.Context, input *iam.ListGroupsInput, bucket string) ([]*iam.Group, error) {
+	if input == nil {
+		return []*iam.Group{}, apierror.New(apierror.ErrBadRequest, "invalid input", nil)
+	}
+
+	groups, err := i.Service.ListGroupsWithContext(ctx, input)
+	if err != nil {
+		return []*iam.Group{}, apierror.New(apierror.ErrInternalError, "unknown error", err)
+	}
+
+	log.Debugf("listing iam groups for account %+v", groups)
+	var outGroups []*iam.Group
+
+	for _, group := range groups.Groups {
+		log.Debugf("checking if %s contains %s", aws.StringValue(group.GroupName), bucket)
+		if strings.Contains(aws.StringValue(group.GroupName), bucket) {
+			outGroups = append(outGroups, group)
+		}
+	}
+
+	return outGroups, nil
+}
+
 // ListGroupUsers lists the users that belong to a group
 func (i *IAM) ListGroupUsers(ctx context.Context, input *iam.GetGroupInput) ([]*iam.User, error) {
 	users := []*iam.User{}
@@ -146,4 +170,47 @@ func (i *IAM) ListGroupUsers(ctx context.Context, input *iam.GetGroupInput) ([]*
 	log.Debugf("returning list of users in group %s: %s", aws.StringValue(input.GroupName), awsutil.Prettify(users))
 
 	return users, nil
+}
+
+func FormatGroupName(base string, path string, group string) string {
+	out := ""
+	path = EnforcePathFormat(path)
+
+	if path == "/" {
+		out = fmt.Sprintf("%s-%s", base, group)
+	} else {
+		path = RemoveCappingSlashes(path)
+		sanitizedPath := strings.Replace(path, "/", "_", -1)
+		out = fmt.Sprintf("%s-%s-%s", base, sanitizedPath, group)
+	}
+
+	return out
+}
+
+func ReplaceWithUnderscores(path string) string {
+	if path != "/" {
+		path = RemoveCappingSlashes(path)
+		path = strings.Replace(path, "/", "_", -1)
+	}
+
+	return path
+}
+
+func EnforcePathFormat(str string) string {
+	strLen := len(str)
+
+	if string(str[0]) != "/" {
+		str = fmt.Sprintf("%s%s", "/", str)
+		strLen = len(str)
+	}
+
+	if string(str[strLen-1]) != "/" {
+		str = fmt.Sprintf("%s%s", str, "/")
+	}
+
+	return str
+}
+
+func RemoveCappingSlashes(str string) string {
+	return strings.Trim(str, "/")
 }

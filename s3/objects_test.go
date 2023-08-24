@@ -25,13 +25,60 @@ var testObjectTags = []*s3.Tag{
 	},
 }
 
+// mock object store
+var testHasObjects = []*s3.GetObjectInput{
+	{
+		Bucket: aws.String("foo.baz.org"),
+		Key:    aws.String("/index.html"),
+	},
+	{
+		Bucket: aws.String("foo.bar.org"),
+		Key:    aws.String("/spinup/index.html"),
+	},
+	{
+		Bucket: aws.String("foo.bag.org"),
+		Key:    aws.String("/foo/index.html"),
+	},
+}
+
+func hasTestHasObject(input *s3.GetObjectInput) bool {
+	for _, obj := range testHasObjects {
+		aBkt := aws.StringValue(obj.Bucket)
+		bBkt := aws.StringValue(input.Bucket)
+		aKey := aws.StringValue(obj.Key)
+		bKey := aws.StringValue(input.Key)
+
+		if aBkt == bBkt && aKey == bKey {
+			return true
+		}
+	}
+
+	return false
+}
+
 func (m *mockS3Client) GetObjectTaggingWithContext(ctx context.Context, input *s3.GetObjectTaggingInput, opts ...request.Option) (*s3.GetObjectTaggingOutput, error) {
 	if m.err != nil {
 		return nil, m.err
 	}
+
 	return &s3.GetObjectTaggingOutput{
 		TagSet: testObjectTags,
 	}, nil
+}
+
+func (m *mockS3Client) GetObjectWithContext(ctx context.Context, input *s3.GetObjectInput, opts ...request.Option) (*s3.GetObjectOutput, error) {
+	if m.err != nil {
+		return nil, m.err
+	}
+
+	successResponse := &s3.GetObjectOutput{}
+	errorResponse := errors.New("object not found")
+
+	if hasTestHasObject(input) {
+		return successResponse, nil
+	} else {
+		return &s3.GetObjectOutput{}, errorResponse
+	}
 }
 
 func (m *mockS3Client) PutObjectWithContext(ctx context.Context, input *s3.PutObjectInput, opts ...request.Option) (*s3.PutObjectOutput, error) {
@@ -50,6 +97,87 @@ func (m *mockS3Client) DeleteObjectWithContext(ctx context.Context, input *s3.De
 		return nil, awserr.New(s3.ErrCodeNoSuchKey, "Not Found", nil)
 	}
 	return nil, nil
+}
+
+func TestHasObjectWithRootKey(t *testing.T) {
+	s := S3{Service: newMockS3Client(t, nil)}
+
+	input := s3.GetObjectInput{
+		Bucket: aws.String("foo.baz.org"),
+		Key:    aws.String("/index.html"),
+	}
+
+	out, err := s.HasObject(context.TODO(), &input)
+	if err != nil {
+		t.Errorf("unexpected error. item was supposed to be found with no errors: %s", err)
+	}
+
+	if !out {
+		t.Errorf("expected %+v, got %+v", true, out)
+	}
+}
+
+func TestHasObjectWithScopedKey(t *testing.T) {
+	s := S3{Service: newMockS3Client(t, nil)}
+
+	input := s3.GetObjectInput{
+		Bucket: aws.String("foo.bar.org"),
+		Key:    aws.String("/spinup/index.html"),
+	}
+
+	out, err := s.HasObject(context.TODO(), &input)
+	if err != nil {
+		t.Errorf("unexpected error. item was supposed to be found with no errors: %s", err)
+	}
+
+	if !out {
+		t.Errorf("expected %+v, got %+v", true, out)
+	}
+}
+
+func TestHasObjectWithMissingItem(t *testing.T) {
+	s := S3{Service: newMockS3Client(t, nil)}
+
+	input := s3.GetObjectInput{
+		Bucket: aws.String("foo.bar.org"),
+		Key:    aws.String("/foo/index.html"),
+	}
+
+	out, err := s.HasObject(context.TODO(), &input)
+	if err != nil {
+		t.Errorf("unexpected error. item was supposed to be missing with no errors: %s", err)
+	}
+
+	if out {
+		t.Errorf("expected %+v, got %+v", false, out)
+	}
+}
+
+func TestHasObjectWithMissingInputs(t *testing.T) {
+	s := S3{Service: newMockS3Client(t, nil)}
+
+	expected := apierror.New(apierror.ErrBadRequest, "invalid input", errors.New("empty input"))
+
+	_, err := s.HasObject(context.TODO(), nil)
+	if !reflect.DeepEqual(expected, err) {
+		t.Errorf("expected %+v, got %+v", expected, err)
+	}
+
+	input := s3.GetObjectInput{}
+	expected = apierror.New(apierror.ErrBadRequest, "invalid input", errors.New("missing bucket name"))
+
+	_, err = s.HasObject(context.TODO(), &input)
+	if !reflect.DeepEqual(expected, err) {
+		t.Errorf("expected %+v, got %+v", expected, err)
+	}
+
+	input = s3.GetObjectInput{Bucket: aws.String("foo.bar.org")}
+	expected = apierror.New(apierror.ErrBadRequest, "invalid input", errors.New("missing key name"))
+
+	_, err = s.HasObject(context.TODO(), &input)
+	if !reflect.DeepEqual(expected, err) {
+		t.Errorf("expected %+v, got %+v", expected, err)
+	}
 }
 
 func TestCreateObject(t *testing.T) {

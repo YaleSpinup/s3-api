@@ -101,7 +101,10 @@ type PolicyStatement struct {
 	Principal string `json:",omitempty"`
 	Action    []string
 	Resource  []string
+	Condition map[string]PolicyCondition `json:",omitempty"`
 }
+
+type PolicyCondition map[string]string
 
 // PolicyDoc collects the policy statements
 type PolicyDoc struct {
@@ -172,6 +175,43 @@ func (i *IAM) ReadOnlyBucketPolicy(bucket string) ([]byte, error) {
 	return policyDoc, nil
 }
 
+// ReadOnlyBucketPolicyWithPath generates the read-only bucket policy
+func (i *IAM) ReadOnlyBucketPolicyWithPath(bucket string, path string) ([]byte, error) {
+	log.Infof("generating read-only bucket policy document for %s", bucket)
+
+	path = RemoveCappingSlashes(path)
+
+	policyDoc, err := json.Marshal(PolicyDoc{
+		Version: "2012-10-17",
+		Statement: []PolicyStatement{
+			{
+				Effect:   "Allow",
+				Action:   BucketReadPolicy,
+				Resource: []string{fmt.Sprintf("arn:aws:s3:::%s", bucket)},
+				Condition: map[string]PolicyCondition{
+					"StringLike": {
+						"s3:prefix": fmt.Sprintf("%s/*", path),
+					},
+				},
+			},
+			{
+				Effect:   "Allow",
+				Action:   ObjectReadPolicy,
+				Resource: []string{fmt.Sprintf("arn:aws:s3:::%s/%s/*", bucket, path)},
+			},
+		},
+	})
+
+	if err != nil {
+		log.Errorf("failed to generate read-only bucket policy for %s: %s", bucket, err)
+		return []byte{}, err
+	}
+
+	log.Debugf("generated policy document %s", string(policyDoc))
+
+	return policyDoc, nil
+}
+
 // ReadWriteBucketPolicy generates the read-write bucket policy
 func (i *IAM) ReadWriteBucketPolicy(bucket string) ([]byte, error) {
 
@@ -194,6 +234,48 @@ func (i *IAM) ReadWriteBucketPolicy(bucket string) ([]byte, error) {
 				Effect:   "Allow",
 				Action:   ObjectWritePolicy,
 				Resource: []string{fmt.Sprintf("arn:aws:s3:::%s/*", bucket)},
+			},
+		},
+	})
+
+	if err != nil {
+		log.Errorf("failed to generate read-write bucket policy for %s: %s", bucket, err)
+		return []byte{}, err
+	}
+
+	log.Debugf("generated policy document %s", string(policyDoc))
+
+	return policyDoc, nil
+}
+
+// ReadWriteBucketPolicyWithPath generates the read-write bucket policy
+func (i *IAM) ReadWriteBucketPolicyWithPath(bucket string, path string) ([]byte, error) {
+	log.Infof("generating read-write bucket policy document for %s", bucket)
+
+	path = RemoveCappingSlashes(path)
+
+	policyDoc, err := json.Marshal(PolicyDoc{
+		Version: "2012-10-17",
+		Statement: []PolicyStatement{
+			{
+				Effect:   "Allow",
+				Action:   BucketReadPolicy,
+				Resource: []string{fmt.Sprintf("arn:aws:s3:::%s", bucket)},
+				Condition: map[string]PolicyCondition{
+					"StringLike": {
+						"s3:prefix": fmt.Sprintf("%s/*", path),
+					},
+				},
+			},
+			{
+				Effect:   "Allow",
+				Action:   ObjectReadPolicy,
+				Resource: []string{fmt.Sprintf("arn:aws:s3:::%s/%s/*", bucket, path)},
+			},
+			{
+				Effect:   "Allow",
+				Action:   ObjectWritePolicy,
+				Resource: []string{fmt.Sprintf("arn:aws:s3:::%s/%s/*", bucket, path)},
 			},
 		},
 	})
@@ -235,6 +317,58 @@ func (i *IAM) AdminBucketPolicy(bucket string) ([]byte, error) {
 				Effect:   "Allow",
 				Action:   ObjectWritePolicy,
 				Resource: []string{fmt.Sprintf("arn:aws:s3:::%s/*", bucket)},
+			},
+		},
+	})
+
+	if err != nil {
+		log.Errorf("failed to generate read-write bucket policy for %s: %s", bucket, err)
+		return []byte{}, err
+	}
+
+	log.Debugf("generated policy document %s", string(policyDoc))
+
+	return policyDoc, nil
+}
+
+// AdminBucketPolicyWithPath generates the administrative bucket policy
+func (i *IAM) AdminBucketPolicyWithPath(bucket string, path string) ([]byte, error) {
+	log.Infof("generating administrative bucket policy document for %s", bucket)
+
+	path = RemoveCappingSlashes(path)
+
+	policyDoc, err := json.Marshal(PolicyDoc{
+		Version: "2012-10-17",
+		Statement: []PolicyStatement{
+			{
+				Effect:   "Allow",
+				Action:   BucketAdminPolicy,
+				Resource: []string{fmt.Sprintf("arn:aws:s3:::%s", bucket)},
+				Condition: map[string]PolicyCondition{
+					"StringLike": {
+						"s3:prefix": fmt.Sprintf("%s/*", path),
+					},
+				},
+			},
+			{
+				Effect:   "Allow",
+				Action:   BucketReadPolicy,
+				Resource: []string{fmt.Sprintf("arn:aws:s3:::%s", bucket)},
+				Condition: map[string]PolicyCondition{
+					"StringLike": {
+						"s3:prefix": fmt.Sprintf("%s/*", path),
+					},
+				},
+			},
+			{
+				Effect:   "Allow",
+				Action:   ObjectReadPolicy,
+				Resource: []string{fmt.Sprintf("arn:aws:s3:::%s/%s/*", bucket, path)},
+			},
+			{
+				Effect:   "Allow",
+				Action:   ObjectWritePolicy,
+				Resource: []string{fmt.Sprintf("arn:aws:s3:::%s/%s/*", bucket, path)},
 			},
 		},
 	})
