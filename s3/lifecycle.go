@@ -1,9 +1,9 @@
 package s3
 
 import (
-	"fmt"
 	"github.com/aws/aws-sdk-go/aws"
 	"github.com/aws/aws-sdk-go/service/s3"
+	log "github.com/sirupsen/logrus"
 	"time"
 )
 
@@ -12,9 +12,12 @@ var (
 		Rules: map[string]s3.LifecycleRule{
 			"deep-archive": {
 				Status: aws.String(s3.IntelligentTieringStatusEnabled),
+				Filter: &s3.LifecycleRuleFilter{
+					Prefix: aws.String(""),
+				},
+				ID: aws.String("deep-archive-rule"),
 				Transitions: []*s3.Transition{
 					{
-						Date:         aws.Time(getMidnightTomorrow()),
 						Days:         aws.Int64(1),
 						StorageClass: aws.String(s3.TransitionStorageClassDeepArchive),
 					},
@@ -43,13 +46,9 @@ func (l *SupportedLifecycles) GetLifecycle(lifecycle string) *s3.LifecycleRule {
 // getMidnightTomorrow gets the current time, adds a day, then sets it to midnight
 func getMidnightTomorrow() time.Time {
 	sometimeTomorrow := time.Now().Add(time.Hour * 24)
-	timeStr := fmt.Sprintf("%d-%d-%dT00:00:00Z",
-		sometimeTomorrow.Year(),
-		sometimeTomorrow.Month(),
-		sometimeTomorrow.Day(),
-	)
 
-	out, _ := time.Parse(time.RFC3339, timeStr)
+	out, _ := time.Parse(time.RFC3339, sometimeTomorrow.Format("2006-01-02"))
+	log.Info("tomorrow midnight: %s", out.String())
 
 	return out
 }

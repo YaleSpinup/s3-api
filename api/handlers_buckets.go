@@ -91,13 +91,12 @@ func (s *server) BucketCreateHandler(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// append bucket delete to rollback tasks
-	rbfunc := func(ctx context.Context) error {
+	rollBackTasks = append(rollBackTasks, func(ctx context.Context) error {
 		if err := s3Service.DeleteEmptyBucket(ctx, &s3.DeleteBucketInput{Bucket: aws.String(bucketName)}); err != nil {
 			return err
 		}
 		return nil
-	}
-	rollBackTasks = append(rollBackTasks, rbfunc)
+	})
 
 	// wait for the bucket to exist
 	if err = retry(3, 2*time.Second, func() error {
@@ -133,7 +132,6 @@ func (s *server) BucketCreateHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// if has lifecycle
 	if req.Lifecycle != nil {
 		// Get the supported lifecycle and error if not
 		lifecycle := s3api.Lifecycles.GetLifecycle(*req.Lifecycle)
@@ -209,13 +207,12 @@ func (s *server) BucketCreateHandler(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// append policy delete to rollback tasks
-	rbfunc = func(ctx context.Context) error {
+	rollBackTasks = append(rollBackTasks, func(ctx context.Context) error {
 		if err := iamService.DeletePolicy(ctx, &iam.DeletePolicyInput{PolicyArn: iamPolicy.Arn}); err != nil {
 			return err
 		}
 		return nil
-	}
-	rollBackTasks = append(rollBackTasks, rbfunc)
+	})
 
 	groupName := fmt.Sprintf("%s-BktAdmGrp", bucketName)
 
@@ -229,13 +226,12 @@ func (s *server) BucketCreateHandler(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// append group delete to rollback tasks
-	rbfunc = func(ctx context.Context) error {
+	rollBackTasks = append(rollBackTasks, func(ctx context.Context) error {
 		if err := iamService.DeleteGroup(ctx, &iam.DeleteGroupInput{GroupName: aws.String(groupName)}); err != nil {
 			return err
 		}
 		return nil
-	}
-	rollBackTasks = append(rollBackTasks, rbfunc)
+	})
 
 	if err = iamService.AttachGroupPolicy(r.Context(), &iam.AttachGroupPolicyInput{
 		GroupName: aws.String(groupName),
