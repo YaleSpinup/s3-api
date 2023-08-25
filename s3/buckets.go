@@ -35,6 +35,22 @@ func (s *S3) BucketExists(ctx context.Context, bucketName string) (bool, error) 
 	return true, nil
 }
 
+// PutBucketLifecycle handles setting a buckets lifecycle configuration
+func (s *S3) PutBucketLifecycle(ctx context.Context, input *s3.PutBucketLifecycleInput) (*s3.PutBucketLifecycleOutput, error) {
+	if input == nil || aws.StringValue(input.Bucket) == "" {
+		return nil, apierror.New(apierror.ErrBadRequest, "invalid input", nil)
+	}
+
+	log.Infof("updating bucket lifecycle: %s", aws.StringValue(input.Bucket))
+
+	output, err := s.Service.PutBucketLifecycleWithContext(ctx, input)
+	if err != nil {
+		return nil, ErrCode("failed to update bucket lifecycle", err)
+	}
+
+	return output, nil
+}
+
 // CreateBucket handles checking if a bucket exists and creating it
 func (s *S3) CreateBucket(ctx context.Context, input *s3.CreateBucketInput) (*s3.CreateBucketOutput, error) {
 	if input == nil || aws.StringValue(input.Bucket) == "" {
