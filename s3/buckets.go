@@ -51,6 +51,7 @@ func (s *S3) PutBucketLifecycleConfiguration(ctx context.Context, input *s3.PutB
 	return nil
 }
 
+// DeleteBucketLifecycle removes all bucket lifecycle configurations from the bucket
 func (s *S3) DeleteBucketLifecycle(ctx context.Context, input *s3.DeleteBucketLifecycleInput) error {
 	if input == nil || aws.StringValue(input.Bucket) == "" {
 		return apierror.New(apierror.ErrBadRequest, "invalid input", nil)
