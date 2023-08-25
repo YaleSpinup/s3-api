@@ -57,6 +57,7 @@ func (s *server) BucketCreateHandler(w http.ResponseWriter, r *http.Request) {
 
 	var req struct {
 		Tags        []*s3.Tag
+		Lifecycle   *string
 		BucketInput s3.CreateBucketInput
 	}
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
@@ -130,6 +131,34 @@ func (s *server) BucketCreateHandler(w http.ResponseWriter, r *http.Request) {
 		msg := fmt.Sprintf("failed to tag bucket %s: %s", bucketName, err.Error())
 		handleError(w, errors.Wrap(err, msg))
 		return
+	}
+
+	// if has lifecycle
+	if req.Lifecycle != nil {
+		// Get the supported lifecycle and error if not
+		lifecycle := s3api.Lifecycles.GetLifecycle(*req.Lifecycle)
+		if lifecycle == nil {
+			handleError(w, errors.Wrap(errors.New("lifecycle doesnt exist in supported lifecycles"), ""))
+			return
+		}
+
+		// Update the bucket lifecycle config
+		if err = s3Service.PutBucketLifecycleConfiguration(r.Context(), &s3.PutBucketLifecycleConfigurationInput{
+			Bucket:                 aws.String(bucketName),
+			LifecycleConfiguration: &s3.BucketLifecycleConfiguration{Rules: []*s3.LifecycleRule{lifecycle}},
+		}); err != nil {
+			msg := fmt.Sprintf("failed to update bucket lifecycle configuration%s: %s", bucketName, err.Error())
+			handleError(w, errors.Wrap(err, msg))
+			return
+		}
+
+		// append bucket delete to rollback tasks
+		rollBackTasks = append(rollBackTasks, func(ctx context.Context) error {
+			if err := s3Service.DeleteBucketLifecycle(ctx, &s3.DeleteBucketLifecycleInput{Bucket: aws.String(bucketName)}); err != nil {
+				return err
+			}
+			return nil
+		})
 	}
 
 	// enable AWS managed serverside encryption for the bucket
