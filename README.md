@@ -141,14 +141,24 @@ POST `/v1/s3/{account}/buckets
 
 ```json
 {
-    "Tags": [
-        { "Key": "Application", "Value": "HowToGet" },
-        { "Key": "COA", "Value": "Take.My.Money.$$$$" },
-        { "Key": "CreatedBy", "Value": "Big Bird" }
-    ],
-    "BucketInput": {
-        "Bucket": "foobarbucketname"
+  "Tags": [
+    {
+      "Key": "Application",
+      "Value": "HowToGet"
+    },
+    {
+      "Key": "COA",
+      "Value": "Take.My.Money.$$$$"
+    },
+    {
+      "Key": "CreatedBy",
+      "Value": "Big Bird"
     }
+  ],
+  "Lifecycle": "deep-archive",
+  "BucketInput": {
+    "Bucket": "foobarbucketname"
+  }
 }
 ```
 
