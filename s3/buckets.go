@@ -57,7 +57,7 @@ func (s *S3) DeleteBucketLifecycle(ctx context.Context, input *s3.DeleteBucketLi
 		return apierror.New(apierror.ErrBadRequest, "invalid input", nil)
 	}
 
-	log.Info("deleting bucket lifecycles: %s", aws.StringValue(input.Bucket))
+	log.Infof("deleting bucket lifecycles: %s", aws.StringValue(input.Bucket))
 
 	_, err := s.Service.DeleteBucketLifecycleWithContext(ctx, input)
 	if err != nil {
