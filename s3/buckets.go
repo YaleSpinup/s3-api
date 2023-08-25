@@ -35,15 +35,15 @@ func (s *S3) BucketExists(ctx context.Context, bucketName string) (bool, error) 
 	return true, nil
 }
 
-// PutBucketLifecycle handles setting a buckets lifecycle configuration
-func (s *S3) PutBucketLifecycle(ctx context.Context, input *s3.PutBucketLifecycleInput) (*s3.PutBucketLifecycleOutput, error) {
+// PutBucketLifecycleConfiguration handles setting a buckets lifecycle configuration
+func (s *S3) PutBucketLifecycleConfiguration(ctx context.Context, input *s3.PutBucketLifecycleConfigurationInput) (*s3.PutBucketLifecycleConfigurationOutput, error) {
 	if input == nil || aws.StringValue(input.Bucket) == "" {
 		return nil, apierror.New(apierror.ErrBadRequest, "invalid input", nil)
 	}
 
 	log.Infof("updating bucket lifecycle: %s", aws.StringValue(input.Bucket))
 
-	output, err := s.Service.PutBucketLifecycleWithContext(ctx, input)
+	output, err := s.Service.PutBucketLifecycleConfigurationWithContext(ctx, input)
 	if err != nil {
 		return nil, ErrCode("failed to update bucket lifecycle", err)
 	}
