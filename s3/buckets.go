@@ -35,6 +35,38 @@ func (s *S3) BucketExists(ctx context.Context, bucketName string) (bool, error) 
 	return true, nil
 }
 
+// PutBucketLifecycleConfiguration handles setting a buckets lifecycle configuration
+func (s *S3) PutBucketLifecycleConfiguration(ctx context.Context, input *s3.PutBucketLifecycleConfigurationInput) error {
+	if input == nil || aws.StringValue(input.Bucket) == "" {
+		return apierror.New(apierror.ErrBadRequest, "invalid input", nil)
+	}
+
+	log.Infof("updating bucket lifecycle: %s", aws.StringValue(input.Bucket))
+
+	_, err := s.Service.PutBucketLifecycleConfigurationWithContext(ctx, input)
+	if err != nil {
+		return ErrCode("failed to update bucket lifecycle", err)
+	}
+
+	return nil
+}
+
+// DeleteBucketLifecycle removes all bucket lifecycle configurations from the bucket
+func (s *S3) DeleteBucketLifecycle(ctx context.Context, input *s3.DeleteBucketLifecycleInput) error {
+	if input == nil || aws.StringValue(input.Bucket) == "" {
+		return apierror.New(apierror.ErrBadRequest, "invalid input", nil)
+	}
+
+	log.Infof("deleting bucket lifecycles: %s", aws.StringValue(input.Bucket))
+
+	_, err := s.Service.DeleteBucketLifecycleWithContext(ctx, input)
+	if err != nil {
+		return ErrCode("failed to delete bucket lifecycles", err)
+	}
+
+	return nil
+}
+
 // CreateBucket handles checking if a bucket exists and creating it
 func (s *S3) CreateBucket(ctx context.Context, input *s3.CreateBucketInput) (*s3.CreateBucketOutput, error) {
 	if input == nil || aws.StringValue(input.Bucket) == "" {
