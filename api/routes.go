@@ -40,7 +40,7 @@ func (s *server) routes() {
 	// website users handlers
 	api.HandleFunc("/{account}/websites/{bucket}/users", s.UserListHandler).Methods(http.MethodGet)
 	api.HandleFunc("/{account}/websites/{website}/users", s.WebsiteUserCreateHandler).Methods(http.MethodPost)
-	api.HandleFunc("/{account}/websites/{bucket}/users/{user}", s.UserShowHandler).Methods(http.MethodGet)
+	api.HandleFunc("/{account}/websites/{bucket}/users/{user}", s.WebsiteUserShowHandler).Methods(http.MethodGet)
 	api.HandleFunc("/{account}/websites/{bucket}/users/{user}", s.UserDeleteHandler).Methods(http.MethodDelete)
 	api.HandleFunc("/{account}/websites/{bucket}/users/{user}", s.UserUpdateKeyHandler).Methods(http.MethodPut)
 }

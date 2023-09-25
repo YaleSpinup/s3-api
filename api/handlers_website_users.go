@@ -210,3 +210,111 @@ func (s *server) WebsiteUserCreateHandler(w http.ResponseWriter, r *http.Request
 	w.WriteHeader(http.StatusOK)
 	w.Write(j)
 }
+
+// WebsiteUserShowHandler gets and returns details of a bucket user.  This is accomplished by getting all of the
+// users for a bucket's management groups and then comparing that to the passed user.  This would be more
+// efficient if we just GetUser for the passed in user, but then we can't be sure it's associated with the
+// bucket.
+func (s *server) WebsiteUserShowHandler(w http.ResponseWriter, r *http.Request) {
+	w = LogWriter{w}
+	vars := mux.Vars(r)
+	accountId := s.mapAccountNumber(vars["account"])
+	bucket := vars["bucket"]
+	user := vars["user"]
+	path := iamapi.GetUsernamePath(bucket, user)
+
+	role := fmt.Sprintf("arn:aws:iam::%s:role/%s", accountId, s.session.RoleName)
+	policy, err := generatePolicy("iam:*")
+	if err != nil {
+		log.Errorf("cannot generate policy: %s", err)
+		w.WriteHeader(http.StatusInternalServerError)
+		return
+	}
+
+	session, err := s.assumeRole(
+		r.Context(),
+		s.session.ExternalID,
+		role,
+		policy,
+	)
+	if err != nil {
+		log.Errorf("failed to assume role in account: %s", accountId)
+		w.WriteHeader(http.StatusInternalServerError)
+		return
+	}
+
+	iamService := iamapi.NewSession(session.Session, s.account)
+
+	// collect the list of users in the various management groups
+	users := []*iam.User{}
+	for _, g := range []string{"BktAdmGrp", "BktRWGrp", "BktROGrp"} {
+		log.Debugf("formatting group name with parts | bucket: %s, path: %s, group: %s", bucket, path, g)
+		groupName := iamapi.FormatGroupName(bucket, path, g)
+		log.Debugf("list group users for group name: %s", groupName)
+		grpUsers, err := iamService.ListGroupUsers(r.Context(), &iam.GetGroupInput{GroupName: aws.String(groupName)})
+		if err != nil {
+			log.Warnf("error getting users for the %s goup", groupName)
+			continue
+		}
+
+		users = append(users, grpUsers...)
+	}
+
+	// check if there is a user with the same name as the bucket to support legacy buckets
+	u, err := iamService.GetUser(r.Context(), &iam.GetUserInput{UserName: aws.String(bucket)})
+	if err == nil {
+		users = append(users, u.User)
+	}
+
+	// range over all of the users we found and return the user if it matches the requested user
+	for _, u := range users {
+		if aws.StringValue(u.UserName) == user {
+			var userDetails = struct {
+				User       *iam.User
+				AccessKeys []*iam.AccessKeyMetadata
+				Groups     []*iam.Group
+				Policies   []*iam.AttachedPolicy
+			}{
+				User: u,
+			}
+
+			keys, err := iamService.ListAccessKeys(r.Context(), &iam.ListAccessKeysInput{UserName: aws.String(user)})
+			if err != nil {
+				handleError(w, err)
+				return
+			}
+			userDetails.AccessKeys = keys
+
+			groups, err := iamService.ListUserGroups(r.Context(), &iam.ListGroupsForUserInput{UserName: aws.String(user)})
+			if err != nil {
+				handleError(w, err)
+				return
+			}
+			userDetails.Groups = groups
+
+			policies, err := iamService.ListUserPolicies(r.Context(), &iam.ListAttachedUserPoliciesInput{UserName: aws.String(user)})
+			if err != nil {
+				handleError(w, err)
+				return
+			}
+			userDetails.Policies = policies
+
+			j, err := json.Marshal(userDetails)
+			if err != nil {
+				log.Errorf("cannot marshal reasponse(%v) into JSON: %s", u, err)
+				w.WriteHeader(http.StatusInternalServerError)
+				return
+			}
+
+			w.Header().Set("Content-Type", "application/json")
+			w.WriteHeader(http.StatusOK)
+			w.Write(j)
+
+			return
+		}
+	}
+
+	log.Warnf("requested user %s does not exist or does not belong to bucket %s", user, bucket)
+	w.WriteHeader(http.StatusNotFound)
+	w.Write([]byte{})
+}
