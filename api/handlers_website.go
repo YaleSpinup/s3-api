@@ -645,7 +645,7 @@ func (s *server) WebsiteDeleteHandler(w http.ResponseWriter, r *http.Request) {
 	var deletedPolicies []*string
 	var users []*iam.User
 
-	foundGroups, err := iamService.ListGroups(r.Context(), &iam.ListGroupsInput{}, website)
+	foundGroups, err := iamService.ListGroups(r.Context(), &iam.ListGroupsInput{MaxItems: aws.Int64(1000)}, website)
 	if err != nil {
 		log.Errorf("there was an error listing groups %s", err)
 	}
