@@ -3,8 +3,8 @@ module github.com/YaleSpinup/s3-api
 go 1.21
 
 require (
-	github.com/YaleSpinup/apierror v0.1.1
-	github.com/YaleSpinup/aws-go v0.2.1
+	github.com/YaleSpinup/apierror v0.1.5
+	github.com/YaleSpinup/aws-go v0.2.5
 	github.com/aws/aws-sdk-go v1.48.3
 	github.com/google/uuid v1.3.1
 	github.com/gorilla/handlers v1.5.1
@@ -27,6 +27,6 @@ require (
 	github.com/prometheus/client_model v0.5.0 // indirect
 	github.com/prometheus/common v0.44.0 // indirect
 	github.com/prometheus/procfs v0.12.0 // indirect
-	golang.org/x/sys v0.13.0 // indirect
+	golang.org/x/sys v0.14.0 // indirect
 	google.golang.org/protobuf v1.31.0 // indirect
 )
