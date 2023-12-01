@@ -392,7 +392,7 @@ func (s *server) UserListHandler(w http.ResponseWriter, r *http.Request) {
 
 	// TODO check if bucket exists and fail if it doesn't?
 	users := []*iam.User{}
-	foundGroups, err := iamService.ListGroups(r.Context(), &iam.ListGroupsInput{MaxItems: aws.Int64(1000)}, bucket)
+	foundGroups, err := iamService.ListGroups(r.Context(), &iam.ListGroupsInput{}, bucket)
 	if err != nil {
 		log.Errorf("there was an error listing groups %s", err)
 	}
