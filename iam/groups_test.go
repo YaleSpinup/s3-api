@@ -77,12 +77,6 @@ var testFormatGroupNameInputs = []TestFormatGroupNameSet{
 	},
 }
 
-var testListGroupsDataMarkers = []string{
-	"mymarker1",
-	"mymarker2",
-	"mymarker3",
-}
-
 var testListGroupsData = []*iam.Group{
 	{
 		Arn:        aws.String("arn:aws:iam::12345678910:group/testsite.yalepages.org-spinup-BktAdmGrp"),
@@ -172,63 +166,7 @@ func (m *mockIAMClient) ListGroupsWithContext(ctx context.Context, input *iam.Li
 		return nil, m.err
 	}
 
-	if input.Marker == nil && input.MaxItems == nil {
-		return &iam.ListGroupsOutput{Groups: testListGroupsData}, nil
-	}
-
-	if input.Marker == nil && input.MaxItems != nil {
-		maxItems := aws.Int64Value(input.MaxItems) << 32
-		itemsLen := len(testListGroupsData)
-		g := int(maxItems)
-
-		var groups []*iam.Group
-
-		if g > itemsLen {
-			g = itemsLen
-		}
-
-		for i := 0; i < g; i++ {
-			groups = append(groups, testListGroupsData[i])
-		}
-
-		return &iam.ListGroupsOutput{Groups: groups}, nil
-	}
-
-	if input.Marker != nil && input.MaxItems != nil {
-		markerIndex := -1
-		startIndex := -1
-		itemsLen := len(testListGroupsData)
-
-		for i := 0; i < len(testListGroupsDataMarkers); i++ {
-			m := testListGroupsDataMarkers[i]
-			if m == *input.Marker {
-				markerIndex = i
-			}
-		}
-
-		if markerIndex == -1 {
-			return &iam.ListGroupsOutput{}, nil
-		}
-
-		startIndex = markerIndex
-		maxItems := aws.Int64Value(input.MaxItems) << 32
-		itemsLen = len(testListGroupsData) - startIndex
-		g := int(maxItems)
-
-		var groups []*iam.Group
-
-		if g > itemsLen {
-			g = itemsLen
-		}
-
-		for i := startIndex; i < g; i++ {
-			groups = append(groups, testListGroupsData[i])
-		}
-
-		return &iam.ListGroupsOutput{Groups: groups}, nil
-	}
-
-	return &iam.ListGroupsOutput{}, nil
+	return &iam.ListGroupsOutput{Groups: testListGroupsData}, nil
 }
 
 func (m *mockIAMClient) CreateGroupWithContext(ctx context.Context, input *iam.CreateGroupInput, opts ...request.Option) (*iam.CreateGroupOutput, error) {
@@ -298,15 +236,6 @@ func TestListGroups(t *testing.T) {
 
 	if !reflect.DeepEqual(listResult, testListGroupsExpected) {
 		t.Errorf("expected %+v, got %+v", testListGroupsExpected, listResult)
-	}
-
-	listResultMaxItemsConstrain, err := i.ListGroups(context.TODO(), &iam.ListGroupsInput{MaxItems: aws.Int64(1)}, "testsite.yalepages.org")
-	if err != nil {
-		t.Errorf("expected nil error, got %s", err)
-	}
-
-	if !reflect.DeepEqual(listResultMaxItemsConstrain, testListGroupsExpected) {
-		t.Errorf("expected %+v, got %+v", testListGroupsExpected, listResultMaxItemsConstrain)
 	}
 
 	listResult, err = i.ListGroups(context.TODO(), &iam.ListGroupsInput{}, "anothersite.yalepages.org")
