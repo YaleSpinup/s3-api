@@ -219,7 +219,7 @@ func (c *CloudFront) ListTags(ctx context.Context, arn string) ([]*cloudfront.Ta
 		return nil, apierror.New(apierror.ErrBadRequest, "invalid input", nil)
 	}
 
-	log.Infof("listing tags for cloudfront resource %s", arn)
+	log.Debugf("listing tags for cloudfront resource %s", arn)
 
 	out, err := c.Service.ListTagsForResourceWithContext(ctx, &cloudfront.ListTagsForResourceInput{Resource: aws.String(arn)})
 	if err != nil {

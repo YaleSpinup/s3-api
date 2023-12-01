@@ -124,19 +124,29 @@ func (i *IAM) ListGroupPolicies(ctx context.Context, input *iam.ListAttachedGrou
 }
 
 func (i *IAM) ListGroups(ctx context.Context, input *iam.ListGroupsInput, bucket string) ([]*iam.Group, error) {
+	var groups []*iam.Group
+	var outGroups []*iam.Group
+
 	if input == nil {
 		return []*iam.Group{}, apierror.New(apierror.ErrBadRequest, "invalid input", nil)
 	}
 
-	groups, err := i.Service.ListGroupsWithContext(ctx, input)
-	if err != nil {
-		return []*iam.Group{}, apierror.New(apierror.ErrInternalError, "unknown error", err)
+	log.Debugf("listing iam groups for account %+v", groups)
+
+	truncated := true
+	for truncated {
+		output, err := i.Service.ListGroupsWithContext(ctx, input)
+		if err != nil {
+			return []*iam.Group{}, apierror.New(apierror.ErrInternalError, "unknown error", err)
+		}
+		truncated = aws.BoolValue(output.IsTruncated)
+		groups = append(groups, output.Groups...)
+		input.Marker = output.Marker
 	}
 
-	log.Debugf("listing iam groups for account %+v", groups)
-	var outGroups []*iam.Group
+	log.Infof("got %d groups", len(groups))
 
-	for _, group := range groups.Groups {
+	for _, group := range groups {
 		log.Debugf("checking if %s contains %s", aws.StringValue(group.GroupName), bucket)
 		if strings.Contains(aws.StringValue(group.GroupName), bucket) {
 			outGroups = append(outGroups, group)
