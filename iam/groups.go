@@ -132,11 +132,29 @@ func (i *IAM) ListGroups(ctx context.Context, input *iam.ListGroupsInput, bucket
 	if err != nil {
 		return []*iam.Group{}, apierror.New(apierror.ErrInternalError, "unknown error", err)
 	}
+	isTruncated := groups.IsTruncated
+	groupsList := groups.Groups
+
+	if isTruncated != nil && *isTruncated {
+		for ok := true; ok; ok = *isTruncated {
+			input.Marker = groups.Marker
+			groups, err = i.Service.ListGroupsWithContext(ctx, input)
+			if err != nil {
+				return []*iam.Group{}, apierror.New(apierror.ErrInternalError, "unknown error", err)
+			}
+			if *groups.IsTruncated != false {
+				isTruncated = groups.IsTruncated
+				groupsList = append(groupsList, groups.Groups...)
+			} else {
+				break
+			}
+		}
+	}
 
 	log.Debugf("listing iam groups for account %+v", groups)
 	var outGroups []*iam.Group
 
-	for _, group := range groups.Groups {
+	for _, group := range groupsList {
 		log.Debugf("checking if %s contains %s", aws.StringValue(group.GroupName), bucket)
 		if strings.Contains(aws.StringValue(group.GroupName), bucket) {
 			outGroups = append(outGroups, group)
