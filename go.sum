@@ -2,8 +2,8 @@ github.com/YaleSpinup/apierror v0.1.5 h1:ZW59fFo+bO30GpQ3TvGNBlY7kdX8L9KIEkaztsK
 github.com/YaleSpinup/apierror v0.1.5/go.mod h1:u2smW7kQNefbVbBpNNvHQj9TjLZdVC+fKxwKNtLIhb4=
 github.com/YaleSpinup/aws-go v0.2.5 h1:FkTCxw2lWKU2x5PUmPq/v+1R9jaekR9LhkuilbNnXGw=
 github.com/YaleSpinup/aws-go v0.2.5/go.mod h1:ICZ44nNZzu0ii+UdiC0T4/8+mxROh+UjWztl1SCoXlI=
-github.com/aws/aws-sdk-go v1.48.3 h1:btYjT+opVFxUbRz+qSCjJe07cdX82BHmMX/FXYmoL7g=
-github.com/aws/aws-sdk-go v1.48.3/go.mod h1:LF8svs817+Nz+DmiMQKTO3ubZ/6IaTpq3TjupRn3Eqk=
+github.com/aws/aws-sdk-go v1.49.16 h1:KAQwhLg296hfffRdh+itA9p7Nx/3cXS/qOa3uF9ssig=
+github.com/aws/aws-sdk-go v1.49.16/go.mod h1:LF8svs817+Nz+DmiMQKTO3ubZ/6IaTpq3TjupRn3Eqk=
 github.com/beorn7/perks v1.0.1 h1:VlbKKnNfV8bJzeqoa4cOKqO6bYr3WgKZxO8Z16+hsOM=
 github.com/beorn7/perks v1.0.1/go.mod h1:G2ZrVWU2WbWT9wwq4/hrbKbnv/1ERSJQ0ibhJ6rlkpw=
 github.com/cespare/xxhash/v2 v2.2.0 h1:DC2CZ1Ep5Y4k3ZQ899DldepgrayRUGE6BBZ/cd9Cj44=
