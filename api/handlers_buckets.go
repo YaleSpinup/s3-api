@@ -554,7 +554,7 @@ func (s *server) BucketUpdateHandler(w http.ResponseWriter, r *http.Request) {
 	accountId := s.mapAccountNumber(vars["account"])
 	bucket := vars["bucket"]
 	role := fmt.Sprintf("arn:aws:iam::%s:role/%s", accountId, s.session.RoleName)
-	policy, err := generatePolicy("s3:PutBucketTagging")
+	policy, err := generatePolicy("s3:PutBucketTagging", "s3:PutBucketPolicy")
 	if err != nil {
 		log.Errorf("cannot generate policy: %s", err)
 		w.WriteHeader(http.StatusInternalServerError)
@@ -577,7 +577,8 @@ func (s *server) BucketUpdateHandler(w http.ResponseWriter, r *http.Request) {
 	s3Client := s3api.NewSession(session.Session, s.account, s.mapToAccountName(accountId))
 
 	var req struct {
-		Tags []*s3.Tag
+		BucketPolicy *string
+		Tags         []*s3.Tag
 	}
 	err = json.NewDecoder(r.Body).Decode(&req)
 	if err != nil {
@@ -592,11 +593,23 @@ func (s *server) BucketUpdateHandler(w http.ResponseWriter, r *http.Request) {
 		Value: aws.String(Org),
 	})
 
+	// If there are tags to update
 	if len(req.Tags) > 0 {
 		err = s3Client.TagBucket(r.Context(), bucket, req.Tags)
 		if err != nil {
 			msg := fmt.Sprintf("failed to tag bucket %s: %s", bucket, err.Error())
 			handleError(w, apierror.New(apierror.ErrInternalError, msg, err))
+			return
+		}
+	}
+
+	// If there is a policy to update
+	if req.BucketPolicy != nil {
+		if err = s3Client.UpdateBucketPolicy(r.Context(), &s3.PutBucketPolicyInput{
+			Bucket: aws.String(bucket),
+			Policy: aws.String(string(*req.BucketPolicy)),
+		}); err != nil {
+			handleError(w, err)
 			return
 		}
 	}
