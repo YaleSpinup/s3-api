@@ -5,7 +5,7 @@ go 1.21
 require (
 	github.com/YaleSpinup/apierror v0.1.5
 	github.com/YaleSpinup/aws-go v0.2.5
-	github.com/aws/aws-sdk-go v1.48.10
+	github.com/aws/aws-sdk-go v1.55.5
 	github.com/google/uuid v1.4.0
 	github.com/gorilla/handlers v1.5.2
 	github.com/gorilla/mux v1.8.1
