@@ -43,13 +43,6 @@ func WithSession(sess *session.Session) STSOption {
 	}
 }
 
-func WithDefaultSessionDuration(t int64) STSOption {
-	return func(s *STS) {
-		log.Debugf("setting default session duration to %d", t)
-		s.DefaultDuration = t
-	}
-}
-
 // AssumeRole assumes the passed role with the given input
 // NB: the combined size of the inlinePolicy and the policy within the policyArns passed is 2048 characters.
 func (s *STS) AssumeRole(ctx context.Context, input *sts.AssumeRoleInput) (*sts.AssumeRoleOutput, error) {

@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"github.com/YaleSpinup/s3-api/iam"
 
-	"github.com/groob/plist"
+	"github.com/micromdm/plist"
 	log "github.com/sirupsen/logrus"
 )
 
