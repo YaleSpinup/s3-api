@@ -12,7 +12,7 @@ RUN go build -o /go/api.out *.go
 
 # final stage
 FROM alpine
-RUN apk add --no-cache ca-certificates
+RUN apk add --no-cache ca-certificates curl
 WORKDIR /app
 COPY --from=build-env /go/api.out /app/api
 EXPOSE 80
