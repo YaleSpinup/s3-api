@@ -1,6 +1,6 @@
 module github.com/YaleSpinup/s3-api
 
-go 1.21.0
+go 1.21.13
 
 require (
 	github.com/YaleSpinup/apierror v0.1.5
