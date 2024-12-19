@@ -197,15 +197,6 @@ func FormatGroupName(base string, path string, group string) string {
 	return out
 }
 
-func ReplaceWithUnderscores(path string) string {
-	if path != "/" {
-		path = RemoveCappingSlashes(path)
-		path = strings.Replace(path, "/", "_", -1)
-	}
-
-	return path
-}
-
 func EnforcePathFormat(str string) string {
 	strLen := len(str)
 
