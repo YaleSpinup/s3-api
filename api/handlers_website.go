@@ -30,14 +30,10 @@ import (
 // 1. create the bucket with the given name
 // 2. tag the bucket with given tags
 // 3. apply the website configuration to the bucket
-// 4. generate the default admin bucket policy
-// 5. create the admin bucket policy
-// 6. create the bucket admin group, '<bucketName>-BktAdmGrp'
-// 7. attach the bucket admin policy to the bucket admin group
-// 8. create cloudfront distribution with s3 website origin (for https)
-// 9. create the web admin group, '<bucketName>-WebAdmGrp'
-// 10. attach the web admin policy to the web admin group
-// 11. create alias record in route53
+// 4. set the S3 bucket policy for public website access
+// 5. create cloudfront distribution with s3 website origin (for https)
+// 6. create alias record in route53
+// Note: IAM policies are now attached as inline policies when users are created
 // Note: this does _not_ create any users for managing the bucket
 func (s *server) CreateWebsiteHandler(w http.ResponseWriter, r *http.Request) {
 	w = LogWriter{w}
@@ -211,67 +207,6 @@ func (s *server) CreateWebsiteHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// build the default IAM bucket admin policy (from the config and known inputs)
-	var defaultBktPolicy []byte
-	if defaultBktPolicy, err = iamService.DefaultBucketAdminPolicy(aws.String(bucketName)); err != nil {
-		msg := fmt.Sprintf("failed building default IAM policy for bucket %s: %s", bucketName, err.Error())
-		handleError(w, apierror.New(apierror.ErrInternalError, msg, err))
-		return
-	}
-
-	var bktPolicy *iam.Policy
-	if bktPolicy, err = iamService.CreatePolicy(r.Context(), &iam.CreatePolicyInput{
-		Description:    aws.String(fmt.Sprintf("Admin policy for %s bucket", bucketName)),
-		PolicyDocument: aws.String(string(defaultBktPolicy)),
-		PolicyName:     aws.String(fmt.Sprintf("%s-BktAdmPlc", bucketName)),
-	}); err != nil {
-		msg := fmt.Sprintf("failed to create bucket admin policy: %s", err.Error())
-		handleError(w, errors.Wrap(err, msg))
-		return
-	}
-
-	// append policy delete to rollback tasks
-	rbfunc = func(ctx context.Context) error {
-		err := iamService.DeletePolicy(r.Context(), &iam.DeletePolicyInput{PolicyArn: bktPolicy.Arn})
-		return err
-	}
-	rollBackTasks = append(rollBackTasks, rbfunc)
-
-	bktGroupName := fmt.Sprintf("%s-BktAdmGrp", bucketName)
-
-	var bktGroup *iam.Group
-	if bktGroup, err = iamService.CreateGroup(r.Context(), &iam.CreateGroupInput{
-		GroupName: aws.String(bktGroupName),
-	}); err != nil {
-		msg := fmt.Sprintf("failed to create bucket admin group: %s", err.Error())
-		handleError(w, errors.Wrap(err, msg))
-		return
-	}
-
-	// append group delete to rollback tasks
-	rbfunc = func(ctx context.Context) error {
-		return iamService.DeleteGroup(r.Context(), &iam.DeleteGroupInput{GroupName: aws.String(bktGroupName)})
-	}
-	rollBackTasks = append(rollBackTasks, rbfunc)
-
-	if err = iamService.AttachGroupPolicy(r.Context(), &iam.AttachGroupPolicyInput{
-		GroupName: aws.String(bktGroupName),
-		PolicyArn: bktPolicy.Arn,
-	}); err != nil {
-		msg := fmt.Sprintf("failed to attach policy %s to group %s: %s", aws.StringValue(bktPolicy.Arn), bktGroupName, err.Error())
-		handleError(w, errors.Wrap(err, msg))
-		return
-	}
-
-	// append detach group policy to rollback tasks
-	rbfunc = func(ctx context.Context) error {
-		return iamService.DetachGroupPolicy(r.Context(), &iam.DetachGroupPolicyInput{
-			GroupName: aws.String(bktGroupName),
-			PolicyArn: bktPolicy.Arn,
-		})
-	}
-	rollBackTasks = append(rollBackTasks, rbfunc)
-
 	// normalize tags
 	cfTags := []*cloudfront.Tag{}
 	for _, tag := range req.Tags {
@@ -300,66 +235,6 @@ func (s *server) CreateWebsiteHandler(w http.ResponseWriter, r *http.Request) {
 	rbfunc = func(ctx context.Context) error {
 		_, err := cloudFrontService.DisableDistribution(r.Context(), aws.StringValue(distribution.Id))
 		return err
-	}
-	rollBackTasks = append(rollBackTasks, rbfunc)
-
-	// build the default IAM web admin policy (from the config and known inputs)
-	var defaultWebPolicy []byte
-	if defaultWebPolicy, err = iamService.DefaultWebAdminPolicy(distribution.ARN); err != nil {
-		msg := fmt.Sprintf("failed building default IAM policy for cloudfront distribution %s: %s", aws.StringValue(distribution.ARN), err.Error())
-		handleError(w, apierror.New(apierror.ErrInternalError, msg, err))
-		return
-	}
-
-	var webPolicy *iam.Policy
-	if webPolicy, err = iamService.CreatePolicy(r.Context(), &iam.CreatePolicyInput{
-		Description:    aws.String(fmt.Sprintf("Admin policy for %s web distribution", bucketName)),
-		PolicyDocument: aws.String(string(defaultWebPolicy)),
-		PolicyName:     aws.String(fmt.Sprintf("%s-WebAdmPlc", bucketName)),
-	}); err != nil {
-		msg := fmt.Sprintf("failed to create web admin policy: %s", err.Error())
-		handleError(w, errors.Wrap(err, msg))
-		return
-	}
-
-	// append policy delete to rollback tasks
-	rbfunc = func(ctx context.Context) error {
-		return iamService.DeletePolicy(r.Context(), &iam.DeletePolicyInput{PolicyArn: webPolicy.Arn})
-	}
-	rollBackTasks = append(rollBackTasks, rbfunc)
-
-	webGroupName := fmt.Sprintf("%s-WebAdmGrp", bucketName)
-
-	var webGroup *iam.Group
-	if webGroup, err = iamService.CreateGroup(r.Context(), &iam.CreateGroupInput{
-		GroupName: aws.String(webGroupName),
-	}); err != nil {
-		msg := fmt.Sprintf("failed to create web admin group: %s", err.Error())
-		handleError(w, errors.Wrap(err, msg))
-		return
-	}
-
-	// append group delete to rollback tasks
-	rbfunc = func(ctx context.Context) error {
-		return iamService.DeleteGroup(r.Context(), &iam.DeleteGroupInput{GroupName: aws.String(webGroupName)})
-	}
-	rollBackTasks = append(rollBackTasks, rbfunc)
-
-	if err = iamService.AttachGroupPolicy(r.Context(), &iam.AttachGroupPolicyInput{
-		GroupName: aws.String(webGroupName),
-		PolicyArn: webPolicy.Arn,
-	}); err != nil {
-		msg := fmt.Sprintf("failed to attach policy %s to group %s: %s", aws.StringValue(bktPolicy.Arn), webGroupName, err.Error())
-		handleError(w, errors.Wrap(err, msg))
-		return
-	}
-
-	// append detach group policy to rollback tasks
-	rbfunc = func(ctx context.Context) error {
-		return iamService.DetachGroupPolicy(r.Context(), &iam.DetachGroupPolicyInput{
-			GroupName: aws.String(webGroupName),
-			PolicyArn: webPolicy.Arn,
-		})
 	}
 	rollBackTasks = append(rollBackTasks, rbfunc)
 
@@ -394,14 +269,10 @@ func (s *server) CreateWebsiteHandler(w http.ResponseWriter, r *http.Request) {
 
 	output := struct {
 		Bucket       *string
-		Policies     []*iam.Policy
-		Groups       []*iam.Group
 		Distribution *cloudfront.Distribution
 		DnsChange    *route53.ChangeInfo
 	}{
 		bucketOutput.Location,
-		[]*iam.Policy{bktPolicy, webPolicy},
-		[]*iam.Group{bktGroup, webGroup},
 		distribution,
 		dnsChange,
 	}
@@ -547,14 +418,10 @@ func (s *server) WebsiteShowHandler(w http.ResponseWriter, r *http.Request) {
 
 // WebsiteDeleteHandler deletes all of the resources for a static website.  The operations are
 // 1. the website bucket is deleted, this will fail if the bucket is not empty
-// 2. a list of policies attached to the bucket admin group (<bucketName>-BktAdmGrp) is gathered
-// 3. each of those policies is detached from the group and if it starts with '<bucketName>-', it is deleted
-// 4. the bucket admin group is deleted
-// 5. a list of policies attached to the web admin group (<bucketName>-WebAdmGrp) is gathered
-// 6. each of those policies is detached from the group and if it starts with '<bucketName>-', it is deleted
-// 7. the web admin group is deleted
-// 8. the route53 dns record is deleted
-// 9. the cloudfront distribution is disabled for async processing
+// 2. (legacy) group-based cleanup: detach/delete policies, remove users from groups, delete groups
+// 3. (new) inline-policy-based cleanup: find users by prefix, delete inline policies, access keys, and users
+// 4. the route53 dns record is deleted
+// 5. the cloudfront distribution is disabled for async processing
 func (s *server) WebsiteDeleteHandler(w http.ResponseWriter, r *http.Request) {
 	w = LogWriter{w}
 	vars := mux.Vars(r)
@@ -735,6 +602,69 @@ func (s *server) WebsiteDeleteHandler(w http.ResponseWriter, r *http.Request) {
 			if err != nil {
 				log.Warnf("failed to delete user: %s, %s", aws.StringValue(groupUser.UserName), err)
 			}
+		}
+	}
+
+	// --- New inline-policy-based cleanup ---
+	// Find users by website name prefix (e.g., "mywebsite.example.com-")
+	inlineUsers, err := iamService.ListUsers(r.Context(), website+"-")
+	if err != nil {
+		log.Warnf("failed to list inline policy users for website %s: %s", website, err)
+	}
+
+	for _, u := range inlineUsers {
+		userName := aws.StringValue(u.UserName)
+
+		// Delete inline policies
+		inlinePolicies, err := iamService.ListUserInlinePolicies(r.Context(), &iam.ListUserPoliciesInput{UserName: u.UserName})
+		if err != nil {
+			log.Warnf("failed to list inline policies for user %s: %s", userName, err)
+		}
+		for _, pName := range inlinePolicies {
+			if err := iamService.DeleteUserPolicy(r.Context(), &iam.DeleteUserPolicyInput{
+				UserName:   u.UserName,
+				PolicyName: pName,
+			}); err != nil {
+				log.Warnf("failed to delete inline policy %s for user %s: %s", aws.StringValue(pName), userName, err)
+			}
+		}
+
+		// Delete access keys
+		keys, err := iamService.ListAccessKeys(r.Context(), &iam.ListAccessKeysInput{UserName: u.UserName})
+		if err != nil {
+			log.Warnf("failed to list access keys for user %s: %s", userName, err)
+		}
+		for _, k := range keys {
+			if err := iamService.DeleteAccessKey(r.Context(), &iam.DeleteAccessKeyInput{UserName: u.UserName, AccessKeyId: k.AccessKeyId}); err != nil {
+				log.Warnf("failed to delete access key for user %s: %s", userName, err)
+			}
+		}
+
+		// Remove from any remaining groups
+		userGroups, err := iamService.ListUserGroups(r.Context(), &iam.ListGroupsForUserInput{UserName: u.UserName})
+		if err != nil {
+			log.Warnf("failed to list groups for user %s: %s", userName, err)
+		}
+		for _, g := range userGroups {
+			if err := iamService.RemoveUserFromGroup(r.Context(), &iam.RemoveUserFromGroupInput{UserName: u.UserName, GroupName: g.GroupName}); err != nil {
+				log.Warnf("failed to remove user %s from group %s: %s", userName, aws.StringValue(g.GroupName), err)
+			}
+		}
+
+		// Detach managed policies
+		managedPolicies, err := iamService.ListUserPolicies(r.Context(), &iam.ListAttachedUserPoliciesInput{UserName: u.UserName})
+		if err != nil {
+			log.Warnf("failed to list managed policies for user %s: %s", userName, err)
+		}
+		for _, p := range managedPolicies {
+			if err := iamService.DetachUserPolicy(r.Context(), &iam.DetachUserPolicyInput{UserName: u.UserName, PolicyArn: p.PolicyArn}); err != nil {
+				log.Warnf("failed to detach policy from user %s: %s", userName, err)
+			}
+		}
+
+		// Delete the user
+		if err := iamService.DeleteUser(r.Context(), &iam.DeleteUserInput{UserName: u.UserName}); err != nil {
+			log.Warnf("failed to delete inline policy user %s: %s", userName, err)
 		}
 	}
 
