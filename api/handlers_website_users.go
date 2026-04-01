@@ -117,58 +117,15 @@ func (s *server) WebsiteUserCreateHandler(w http.ResponseWriter, r *http.Request
 		path = aws.StringValue(req.User.Path)
 	}
 
+	userName := aws.StringValue(userOutput.User.UserName)
 	for _, group := range groupNames {
-		groupName := iamapi.FormatGroupName(website, path, group)
-
-		_, err := iamService.GetGroup(r.Context(), groupName)
+		rbTasks, err := s.CreateWebsiteUserInlinePolicy(r.Context(), iamService, website, path, userName, group)
 		if err != nil {
-			if aerr, ok := err.(apierror.Error); ok && aerr.Code == apierror.ErrNotFound {
-				var rbTasks []rollbackFunc
-				rbTasks, err = s.CreateWebsiteBucketPolicy(r.Context(), iamService, website, path, group)
-				if err != nil {
-					handleError(w, err)
-					return
-				}
-				rollBackTasks = append(rollBackTasks, rbTasks...)
-			} else {
-				handleError(w, err)
-				return
-			}
-		}
-
-		if err = iamService.AddUserToGroup(r.Context(), &iam.AddUserToGroupInput{
-			UserName:  userOutput.User.UserName,
-			GroupName: aws.String(groupName),
-		}); err != nil {
-			msg := fmt.Sprintf("failed to add user: %s to group %s for website %s", aws.StringValue(userOutput.User.UserName), group, website)
+			msg := fmt.Sprintf("failed to attach inline policy for user %s, group %s, website %s: %s", userName, group, website, err)
 			handleError(w, errors.Wrap(err, msg))
 			return
 		}
-
-		if path == "/" && group == "BktAdmGrp" {
-			webGroupName := iamapi.FormatGroupName(website, path, "WebAdmGrp")
-
-			if err = iamService.AddUserToGroup(r.Context(), &iam.AddUserToGroupInput{
-				UserName:  userOutput.User.UserName,
-				GroupName: aws.String(webGroupName),
-			}); err != nil {
-				msg := fmt.Sprintf("failed to add user: %s to group %s for website %s", aws.StringValue(userOutput.User.UserName), "WebAdmGrp", website)
-				handleError(w, errors.Wrap(err, msg))
-				return
-			}
-		}
-
-		// append detach group to rollback funciton
-		rbfunc = func(ctx context.Context) error {
-			if err := iamService.RemoveUserFromGroup(r.Context(), &iam.RemoveUserFromGroupInput{
-				UserName:  userOutput.User.UserName,
-				GroupName: aws.String(groupName),
-			}); err != nil {
-				return err
-			}
-			return nil
-		}
-		rollBackTasks = append(rollBackTasks, rbfunc)
+		rollBackTasks = append(rollBackTasks, rbTasks...)
 	}
 
 	if path != "/" {
@@ -245,7 +202,7 @@ func (s *server) WebsiteUserShowHandler(w http.ResponseWriter, r *http.Request) 
 
 	iamService := iamapi.NewSession(session.Session, s.account)
 
-	// collect the list of users in the various management groups
+	// collect the list of users in the various management groups (legacy)
 	users := []*iam.User{}
 	for _, g := range []string{"BktAdmGrp", "BktRWGrp", "BktROGrp"} {
 		log.Debugf("formatting group name with parts | bucket: %s, path: %s, group: %s", bucket, path, g)
@@ -260,20 +217,31 @@ func (s *server) WebsiteUserShowHandler(w http.ResponseWriter, r *http.Request) 
 		users = append(users, grpUsers...)
 	}
 
+	// discover users by prefix (new inline policy model)
+	prefixUsers, err := iamService.ListUsers(r.Context(), bucket+"-")
+	if err != nil {
+		log.Warnf("failed to list users by prefix for website %s: %s", bucket, err)
+	}
+	users = append(users, prefixUsers...)
+
 	// check if there is a user with the same name as the bucket to support legacy buckets
 	u, err := iamService.GetUser(r.Context(), &iam.GetUserInput{UserName: aws.String(bucket)})
 	if err == nil {
 		users = append(users, u.User)
 	}
 
+	// remove potential duplicate users
+	users = iamapi.FilterDuplicateUsers(users)
+
 	// range over all of the users we found and return the user if it matches the requested user
 	for _, u := range users {
 		if aws.StringValue(u.UserName) == user {
 			var userDetails = struct {
-				User       *iam.User
-				AccessKeys []*iam.AccessKeyMetadata
-				Groups     []*iam.Group
-				Policies   []*iam.AttachedPolicy
+				User           *iam.User
+				AccessKeys     []*iam.AccessKeyMetadata
+				Groups         []*iam.Group
+				Policies       []*iam.AttachedPolicy
+				InlinePolicies []*string
 			}{
 				User: u,
 			}
@@ -298,6 +266,12 @@ func (s *server) WebsiteUserShowHandler(w http.ResponseWriter, r *http.Request) 
 				return
 			}
 			userDetails.Policies = policies
+
+			inlinePolicies, err := iamService.ListUserInlinePolicies(r.Context(), &iam.ListUserPoliciesInput{UserName: aws.String(user)})
+			if err != nil {
+				log.Warnf("failed to list inline policies for user %s: %s", user, err)
+			}
+			userDetails.InlinePolicies = inlinePolicies
 
 			j, err := json.Marshal(userDetails)
 			if err != nil {

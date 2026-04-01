@@ -267,3 +267,108 @@ func (i *IAM) DetachUserPolicy(ctx context.Context, input *iam.DetachUserPolicyI
 
 	return nil
 }
+
+// PutUserPolicy attaches an inline policy document to an IAM user
+func (i *IAM) PutUserPolicy(ctx context.Context, input *iam.PutUserPolicyInput) error {
+	if input == nil || aws.StringValue(input.UserName) == "" || aws.StringValue(input.PolicyName) == "" || aws.StringValue(input.PolicyDocument) == "" {
+		return apierror.New(apierror.ErrBadRequest, "invalid input", nil)
+	}
+
+	log.Infof("putting inline policy %s for user %s", aws.StringValue(input.PolicyName), aws.StringValue(input.UserName))
+
+	_, err := i.Service.PutUserPolicyWithContext(ctx, input)
+	if err != nil {
+		return ErrCode("failed to put inline policy for user", err)
+	}
+
+	return nil
+}
+
+// DeleteUserPolicy removes an inline policy from an IAM user
+func (i *IAM) DeleteUserPolicy(ctx context.Context, input *iam.DeleteUserPolicyInput) error {
+	if input == nil || aws.StringValue(input.UserName) == "" || aws.StringValue(input.PolicyName) == "" {
+		return apierror.New(apierror.ErrBadRequest, "invalid input", nil)
+	}
+
+	log.Infof("deleting inline policy %s for user %s", aws.StringValue(input.PolicyName), aws.StringValue(input.UserName))
+
+	_, err := i.Service.DeleteUserPolicyWithContext(ctx, input)
+	if err != nil {
+		return ErrCode("failed to delete inline policy for user", err)
+	}
+
+	return nil
+}
+
+// GetUserPolicy retrieves an inline policy document for an IAM user
+func (i *IAM) GetUserPolicy(ctx context.Context, input *iam.GetUserPolicyInput) (*iam.GetUserPolicyOutput, error) {
+	if input == nil || aws.StringValue(input.UserName) == "" || aws.StringValue(input.PolicyName) == "" {
+		return nil, apierror.New(apierror.ErrBadRequest, "invalid input", nil)
+	}
+
+	log.Infof("getting inline policy %s for user %s", aws.StringValue(input.PolicyName), aws.StringValue(input.UserName))
+
+	output, err := i.Service.GetUserPolicyWithContext(ctx, input)
+	if err != nil {
+		return nil, ErrCode("failed to get inline policy for user", err)
+	}
+
+	log.Debugf("get user policy output: %s", awsutil.Prettify(output))
+
+	return output, nil
+}
+
+// ListUserInlinePolicies lists the names of inline policies attached to an IAM user.
+// Note: This is distinct from ListUserPolicies which lists *attached managed* policies.
+func (i *IAM) ListUserInlinePolicies(ctx context.Context, input *iam.ListUserPoliciesInput) ([]*string, error) {
+	policyNames := []*string{}
+
+	if input == nil || aws.StringValue(input.UserName) == "" {
+		return policyNames, apierror.New(apierror.ErrBadRequest, "invalid input", nil)
+	}
+
+	log.Infof("listing inline policies for user %s", aws.StringValue(input.UserName))
+
+	truncated := true
+	for truncated {
+		output, err := i.Service.ListUserPoliciesWithContext(ctx, input)
+		if err != nil {
+			return nil, ErrCode("failed to list inline policies for user", err)
+		}
+		truncated = aws.BoolValue(output.IsTruncated)
+		policyNames = append(policyNames, output.PolicyNames...)
+		input.Marker = output.Marker
+	}
+
+	log.Debugf("got list of inline policies for user %s: %s", aws.StringValue(input.UserName), awsutil.Prettify(policyNames))
+
+	return policyNames, nil
+}
+
+// ListUsers lists all IAM users, optionally filtering by a name prefix.
+// If prefix is non-empty, only users whose UserName starts with the prefix are returned.
+func (i *IAM) ListUsers(ctx context.Context, prefix string) ([]*iam.User, error) {
+	var users []*iam.User
+
+	log.Infof("listing iam users with prefix '%s'", prefix)
+
+	input := &iam.ListUsersInput{}
+	truncated := true
+	for truncated {
+		output, err := i.Service.ListUsersWithContext(ctx, input)
+		if err != nil {
+			return nil, ErrCode("failed to list iam users", err)
+		}
+		truncated = aws.BoolValue(output.IsTruncated)
+		for _, u := range output.Users {
+			if prefix == "" || strings.HasPrefix(aws.StringValue(u.UserName), prefix) {
+				users = append(users, u)
+			}
+		}
+		input.Marker = output.Marker
+	}
+
+	log.Debugf("found %d users with prefix '%s'", len(users), prefix)
+
+	return users, nil
+}

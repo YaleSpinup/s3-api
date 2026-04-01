@@ -107,44 +107,15 @@ func (s *server) UserCreateHandler(w http.ResponseWriter, r *http.Request) {
 	}
 	rollBackTasks = append(rollBackTasks, rbfunc)
 
+	userName := aws.StringValue(userOutput.User.UserName)
 	for _, group := range req.Groups {
-		groupName := fmt.Sprintf("%s-%s", bucket, group)
-		_, err = iamService.GetGroup(r.Context(), groupName)
+		rbTasks, err := s.CreateBucketUserInlinePolicy(r.Context(), iamService, bucket, userName, group)
 		if err != nil {
-			if aerr, ok := err.(apierror.Error); ok && aerr.Code == apierror.ErrNotFound {
-				var rbTasks []rollbackFunc
-				rbTasks, err = s.CreateBucketGroupPolicy(r.Context(), iamService, bucket, group)
-				if err != nil {
-					handleError(w, err)
-					return
-				}
-				rollBackTasks = append(rollBackTasks, rbTasks...)
-			} else {
-				handleError(w, err)
-				return
-			}
-		}
-
-		if err = iamService.AddUserToGroup(r.Context(), &iam.AddUserToGroupInput{
-			UserName:  userOutput.User.UserName,
-			GroupName: aws.String(groupName),
-		}); err != nil {
-			msg := fmt.Sprintf("failed to add user: %s to group %s for bucket %s", aws.StringValue(userOutput.User.UserName), group, bucket)
+			msg := fmt.Sprintf("failed to attach inline policy for user %s, group %s, bucket %s: %s", userName, group, bucket, err)
 			handleError(w, errors.Wrap(err, msg))
 			return
 		}
-
-		// append detach group to rollback funciton
-		rbfunc = func(ctx context.Context) error {
-			if err := iamService.RemoveUserFromGroup(ctx, &iam.RemoveUserFromGroupInput{
-				UserName:  userOutput.User.UserName,
-				GroupName: aws.String(groupName),
-			}); err != nil {
-				return err
-			}
-			return nil
-		}
-		rollBackTasks = append(rollBackTasks, rbfunc)
+		rollBackTasks = append(rollBackTasks, rbTasks...)
 	}
 
 	output := struct {
@@ -227,7 +198,21 @@ func (s *server) UserDeleteHandler(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	// get a list of all of the attached user policies for a user.  this should be empty for "new" s3 buckets, but buckets created
+	// delete inline policies (new model)
+	inlinePolicies, err := iamService.ListUserInlinePolicies(r.Context(), &iam.ListUserPoliciesInput{UserName: aws.String(user)})
+	if err != nil {
+		log.Warnf("failed to list inline policies for user %s: %s", user, err)
+	}
+	for _, pName := range inlinePolicies {
+		if err := iamService.DeleteUserPolicy(r.Context(), &iam.DeleteUserPolicyInput{
+			UserName:   aws.String(user),
+			PolicyName: pName,
+		}); err != nil {
+			log.Warnf("failed to delete inline policy %s for user %s: %s", aws.StringValue(pName), user, err)
+		}
+	}
+
+	// get a list of all of the attached managed user policies.  this should be empty for "new" s3 buckets, but buckets created
 	// with the legacy service have the policy directly attached to the user with the same name as the user/bucket
 	policies, err := iamService.ListUserPolicies(r.Context(), &iam.ListAttachedUserPoliciesInput{UserName: aws.String(user)})
 	if err != nil {
@@ -235,7 +220,7 @@ func (s *server) UserDeleteHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// detatch and delete all of the policies that we found if the name is the same as the bucket or if the name starts
+	// detach and delete all of the policies that we found if the name is the same as the bucket or if the name starts
 	// with the the name of the bucket
 	for _, p := range policies {
 		pname := aws.StringValue(p.PolicyName)
@@ -358,9 +343,10 @@ func (s *server) UserUpdateKeyHandler(w http.ResponseWriter, r *http.Request) {
 	w.Write(j)
 }
 
-// UserListHandler lists the users for a bucket.  It tries to return the members of the predefined
-// bucket management groups: <<bucket>>-BktAdmGrp,  <<bucket>>-BktRWGrp, <<bucket>>-BktROGrp. It also
-// looks for a user with the same name as the bucket and returns that if it exists.
+// UserListHandler lists the users for a bucket.  It discovers users via:
+// 1. (legacy) members of predefined bucket management groups: <<bucket>>-BktAdmGrp, <<bucket>>-BktRWGrp, <<bucket>>-BktROGrp
+// 2. (new) users found by prefix listing (<<bucket>>-)
+// 3. a user with the same name as the bucket (legacy support)
 func (s *server) UserListHandler(w http.ResponseWriter, r *http.Request) {
 	w = LogWriter{w}
 	vars := mux.Vars(r)
@@ -406,9 +392,15 @@ func (s *server) UserListHandler(w http.ResponseWriter, r *http.Request) {
 		users = append(users, u...)
 	}
 
+	// discover users by prefix (new inline policy model)
+	prefixUsers, err := iamService.ListUsers(r.Context(), bucket+"-")
+	if err != nil {
+		log.Warnf("failed to list users by prefix for bucket %s: %s", bucket, err)
+	}
+	users = append(users, prefixUsers...)
+
 	// check if there is a user with the same name as the bucket to support legacy buckets
 	user, err := iamService.GetUser(r.Context(), &iam.GetUserInput{UserName: aws.String(bucket)})
-	fmt.Println(err)
 	if err == nil {
 		users = append(users, user.User)
 	}
@@ -461,7 +453,7 @@ func (s *server) UserShowHandler(w http.ResponseWriter, r *http.Request) {
 
 	iamService := iamapi.NewSession(session.Session, s.account)
 
-	// collect the list of users in the various management groups
+	// collect the list of users in the various management groups (legacy)
 	users := []*iam.User{}
 	for _, g := range []string{"BktAdmGrp", "BktRWGrp", "BktROGrp"} {
 		groupName := fmt.Sprintf("%s-%s", bucket, g)
@@ -474,20 +466,31 @@ func (s *server) UserShowHandler(w http.ResponseWriter, r *http.Request) {
 		users = append(users, grpUsers...)
 	}
 
+	// discover users by prefix (new inline policy model)
+	prefixUsers, err := iamService.ListUsers(r.Context(), bucket+"-")
+	if err != nil {
+		log.Warnf("failed to list users by prefix for bucket %s: %s", bucket, err)
+	}
+	users = append(users, prefixUsers...)
+
 	// check if there is a user with the same name as the bucket to support legacy buckets
 	u, err := iamService.GetUser(r.Context(), &iam.GetUserInput{UserName: aws.String(bucket)})
 	if err == nil {
 		users = append(users, u.User)
 	}
 
+	// remove potential duplicate users
+	users = iamapi.FilterDuplicateUsers(users)
+
 	// range over all of the users we found and return the user if it matches the requested user
 	for _, u := range users {
 		if aws.StringValue(u.UserName) == user {
 			var userDetails = struct {
-				User       *iam.User
-				AccessKeys []*iam.AccessKeyMetadata
-				Groups     []*iam.Group
-				Policies   []*iam.AttachedPolicy
+				User           *iam.User
+				AccessKeys     []*iam.AccessKeyMetadata
+				Groups         []*iam.Group
+				Policies       []*iam.AttachedPolicy
+				InlinePolicies []*string
 			}{
 				User: u,
 			}
@@ -512,6 +515,12 @@ func (s *server) UserShowHandler(w http.ResponseWriter, r *http.Request) {
 				return
 			}
 			userDetails.Policies = policies
+
+			inlinePolicies, err := iamService.ListUserInlinePolicies(r.Context(), &iam.ListUserPoliciesInput{UserName: aws.String(user)})
+			if err != nil {
+				log.Warnf("failed to list inline policies for user %s: %s", user, err)
+			}
+			userDetails.InlinePolicies = inlinePolicies
 
 			j, err := json.Marshal(userDetails)
 			if err != nil {

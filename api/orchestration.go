@@ -94,6 +94,135 @@ func (s *server) CreateBucketGroupPolicy(ctx context.Context, iamService iamapi.
 	return rollBackTasks, nil
 }
 
+// CreateBucketUserInlinePolicy generates the appropriate bucket policy document based on the group
+// identifier (BktAdmGrp, BktRWGrp, BktROGrp) and attaches it as an inline policy directly to
+// the IAM user.  This replaces the group-based model to avoid the 500 IAM group limit.
+// It returns rollback functions and will rollback itself on error.
+func (s *server) CreateBucketUserInlinePolicy(ctx context.Context, iamService iamapi.IAM, bucket, userName, group string) ([]rollbackFunc, error) {
+	var err error
+	var rollBackTasks []rollbackFunc
+	defer func() {
+		if err != nil {
+			log.Errorf("recovering from error: %s, executing %d rollback tasks", err, len(rollBackTasks))
+			rollBack(&rollBackTasks)
+		}
+	}()
+
+	var policyName string
+	var policyDocument []byte
+	switch group {
+	case "BktAdmGrp":
+		policyName = fmt.Sprintf("%s-BktAdmPlc", bucket)
+		if policyDocument, err = iamService.AdminBucketPolicy(bucket); err != nil {
+			return rollBackTasks, err
+		}
+	case "BktRWGrp":
+		policyName = fmt.Sprintf("%s-BktRWPlc", bucket)
+		if policyDocument, err = iamService.ReadWriteBucketPolicy(bucket); err != nil {
+			return rollBackTasks, err
+		}
+	case "BktROGrp":
+		policyName = fmt.Sprintf("%s-BktROPlc", bucket)
+		if policyDocument, err = iamService.ReadOnlyBucketPolicy(bucket); err != nil {
+			return rollBackTasks, err
+		}
+	default:
+		return rollBackTasks, fmt.Errorf("invalid group name: %s", group)
+	}
+
+	if err = iamService.PutUserPolicy(ctx, &iam.PutUserPolicyInput{
+		UserName:       aws.String(userName),
+		PolicyName:     aws.String(policyName),
+		PolicyDocument: aws.String(string(policyDocument)),
+	}); err != nil {
+		return rollBackTasks, fmt.Errorf("failed to put inline policy %s for user %s: %s", policyName, userName, err)
+	}
+
+	// append inline policy delete to rollback tasks
+	rbfunc := func(ctx context.Context) error {
+		return iamService.DeleteUserPolicy(ctx, &iam.DeleteUserPolicyInput{
+			UserName:   aws.String(userName),
+			PolicyName: aws.String(policyName),
+		})
+	}
+	rollBackTasks = append(rollBackTasks, rbfunc)
+
+	return rollBackTasks, nil
+}
+
+// CreateWebsiteUserInlinePolicy generates the appropriate website policy document based on the group
+// identifier (BktAdmGrp, BktRWGrp, BktROGrp) and attaches it as an inline policy directly to
+// the IAM user.  This replaces the group-based model for websites.
+func (s *server) CreateWebsiteUserInlinePolicy(ctx context.Context, iamService iamapi.IAM, website, path, userName, group string) ([]rollbackFunc, error) {
+	var err error
+	var rollBackTasks []rollbackFunc
+	defer func() {
+		if err != nil {
+			log.Errorf("recovering from error: %s, executing %d rollback tasks", err, len(rollBackTasks))
+			rollBack(&rollBackTasks)
+		}
+	}()
+
+	var policyName string
+	var policyDocument []byte
+	switch group {
+	case "BktAdmGrp":
+		policyName = iamapi.FormatGroupName(website, path, "BktAdmPlc")
+		if path != "/" {
+			if policyDocument, err = iamService.AdminBucketPolicyWithPath(website, path); err != nil {
+				return rollBackTasks, err
+			}
+		} else {
+			if policyDocument, err = iamService.AdminBucketPolicy(website); err != nil {
+				return rollBackTasks, err
+			}
+		}
+	case "BktRWGrp":
+		policyName = iamapi.FormatGroupName(website, path, "BktRWPlc")
+		if path != "/" {
+			if policyDocument, err = iamService.ReadWriteBucketPolicyWithPath(website, path); err != nil {
+				return rollBackTasks, err
+			}
+		} else {
+			if policyDocument, err = iamService.ReadWriteBucketPolicy(website); err != nil {
+				return rollBackTasks, err
+			}
+		}
+	case "BktROGrp":
+		policyName = iamapi.FormatGroupName(website, path, "BktROPlc")
+		if path != "/" {
+			if policyDocument, err = iamService.ReadOnlyBucketPolicyWithPath(website, path); err != nil {
+				return rollBackTasks, err
+			}
+		} else {
+			if policyDocument, err = iamService.ReadOnlyBucketPolicy(website); err != nil {
+				return rollBackTasks, err
+			}
+		}
+	default:
+		return rollBackTasks, fmt.Errorf("invalid group name: %s", group)
+	}
+
+	if err = iamService.PutUserPolicy(ctx, &iam.PutUserPolicyInput{
+		UserName:       aws.String(userName),
+		PolicyName:     aws.String(policyName),
+		PolicyDocument: aws.String(string(policyDocument)),
+	}); err != nil {
+		return rollBackTasks, fmt.Errorf("failed to put inline policy %s for user %s: %s", policyName, userName, err)
+	}
+
+	// append inline policy delete to rollback tasks
+	rbfunc := func(ctx context.Context) error {
+		return iamService.DeleteUserPolicy(ctx, &iam.DeleteUserPolicyInput{
+			UserName:   aws.String(userName),
+			PolicyName: aws.String(policyName),
+		})
+	}
+	rollBackTasks = append(rollBackTasks, rbfunc)
+
+	return rollBackTasks, nil
+}
+
 // CreateWebsiteBucketPolicy expects an acount, bucket name and the group name (without the bucket prefix).  It verifies the group
 // is one of our supported types and then generates a policy doc for the group and bucket.  Finally, it creates the group
 // and attaches the policy.  It returns a rollback function and will rollback itself if it encounters an error.

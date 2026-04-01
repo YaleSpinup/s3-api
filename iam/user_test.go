@@ -260,6 +260,47 @@ func (m *mockIAMClient) DetachUserPolicyWithContext(ctx context.Context, input *
 	return &iam.DetachUserPolicyOutput{}, nil
 }
 
+func (m *mockIAMClient) PutUserPolicyWithContext(ctx context.Context, input *iam.PutUserPolicyInput, opts ...request.Option) (*iam.PutUserPolicyOutput, error) {
+	if m.err != nil {
+		return nil, m.err
+	}
+	return &iam.PutUserPolicyOutput{}, nil
+}
+
+func (m *mockIAMClient) DeleteUserPolicyWithContext(ctx context.Context, input *iam.DeleteUserPolicyInput, opts ...request.Option) (*iam.DeleteUserPolicyOutput, error) {
+	if m.err != nil {
+		return nil, m.err
+	}
+	return &iam.DeleteUserPolicyOutput{}, nil
+}
+
+func (m *mockIAMClient) GetUserPolicyWithContext(ctx context.Context, input *iam.GetUserPolicyInput, opts ...request.Option) (*iam.GetUserPolicyOutput, error) {
+	if m.err != nil {
+		return nil, m.err
+	}
+	return &iam.GetUserPolicyOutput{
+		UserName:       input.UserName,
+		PolicyName:     input.PolicyName,
+		PolicyDocument: aws.String(`{"Version":"2012-10-17","Statement":[]}`),
+	}, nil
+}
+
+func (m *mockIAMClient) ListUserPoliciesWithContext(ctx context.Context, input *iam.ListUserPoliciesInput, opts ...request.Option) (*iam.ListUserPoliciesOutput, error) {
+	if m.err != nil {
+		return nil, m.err
+	}
+	return &iam.ListUserPoliciesOutput{
+		PolicyNames: []*string{aws.String("policy1"), aws.String("policy2")},
+	}, nil
+}
+
+func (m *mockIAMClient) ListUsersWithContext(ctx context.Context, input *iam.ListUsersInput, opts ...request.Option) (*iam.ListUsersOutput, error) {
+	if m.err != nil {
+		return nil, m.err
+	}
+	return &iam.ListUsersOutput{Users: testUsers}, nil
+}
+
 func TestGetUsernameFromBucket(t *testing.T) {
 	for _, set := range testBucketUserData {
 		bucket := set["bucket"]
